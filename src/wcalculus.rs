@@ -72,22 +72,20 @@ pub mod wcalculus {
         fn get_name(&self) -> String;
         fn invoke<'a>(&mut self, time: Natural, history: NatList, env: &'a mut Env) -> EvalType;
     }
-    use std::fmt;
-    // #[derive(Debug)]
+
     pub enum EvalType {
         WFn(Box<dyn CallCls>),
         Number(Real),
     }
-    impl EvalType{
-        fn get_num(&self) -> Option<Real>{
-            match self{
+    impl EvalType {
+        fn get_num(&self) -> Option<Real> {
+            match self {
                 EvalType::Number(n) => Some(*n),
-                _ => None
+                _ => None,
             }
         }
     }
 
-    
     impl CallCls for LamCls {
         fn get_name(&self) -> String {
             self.id.to_string()
@@ -98,10 +96,6 @@ pub mod wcalculus {
         }
     }
 
-    fn type_of<T>(_: T) -> String {
-        let a = std::any::type_name::<T>();
-        return a.to_string();
-    }
     pub fn interpret_n<'a>(time: Natural, e: Rc<Expression>, env: &'a mut Env) -> NatList {
         if time < 0 {
             NatList::new()
@@ -110,8 +104,8 @@ pub mod wcalculus {
             match res_now {
                 EvalType::Number(n) => {
                     let mut res_past = interpret_n(time - 1, e, env);
-                    res_past.push_front(n);
-                    assert_eq!(res_past.len(), 1 + time as usize);
+                    res_past.push_back(n);
+                    debug_assert_eq!(res_past.len(), 1 + time as usize);
                     res_past
                 }
                 EvalType::WFn(f) => {
@@ -136,13 +130,13 @@ pub mod wcalculus {
                 let elist = env.get(id);
                 let timeidx = match t {
                     Time::Constant(t) => *t,
-                    Time::RuntimeV { offset } => time-offset,
+                    Time::RuntimeV { offset } => time - offset,
                 };
                 match elist {
                     Some(l) => match l.iter().nth(timeidx as usize) {
                         Some(n) => EvalType::Number(*n),
                         None => {
-                            if l.len() == 0 || timeidx < 0{
+                            if l.len() == 0 || timeidx < 0 {
                                 EvalType::Number(0.0)
                             } else {
                                 panic!(
@@ -164,10 +158,7 @@ pub mod wcalculus {
             Expr::Scale { c, e } => {
                 let e1 = interpret(time, e.clone(), env);
                 match e1 {
-                    EvalType::Number(n) => {
-                        println!("scale {} * {}", n, c);
-                        EvalType::Number(n * c)
-                    }
+                    EvalType::Number(n) => EvalType::Number(n * c),
                     _ => panic!("failed at scale"),
                 }
             }
@@ -180,10 +171,8 @@ pub mod wcalculus {
                 }
             }
             Expr::App { e, arg } => {
-                let mut a_hist = interpret_n(time, arg.clone(), env);
-                assert_eq!(a_hist.len() as i64, time + 1);
-                println!("app eval at {}, env is {:?}", time, a_hist);
-
+                let a_hist = interpret_n(time, arg.clone(), env);
+                debug_assert_eq!(a_hist.len() as i64, time + 1);
                 let cls = interpret(time, e.clone(), env);
                 let res: EvalType = match cls {
                     EvalType::WFn(mut f) => f.invoke(time, a_hist, env),
@@ -192,34 +181,19 @@ pub mod wcalculus {
                 res
             }
             Expr::Feed { s, e } => {
-                println!("feed history start at {}", time);
-                let mut e_hist = interpret_n(
+                let mut tmpenv = env.clone();
+                let e_hist = interpret_n(
                     time - 1,
                     Rc::new(Expr::Feed {
                         s: s.to_string(),
                         e: e.clone(),
                     }),
-                    env,
+                    &mut tmpenv,
                 );
-                assert_eq!(e_hist.len() as i64, time);
-                println!("feed history at {}:  {:?}", time, e_hist);
+                debug_assert_eq!(e_hist.len() as i64, time);
                 // if time is 5, e_hist should holds the result from 0 to 4...
-                match env.get_mut(s) {
-                    None => {
-                        if e_hist.is_empty() {
-                            e_hist.push_front(0.0);
-                        }
-                        env.insert(s.to_string(), e_hist);
-                    }
-                    Some(mut l) => {
-                        if let Some(n) = e_hist.front() {
-                            l.clear();
-                            l.append(&mut e_hist);
-                        }
-                    }
-                }
-                let res = interpret(time, e.clone(), env);
-                println!("feed eval at {}, res is {}", time, res.get_num().unwrap_or(-99.0));
+                tmpenv.insert(s.to_string(), e_hist);
+                let res = interpret(time, e.clone(), &mut tmpenv);
                 res
             }
             _ => panic!("unknown node"),
@@ -242,18 +216,17 @@ mod tests {
         };
     }
 
-    #[test]
-    pub fn make_onepole() {
+    fn test_onepole(fb: f64) {
         // let gain = Rc::new(Expr::NumberLit(0.99));
-        let factor: f64 = 0.5;
+        let factor: f64 = fb;
         let rfactor = 1.0 - factor;
 
         let scaler = Rc::new(Expr::Scale {
-            c: factor,
+            c: rfactor,
             e: makeId!("onepole_x", 0),
         });
         let rscaler = Rc::new(Expr::Scale {
-            c: rfactor,
+            c: factor,
             e: makeId!("onepole_self", 1),
         });
         let content = Rc::new(Expr::Add {
@@ -270,8 +243,8 @@ mod tests {
         });
         use std::collections::VecDeque;
 
-        let input = vec![0.0, 0.0, 0.0, 0.0, 1.0];
-        let inputdeque = VecDeque::from(input);
+        let input = vec![1.0, 0.0, 0.0, 0.0, 0.0];
+        let inputdeque = VecDeque::from(input.clone());
         let lam = Rc::new(Expr::App {
             e: lam,
             arg: Rc::new(Expr::Var {
@@ -284,8 +257,27 @@ mod tests {
         env.insert("input".to_string(), inputdeque);
         let res = wcalculus::interpret_n(len, lam, &mut env);
 
-        println!("Output: {:?}", res);
+        // println!("Output: {:?}", res);
         assert_eq!(res.len(), (len + 1) as usize);
-        crate::dumpenv!(&env);
+        let resvec = Vec::from(res);
+
+        let answer: Vec<f64> = input
+            .iter()
+            .scan(0.0, |acc, x| {
+                *acc = *acc * fb + (1.0 - fb) * x;
+                Some(*acc)
+            })
+            .collect();
+        assert_eq!(resvec, answer);
+        // crate::dumpenv!(&env);
+    }
+
+    #[test]
+    pub fn test1() {
+        test_onepole(0.5);
+    }
+    #[test]
+    pub fn test2() {
+        test_onepole(0.2);
     }
 }
