@@ -51,7 +51,6 @@ pub mod wcalculus {
 
     pub type Env = HashMap<Id, NatList>;
 
-    #[macro_export]
     macro_rules! dumpenv {
         ($map:expr) => {
             for (key, value) in &*$map {
@@ -63,6 +62,62 @@ pub mod wcalculus {
             }
         };
     }
+    pub(crate) use dumpenv;
+    #[macro_export]
+    macro_rules! var {
+        ($name:literal,$offset:literal) => {
+            Rc::new(Expr::Var {
+                id: String::from($name),
+                t: wcalculus::Time::RuntimeV { offset: $offset },
+            })
+        };
+    }
+    pub(crate) use var;
+    #[macro_export]
+    macro_rules! scale {
+        ($c:expr,$e:expr) => {
+            Rc::new(Expr::Scale { c: $c, e: $e })
+        };
+    }
+    pub(crate) use scale;
+
+    #[macro_export]
+    macro_rules! add {
+        ($e1:expr,$e2:expr) => {
+            Rc::new(Expr::Add { e1: $e1, e2: $e2 })
+        };
+    }
+    pub(crate) use add;
+    #[macro_export]
+    macro_rules! feed {
+        ($id:literal,$e:expr) => {
+            Rc::new(Expr::Feed {
+                s: String::from($id),
+                e: $e,
+            })
+        };
+    }
+    pub(crate) use feed;
+    #[macro_export]
+    macro_rules! lambda {
+        ($id:literal,$e:expr) => {
+            Rc::new(Expr::Lambda {
+                a: String::from($id),
+                e: $e,
+            })
+        };
+    }
+    pub(crate) use lambda;
+    #[macro_export]
+    macro_rules! app {
+        ($ef:expr,$ea:expr) => {
+            Rc::new(Expr::App {
+                e: $ef,
+                arg: $ea,
+            })
+        };
+    }
+    pub(crate) use app;
     pub struct LamCls {
         // e: &'a Expression,
         id: Rc<Id>,
@@ -204,60 +259,32 @@ pub mod wcalculus {
 #[cfg(test)]
 mod tests {
     use crate::wcalculus::*;
+    use wcalculus as wc;
     type Expr = wcalculus::Expression;
     use std::rc::Rc;
-
-    macro_rules! makeId {
-        ($name:literal,$offset:literal) => {
-            Rc::new(Expr::Var {
-                id: String::from($name),
-                t: wcalculus::Time::RuntimeV { offset: $offset },
-            })
-        };
-    }
+    use std::collections::VecDeque;
 
     fn test_onepole(fb: f64) {
-        // let gain = Rc::new(Expr::NumberLit(0.99));
-        let factor: f64 = fb;
-        let rfactor = 1.0 - factor;
-
-        let scaler = Rc::new(Expr::Scale {
-            c: rfactor,
-            e: makeId!("onepole_x", 0),
-        });
-        let rscaler = Rc::new(Expr::Scale {
-            c: factor,
-            e: makeId!("onepole_self", 1),
-        });
-        let content = Rc::new(Expr::Add {
-            e1: scaler,
-            e2: rscaler,
-        });
-        let feed = Rc::new(Expr::Feed {
-            s: String::from("onepole_self"),
-            e: content,
-        });
-        let lam = Rc::new(Expr::Lambda {
-            a: String::from("onepole_x"),
-            e: feed,
-        });
-        use std::collections::VecDeque;
-
         let input = vec![1.0, 0.0, 0.0, 0.0, 0.0];
         let inputdeque = VecDeque::from(input.clone());
-        let lam = Rc::new(Expr::App {
-            e: lam,
-            arg: Rc::new(Expr::Var {
-                id: String::from("input".to_string()),
-                t: wcalculus::Time::RuntimeV { offset: 0 },
-            }),
-        });
         let mut env = wcalculus::Env::new();
         let len = inputdeque.len() as i64 - 1;
         env.insert("input".to_string(), inputdeque);
-        let res = wcalculus::interpret_n(len, lam, &mut env);
 
-        // println!("Output: {:?}", res);
+        let factor: f64 = fb;
+        let rfactor = 1.0 - factor;
+        let app = wc::app!(wc::lambda!(
+            "x",
+            wc::feed!(
+                "y",
+                wc::add!(
+                    wc::scale!(rfactor, wc::var!("x", 0)),
+                    wc::scale!(factor, wc::var!("y", 1))
+                )
+            )
+        ),wc::var!("input",0));
+        
+        let res = wcalculus::interpret_n(len, app, &mut env);
         assert_eq!(res.len(), (len + 1) as usize);
         let resvec = Vec::from(res);
 
