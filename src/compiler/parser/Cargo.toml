@@ -1,0 +1,12 @@
+[package]
+name = "mimium-parser"
+version = "0.0.1"
+license = "MPL2.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokens = { path = "../../components/token", version = "0.0.1", package = "mimium-tokens" }
+ast = { path = "../../components/ast", version = "0.0.1", package = "mimium-ast" }
+chumsky = "0.8.0"

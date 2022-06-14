@@ -23,7 +23,7 @@ pub enum Expr {
     Literal(WithMeta<Literal>),
     Var {
         id: WithMeta<Id>,
-        t: Time,
+        t: Option<Time>,
     }, // variable with history
     Block {
         statements: Vec<(WithMeta<Id>, WithMeta<Self>)>,
@@ -36,15 +36,17 @@ pub enum Expr {
         callee: Box<WithMeta<Self>>,
     },
     Function {
-        parameters: Vec<WithMeta<Id>>,
+        parameters: Vec<WithMeta<TypedId>>,
         body: Box<WithMeta<Self>>,
     },
     Let {
         id: TypedId,
+        rhs: Box<WithMeta<Self>>,
         body: Box<WithMeta<Self>>,
     },
     LetTuple {
         ids: Vec<TypedId>,
+        rhs: Box<WithMeta<Self>>,
         body: Box<WithMeta<Self>>,
     },
     If {

@@ -1,0 +1,5 @@
+[package]
+name = "mimium-tokens"
+version = "0.0.1"
+license = "MPL2.0"
+edition = "2021"
