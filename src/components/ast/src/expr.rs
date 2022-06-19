@@ -20,38 +20,18 @@ pub enum Literal {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Literal(WithMeta<Literal>),
-    Var {
-        id: WithMeta<Id>,
-        t: Option<Time>,
-    }, // variable with history
-    Block {
-        statements: Vec<(WithMeta<Id>, WithMeta<Self>)>,
-        ret: Option<Box<WithMeta<Self>>>,
-    },
+    Literal(Literal),
+    Var(Id, Option<Time>),
+    Block(Vec<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
-    Apply {
-        function: Box<WithMeta<Self>>,
-        callee: Box<WithMeta<Self>>,
-    },
-    Function {
-        parameters: Vec<WithMeta<TypedId>>,
-        body: Box<WithMeta<Self>>,
-    },
-    Let {
-        id: TypedId,
-        rhs: Box<WithMeta<Self>>,
-        body: Box<WithMeta<Self>>,
-    },
-    LetTuple {
-        ids: Vec<TypedId>,
-        rhs: Box<WithMeta<Self>>,
-        body: Box<WithMeta<Self>>,
-    },
-    If {
-        condition: Box<WithMeta<Self>>,
-        then_expr: Box<WithMeta<Self>>,
-        else_expr: Option<Box<WithMeta<Self>>>,
-    },
+    Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    Function(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>),
+    Let(TypedId, Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    LetTuple(Vec<TypedId>, Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    If(
+        Box<WithMeta<Self>>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
+    ),
 }

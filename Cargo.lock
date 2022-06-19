@@ -87,11 +87,11 @@ version = "0.0.1"
 dependencies = [
  "chumsky",
  "mimium-ast",
- "mimium-tokens",
+ "mimium-token",
 ]
 
 [[package]]
-name = "mimium-tokens"
+name = "mimium-token"
 version = "0.0.1"
 
 [[package]]
