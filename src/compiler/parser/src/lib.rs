@@ -1,10 +1,62 @@
+use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use ast::{expr::*, metadata::*};
 use chumsky::prelude::*;
 use lexer::*;
+use std::fmt::Display;
+use std::hash::Hash;
 use token::*;
-
 // pub mod chumsky_test;
 pub mod lexer;
+
+pub fn report_error<E: Hash + Eq + Display>(src: &String, errs: Vec<Simple<E>>) {
+    for e in errs {
+        let message = match e.reason() {
+            chumsky::error::SimpleReason::Unexpected
+            | chumsky::error::SimpleReason::Unclosed { .. } => {
+                format!(
+                    "{}{}, expected {}",
+                    if e.found().is_some() {
+                        "unexpected token"
+                    } else {
+                        "unexpected end of input"
+                    },
+                    if let Some(label) = e.label() {
+                        format!(" while parsing {}", label.fg(Color::Green))
+                    } else {
+                        " something else".to_string()
+                    },
+                    if e.expected().count() == 0 {
+                        "somemething else".to_string()
+                    } else {
+                        e.expected()
+                            .map(|expected| match expected {
+                                Some(expected) => expected.to_string(),
+                                None => "end of input".to_string(),
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    }
+                )
+            }
+            chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
+        };
+
+        Report::build(ReportKind::Error, (), e.span().start)
+            .with_message(message)
+            .with_label(Label::new(e.span()).with_message(match e.reason() {
+                chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
+                _ => format!(
+                        "Unexpected {}",
+                        e.found()
+                            .map(|c| format!("token {}", c.fg(Color::Red)))
+                            .unwrap_or_else(|| "end of input".to_string())
+                    ),
+            }))
+            .finish()
+            .print(Source::from(src))
+            .unwrap();
+    }
+}
 
 pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = select! { Token::Ident(s) => TypedId { id: s, ty: None } }.labelled("lvar");
@@ -12,22 +64,12 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
         Token::Ident(s) => Expr::Var(s,None),
         Token::Int(x) => Expr::Literal(Literal::Int(x)),
         Token::Float(x) =>Expr::Literal(Literal::Float(x.parse().unwrap())),
-        Token::Str(s) => Expr::Literal(Literal::String(s))
+        Token::Str(s) => Expr::Literal(Literal::String(s)),
+        Token::SelfLit => Expr::Literal(Literal::SelfLit()),
+        Token::Now => Expr::Literal(Literal::Now()),
     }
     .map_with_span(|e, s| (e, s));
     let expr = recursive(|expr| {
-        // let lambda = ident
-        //     .separated_by(just(','))
-        //     .delimited_by(just('|'), just('|'))
-        //     .then(expr.clone())
-        //     .map_with_span(|(params, body), span| {
-        //         let f = Expr::Function {
-        //             parameters: params,
-        //             body: Box::new(body),
-        //         };
-        //         add_meta(f, span)
-        //     })
-        //     .padded();;
         let parenexpr = expr
             .clone()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
@@ -54,8 +96,28 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             .map_with_span(|((ident, body), then), span| {
                 (Expr::Let(ident, Box::new(body), Box::new(then)), span)
             });
+        let block = let_e
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
+            .map_with_span(|lines, span| (Expr::Block(lines, None), span));
 
-        let_e.or(apply).map_with_span(|e, s| (e, s))
+        let lambda = lvar
+            .map_with_span(|id, span| (id, span))
+            .separated_by(just(Token::Comma))
+            .delimited_by(
+                just(Token::LambdaArgBeginEnd),
+                just(Token::LambdaArgBeginEnd),
+            )
+            .then(expr)
+            .map_with_span(|(ids, (block, _s)), span| (Expr::Function(ids, Box::new(block)), span));
+
+        let_e
+            .or(apply)
+            .or(lambda)
+            .or(val)
+            .or(block)
+            .map_with_span(|e, s| (e, s))
         // atom.or(apply)
         // .or(lambda)
         // .or(add)
@@ -68,30 +130,40 @@ mod tests {
     use super::*;
     use chumsky::stream::Stream;
 
+    fn parse(
+        src: String,
+    ) -> (
+        Option<WithMeta<Expr>>,
+        Vec<Simple<char>>,
+        Vec<Simple<Token>>,
+    ) {
+        let len = src.chars().count();
+        let (tokens, lex_errs) = lexer().parse_recovery(src.clone());
+        dbg!(tokens.clone());
+        let res = match tokens {
+            Some(token) => {
+                let (ast, parse_errs) =
+                    parser().parse_recovery(Stream::from_iter(len..len + 1, token.into_iter()));
+                // dbg!(ast.clone());
+                (ast, lex_errs, parse_errs)
+            }
+            None => (None, lex_errs, Vec::new()),
+        };
+        res
+    }
+
     macro_rules! test_string {
         ($src:literal, $ans:expr) => {
-            let len = $src.chars().count();
-            let (tokens, errs) = lexer().parse_recovery($src);
-            // dbg!(tokens.clone());
-            let parse_errs = match tokens {
-                Some(token) => {
-                    let (ast, parse_errs) =
-                        parser().parse_recovery(Stream::from_iter(len..len + 1, token.into_iter()));
-                    // dbg!(ast.clone());
-                    if let Some(asts) = ast.filter(|_| errs.len() + parse_errs.len() == 0) {
-                        println!("{:#?}", asts);
-                        assert_eq!($ans, asts);
-                    }
-                    parse_errs
-                }
-                None => Vec::new(),
-            };
-            if (errs.len() > 0) {
-                errs.into_iter()
-                    .map(|e| e.map(|c| c.to_string()))
-                    .chain(parse_errs.into_iter().map(|e| e.map(|tok| tok.to_string())))
-                    .for_each(|e| println!("{:#?}", e));
-                panic!()
+            let srcstr = $src.to_string();
+            let (ast, lex_err, parse_err) = parse(srcstr.clone());
+            if (lex_err.len() > 0 || parse_err.len() > 0) {
+                report_error(&srcstr, parse_err);
+                panic!();
+            }
+            if let Some(a) = ast {
+                assert_eq!(a, $ans);
+            } else {
+                panic!();
             }
         };
     }
@@ -104,10 +176,10 @@ mod tests {
                     id: "goge".to_string(),
                     ty: None,
                 },
-                Box::new((Expr::Literal(Literal::Int(3466)), 12..13)),
-                Box::new((Expr::Var("goge".to_string(), None), 16..20)),
+                Box::new((Expr::Literal(Literal::Int(36)), 11..13)),
+                Box::new((Expr::Var("goge".to_string(), None), 15..19)),
             ),
-            0..4,
+            0..19,
         );
         test_string!("let goge = 36\n goge", ans);
     }
@@ -118,8 +190,29 @@ mod tests {
     }
     #[test]
     pub fn test_string() {
-        let ans = (Expr::Literal(Literal::String("teststr".to_string())), 0..4);
+        let ans = (Expr::Literal(Literal::String("teststr".to_string())), 0..9);
         test_string!("\"teststr\"", ans);
+    }
+    #[test]
+    pub fn test_block() {
+        let ans = (
+            Expr::Block(
+                vec![(
+                    Expr::Let(
+                        TypedId {
+                            ty: None,
+                            id: "hoge".to_string(),
+                        },
+                        Box::new((Expr::Literal(Literal::Int(100)), 12..15)),
+                        Box::new((Expr::Var("hoge".to_string(), None), 18..22)),
+                    ),
+                    1..22,
+                )],
+                None,
+            ),
+            0..23,
+        );
+        test_string!("{let hoge = 100 \n hoge}", ans);
     }
     // #[test]
     // pub fn test_add() {
@@ -147,5 +240,25 @@ mod tests {
             0..12,
         );
         test_string!("myfun(callee)", ans);
+    }
+    #[test]
+    #[should_panic]
+    pub fn test_fail() {
+        let src = "let 100 == hoge\n fuga";
+        let (_ans, lexerr, parse_err) = parse(src.clone().to_string());
+        dbg!(_ans);
+        let is_lex_err = lexerr.len() > 0;
+        let is_par_err = parse_err.len() > 0;
+        dbg!(lexerr.clone());
+        dbg!(parse_err.clone());
+        if is_lex_err {
+            report_error(&src.to_string(), lexerr.clone());
+        }
+        if is_par_err {
+            report_error(&src.to_string(), parse_err.clone());
+        }
+        if is_lex_err || is_par_err {
+            panic!()
+        }
     }
 }

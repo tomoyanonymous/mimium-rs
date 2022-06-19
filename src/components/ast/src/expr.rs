@@ -14,8 +14,8 @@ pub enum Literal {
     String(String),
     Int(i64),
     Float(f64),
-    SelfLit(()),
-    Now(()),
+    SelfLit(),
+    Now(),
 }
 
 #[derive(Clone, Debug, PartialEq)]

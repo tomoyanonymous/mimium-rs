@@ -65,6 +65,7 @@ pub enum Token {
     Alias,
 
     LineBreak,
+    EndOfInput,
 }
 
 impl fmt::Display for Op {
@@ -126,6 +127,7 @@ impl fmt::Display for Token {
             Token::Type => write!(f, "type"),
             Token::Alias => write!(f, "newtype"),
             Token::LineBreak => write!(f, "linebreak"),
+            Token::EndOfInput => write!(f, "endofinput"),
         }
     }
 }
