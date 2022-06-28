@@ -24,6 +24,14 @@ pub enum Type {
     Intermediate(i64),
 }
 
+pub type Id = String;
+
+#[derive(Clone, Debug, PartialEq, Hash)]
+pub struct TypedId {
+    pub ty: Option<Type>,
+    pub id: Id,
+}
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -36,7 +44,7 @@ impl fmt::Display for Type {
             Type::Struct(s) => write!(f, "{{{:?}}}", s),
             Type::Function(p, r, s) => {
                 write!(f, "({:?})->", p)?;
-                write!(f, "{:?}{:?}", r, s)
+                write!(f, "{:?}[{:?}]", r, s)
             }
             Type::Code(c) => write!(f, "<{:?}>", c),
             Type::Intermediate(id) => write!(f, "intermediate({})", id),

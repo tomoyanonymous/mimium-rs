@@ -1,17 +1,19 @@
-pub use mmmtype::TypedId;
 use mmmtype::*;
 use utils::metadata::WithMeta;
 
 pub type Time = i64;
+
+// High-Level Intermediate Representation is mostly W-calculus based format without multi-stage computation factors.
+// Some mimium-specific literal like "now" and "self" is now removed
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Literal {
     String(String),
     Int(i64),
     Float(String),
-    SelfLit(),
-    Now(),
 }
+
+type UniqueId = (String,i64);
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Expr {
@@ -21,8 +23,8 @@ pub enum Expr {
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
-    Lambda(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda
-    Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
+    Function(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda
+    Feed(Id, Box<WithMeta<Self>>),                         //feedback connection primitive
     Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetTuple(
@@ -35,9 +37,5 @@ pub enum Expr {
         Box<WithMeta<Self>>,
         Option<Box<WithMeta<Self>>>,
     ),
-    //exprimental macro system using multi-stage computation
-    Bracket(Box<WithMeta<Self>>),
-    Escape(Box<WithMeta<Self>>),
-
     Error,
 }

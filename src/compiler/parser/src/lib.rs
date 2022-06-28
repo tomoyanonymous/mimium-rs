@@ -102,7 +102,7 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                 just(Token::LambdaArgBeginEnd),
             )
             .then(expr.clone().map_with_span(|e, s| (e, s)))
-            .map_with_span(|(ids, block), s| (Expr::Function(ids, Box::new(block)), s))
+            .map_with_span(|(ids, block), s| (Expr::Lambda(ids, Box::new(block)), s))
             .labelled("lambda");
 
         let let_e = just(Token::Let)
@@ -141,7 +141,7 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                 (
                     Expr::LetRec(
                         fname,
-                        Box::new((Expr::Function(ids, Box::new(block)), _s.clone())),
+                        Box::new((Expr::Lambda(ids, Box::new(block)), _s.clone())),
                         then,
                     ),
                     _s,
@@ -166,7 +166,7 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                 (
                     Expr::LetRec(
                         fname,
-                        Box::new((Expr::Function(ids, Box::new(block)), _s.clone())),
+                        Box::new((Expr::Lambda(ids, Box::new(block)), _s.clone())),
                         then,
                     ),
                     _s,
@@ -340,7 +340,7 @@ mod tests {
                     id: "hoge".to_string(),
                 },
                 Box::new((
-                    Expr::Function(
+                    Expr::Lambda(
                         vec![
                             (
                                 TypedId {
@@ -382,7 +382,7 @@ mod tests {
                     id: "hoge".to_string(),
                 },
                 Box::new((
-                    Expr::Function(
+                    Expr::Lambda(
                         vec![
                             (
                                 TypedId {

@@ -97,6 +97,10 @@ dependencies = [
 [[package]]
 name = "mimium-hir"
 version = "0.0.1"
+dependencies = [
+ "mimium-type",
+ "mimium-utils",
+]
 
 [[package]]
 name = "mimium-parser"
