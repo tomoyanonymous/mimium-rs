@@ -28,6 +28,8 @@ pub enum Op {
 pub enum Token {
     Comment(String),
     Ident(String),
+    MacroExpand(String),
+
     Float(String),
     Int(i64),
     Str(String),
@@ -54,8 +56,8 @@ pub enum Token {
     LambdaArgBeginEnd,
 
     Function, //"fn"
-    Macro, //"macro"
-    Arrow, // ->
+    Macro,    //"macro"
+    Arrow,    // ->
 
     If,
     Then,
@@ -97,9 +99,10 @@ impl fmt::Display for Token {
         match self {
             Token::Comment(x) => write!(f, "{}", x),
             Token::Ident(x) => write!(f, "{}", x),
+            Token::MacroExpand(x) => write!(f, "{}!", x),
             Token::Int(x) => write!(f, "{}", x),
             Token::Float(x) => write!(f, "{}", x),
-            Token::Str(x) => write!(f, "{}", x),
+            Token::Str(x) => write!(f, "\"{}\"", x),
             Token::Op(x) => write!(f, "{}", x),
             Token::SelfLit => write!(f, "self"),
             Token::Now => write!(f, "now"),

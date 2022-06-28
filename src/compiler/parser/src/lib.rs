@@ -142,7 +142,6 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     _s,
                 )
             });
-
         let macro_s = just(Token::Macro)
             .ignore_then(lvar)
             .then(fnparams.clone())
@@ -162,9 +161,21 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     _s,
                 )
             });
-
+        let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
+            .map_with_span(|e, s| (e, s))
+            .then(expr.clone().map_with_span(|e, s| (e, s)))
+            .map_with_span(|(id, then), s: Span| {
+                (
+                    Expr::Escape(Box::new((
+                        Expr::Apply(Box::new(id), Box::new(then)),
+                        s.clone(),
+                    ))),
+                    s,
+                )
+            });
         let_e
             .or(apply)
+            .or(macro_expand)
             .or(lambda)
             .or(val.map_with_span(|e, s| (e, s)))
             .or(block)

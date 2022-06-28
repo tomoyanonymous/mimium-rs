@@ -62,6 +62,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         // "null" => Token::Null,
         _ => Token::Ident(ident),
     });
+    let macro_expand = text::ident::<_, Simple<char>>()
+        .then_ignore(just('!'))
+        .map(|ident: String| Token::MacroExpand(ident));
+
     let parens = one_of::<_, _, Simple<char>>("(){}[]")
         .repeated()
         .at_least(1)
@@ -86,6 +90,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         // .or(ctrl)
         .or(parens)
         .or(ident)
+        .or(macro_expand)
         .or(op)
         .or(linebreak)
         .recover_with(skip_then_retry_until([]));
