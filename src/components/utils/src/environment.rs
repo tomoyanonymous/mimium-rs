@@ -11,12 +11,12 @@ impl<T> Environment<T> {
     pub fn extend(&mut self) {
         self.0.push_front(HashMap::new());
     }
-    pub fn addBind(&mut self, name: String, e: T) {
+    pub fn add_bind(&mut self, name: String, e: T) {
         assert!(self.0.len() > 0);
         self.0.front_mut().unwrap().insert(name, e);
     }
 
-    pub fn getBoundValue(&self, name: String) -> Result<&T, Error> {
+    pub fn get_bound_value(&self, name: String) -> Result<&T, Error> {
         let mut res: Option<&T> = None;
         for hashmap in self.0.iter() {
             let r = hashmap.get(&name);
@@ -25,7 +25,7 @@ impl<T> Environment<T> {
                 break;
             }
         }
-        
+
         match res {
             Some(v) => Ok(v),
             None => Err(Error(
