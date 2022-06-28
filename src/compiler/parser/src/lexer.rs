@@ -1,4 +1,4 @@
-use ast::metadata::*;
+use utils::metadata::*;
 use chumsky::prelude::*;
 use token::*;
 

@@ -6,5 +6,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# [dependencies]
-
+[dependencies]
+mmmtype = { path = "../../components/type", version = "0.0.1", package = "mimium-type" }
+utils = { path = "../../components/utils", version = "0.0.1", package = "mimium-utils" }

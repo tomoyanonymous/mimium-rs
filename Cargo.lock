@@ -89,6 +89,14 @@ checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 [[package]]
 name = "mimium-ast"
 version = "0.0.1"
+dependencies = [
+ "mimium-type",
+ "mimium-utils",
+]
+
+[[package]]
+name = "mimium-hir"
+version = "0.0.1"
 
 [[package]]
 name = "mimium-parser"
@@ -98,10 +106,26 @@ dependencies = [
  "chumsky",
  "mimium-ast",
  "mimium-token",
+ "mimium-utils",
 ]
 
 [[package]]
 name = "mimium-token"
+version = "0.0.1"
+
+[[package]]
+name = "mimium-type"
+version = "0.0.1"
+dependencies = [
+ "mimium-utils",
+]
+
+[[package]]
+name = "mimium-typing"
+version = "0.0.1"
+
+[[package]]
+name = "mimium-utils"
 version = "0.0.1"
 
 [[package]]

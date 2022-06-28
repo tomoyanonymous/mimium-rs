@@ -1,4 +1,4 @@
-use crate::metadata::WithMeta;
+use utils::metadata::WithMeta;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Hash)]

@@ -1,7 +1,7 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use ast::{expr::*, metadata::*};
+use ast::expr::*;
+use utils::metadata::*;
 use chumsky::prelude::*;
-use lexer::*;
 use std::fmt::Display;
 use std::hash::Hash;
 use token::*;
@@ -206,6 +206,7 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lexer::*;
     use chumsky::stream::Stream;
 
     fn parse(
