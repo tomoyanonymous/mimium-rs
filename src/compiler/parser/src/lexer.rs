@@ -44,7 +44,11 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "|>" => Token::Op(Op::Pipe),
             _ => Token::Op(Op::Unknown(s)),
         });
-
+    let separator = one_of::<_, _, Simple<char>>(",.").map(|c| match c {
+        ',' => Token::Comma,
+        '.' => Token::Dot,
+        _ => Token::Ident(c.to_string()),
+    });
     // A parser for identifiers and keywords
     let ident = text::ident().map(|ident: String| match ident.as_str() {
         "fn" => Token::Function,
@@ -66,19 +70,15 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .then_ignore(just('!'))
         .map(|ident: String| Token::MacroExpand(ident));
 
-    let parens = one_of::<_, _, Simple<char>>("(){}[]")
-        .repeated()
-        .at_least(1)
-        .collect::<String>()
-        .map(|s: String| match s.as_str() {
-            "(" => Token::ParenBegin,
-            ")" => Token::ParenEnd,
-            "{" => Token::BlockBegin,
-            "}" => Token::BlockEnd,
-            "[" => Token::ArrayBegin,
-            "]" => Token::ArrayEnd,
-            _ => Token::Ident(s),
-        });
+    let parens = one_of::<_, _, Simple<char>>("(){}[]").map(|c| match c {
+        '(' => Token::ParenBegin,
+        ')' => Token::ParenEnd,
+        '{' => Token::BlockBegin,
+        '}' => Token::BlockEnd,
+        '[' => Token::ArrayBegin,
+        ']' => Token::ArrayEnd,
+        _ => Token::Ident(c.to_string()),
+    });
     let linebreak = text::newline::<Simple<char>>()
         .repeated()
         .at_least(1)
@@ -89,6 +89,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .or(str_)
         // .or(ctrl)
         .or(macro_expand)
+        .or(separator)
         .or(ident)
         .or(op)
         .or(parens)

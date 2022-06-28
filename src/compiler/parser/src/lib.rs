@@ -115,7 +115,12 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             .labelled("let");
         let block = expr
             .clone()
-            .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
+            .delimited_by(
+                just(Token::BlockBegin).then_ignore(just(Token::LineBreak).repeated()),
+                just(Token::LineBreak)
+                    .repeated()
+                    .ignore_then(just(Token::BlockEnd)),
+            )
             .map_with_span(|e, span: Span| (Expr::Block(Some(Box::new((e, span.clone())))), span))
             .recover_with(nested_delimiters(
                 Token::BlockBegin,
@@ -142,14 +147,20 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     _s,
                 )
             });
+        //todo:add bracket to return type
         let macro_s = just(Token::Macro)
             .ignore_then(lvar)
             .then(fnparams.clone())
-            .then(
-                block
-                    .clone()
-                    .map_with_span(|e, s| (Expr::Bracket(Box::new(e)), s)),
-            )
+            .then(block.clone().map(|(e, s)| {
+                let content = match e {
+                    Expr::Block(Some(x)) => Ok(Expr::Bracket(x)),
+                    _ => Err(()),
+                };
+                (
+                    Expr::Block(Some(Box::new((content.unwrap(), s.clone())))),
+                    s,
+                )
+            }))
             .then(expr.clone().map_with_span(|e, s| Box::new((e, s))).or_not())
             .map_with_span(|(((fname, ids), block), then), _s: Span| {
                 (
@@ -318,6 +329,93 @@ mod tests {
             0..14,
         );
         test_string!("myfun!(callee)", ans);
+    }
+    #[test]
+    pub fn test_fndef() {
+        let ans = (
+            Expr::LetRec(
+                TypedId {
+                    ty: None,
+                    id: "hoge".to_string(),
+                },
+                Box::new((
+                    Expr::Function(
+                        vec![
+                            (
+                                TypedId {
+                                    ty: None,
+                                    id: "input".to_string(),
+                                },
+                                8..13,
+                            ),
+                            (
+                                TypedId {
+                                    ty: None,
+                                    id: "gue".to_string(),
+                                },
+                                14..17,
+                            ),
+                        ],
+                        Box::new((
+                            Expr::Block(Some(Box::new((
+                                Expr::Var("input".to_string(), None),
+                                18..28,
+                            )))),
+                            18..28,
+                        )),
+                    ),
+                    0..28,
+                )),
+                None,
+            ),
+            0..28,
+        );
+        test_string!("fn hoge(input,gue){\n input\n}", ans);
+    }
+    #[test]
+    pub fn test_macrodef() {
+        let ans = (
+            Expr::LetRec(
+                TypedId {
+                    ty: None,
+                    id: "hoge".to_string(),
+                },
+                Box::new((
+                    Expr::Function(
+                        vec![
+                            (
+                                TypedId {
+                                    ty: None,
+                                    id: "input".to_string(),
+                                },
+                                11..16,
+                            ),
+                            (
+                                TypedId {
+                                    ty: None,
+                                    id: "gue".to_string(),
+                                },
+                                17..20,
+                            ),
+                        ],
+                        Box::new((
+                            Expr::Block(Some(Box::new((
+                                Expr::Bracket(Box::new((
+                                    Expr::Var("input".to_string(), None),
+                                    21..31,
+                                ))),
+                                21..31,
+                            )))),
+                            21..31,
+                        )),
+                    ),
+                    0..31,
+                )),
+                None,
+            ),
+            0..31,
+        );
+        test_string!("macro hoge(input,gue){\n input\n}", ans);
     }
     #[test]
     #[should_panic]
