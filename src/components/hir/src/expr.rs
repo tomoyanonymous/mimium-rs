@@ -4,6 +4,7 @@ use utils::metadata::WithMeta;
 pub type Time = i64;
 
 // High-Level Intermediate Representation is mostly W-calculus based format without multi-stage computation factors.
+// Values are bound not by name but shared references of ast-nodes.
 // Some mimium-specific literal like "now" and "self" is now removed
 
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -18,24 +19,24 @@ type UniqueId = (String,i64);
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Expr {
     Literal(Literal),
-    Var(Id, Option<Time>),
-    Block(Option<Box<WithMeta<Self>>>),
+    Var(Rc<WithMeta<Self>>, Option<Time>),
+    Block(Option<Rc<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
-    Proj(Box<WithMeta<Self>>, i64),
-    Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
-    Function(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda
-    Feed(Id, Box<WithMeta<Self>>),                         //feedback connection primitive
-    Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
-    LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
+    Proj(Rc<WithMeta<Self>>, i64),
+    Apply(Rc<WithMeta<Self>>, Rc<WithMeta<Self>>),
+    Function(Vec<WithMeta<TypedId>>, Rc<WithMeta<Self>>), //lambda
+    Feed(Id, Rc<WithMeta<Self>>),                         //feedback connection primitive
+    Let(TypedId, Rc<WithMeta<Self>>, Option<Rc<WithMeta<Self>>>),
+    LetRec(TypedId, Rc<WithMeta<Self>>, Option<Rc<WithMeta<Self>>>),
     LetTuple(
         Vec<TypedId>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
+        Rc<WithMeta<Self>>,
+        Option<Rc<WithMeta<Self>>>,
     ),
     If(
-        Box<WithMeta<Self>>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
+        Rc<WithMeta<Self>>,
+        Rc<WithMeta<Self>>,
+        Option<Rc<WithMeta<Self>>>,
     ),
     Error,
 }
