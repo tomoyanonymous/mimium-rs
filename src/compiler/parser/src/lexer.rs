@@ -48,6 +48,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // A parser for identifiers and keywords
     let ident = text::ident().map(|ident: String| match ident.as_str() {
         "fn" => Token::Function,
+        "macro" => Token::Macro,
         "->" => Token::Arrow,
         "self" => Token::SelfLit,
         "now" => Token::Now,
@@ -95,7 +96,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map_with_span(|tok, span| (tok, span))
         // .padded_by(comment.repeated())
         .padded_by(just(' ').or(just('\t').or(just('\u{0020}'))).or_not())
-        .repeated().then_ignore(end())
+        .repeated()
+        .then_ignore(end())
 }
 
 #[test]
@@ -113,8 +115,8 @@ pub fn test_let() {
     // dbg!(res.clone());
     if let Some(tok) = res {
         assert_eq!(tok, ans);
-    }else{
-        println!("{:#?}",_errs);
+    } else {
+        println!("{:#?}", _errs);
         panic!()
     }
 }

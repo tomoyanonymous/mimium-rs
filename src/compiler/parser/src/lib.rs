@@ -68,40 +68,26 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
         Token::SelfLit => Expr::Literal(Literal::SelfLit()),
         Token::Now => Expr::Literal(Literal::Now()),
     }
-    .map_with_span(|e, s| (e, s));
+    .labelled("value");
     let expr = recursive(|expr| {
         let parenexpr = expr
             .clone()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
 
-        let atom = val.map_with_span(|e, span: Span| (e, span)).or(parenexpr);
+        let atom = val.or(parenexpr).map_with_span(|e, span: Span| (e, span));
 
         let apply = atom
             .clone()
             .then_ignore(just(Token::ParenBegin))
             .then(atom.clone())
             .then_ignore(just(Token::ParenEnd))
-            .map(|((fun, s1), (callee, s2))| {
+            .map(|(fun, callee)| {
                 (
-                    Expr::Apply(Box::new(fun), Box::new(callee)),
-                    s1.start..s2.end,
+                    Expr::Apply(Box::new(fun.clone()), Box::new(callee.clone())),
+                    fun.1.start..callee.1.end,
                 )
-            });
-        let let_e = just(Token::Let)
-            .ignore_then(lvar)
-            .then_ignore(just(Token::Assign))
-            .then(atom.clone().map(|(e, _s)| e))
-            .then_ignore(just(Token::LineBreak))
-            .then(atom.clone().map(|(e, _s)| e))
-            .map_with_span(|((ident, body), then), span| {
-                (Expr::Let(ident, Box::new(body), Box::new(then)), span)
-            });
-        let block = let_e
-            .clone()
-            .repeated()
-            .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
-            .map_with_span(|lines, span| (Expr::Block(lines, None), span));
-
+            })
+            .labelled("apply");
         let lambda = lvar
             .map_with_span(|id, span| (id, span))
             .separated_by(just(Token::Comma))
@@ -109,21 +95,61 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                 just(Token::LambdaArgBeginEnd),
                 just(Token::LambdaArgBeginEnd),
             )
-            .then(expr)
-            .map_with_span(|(ids, (block, _s)), span| (Expr::Function(ids, Box::new(block)), span));
+            .then(expr.map_with_span(|e, s| (e, s)))
+            .map_with_span(|(ids, block), s| (Expr::Function(ids, Box::new(block)), s))
+            .labelled("lambda");
+
+        let let_e = just(Token::Let)
+            .ignore_then(lvar)
+            .then_ignore(just(Token::Assign))
+            .then(atom.clone())
+            .then_ignore(just(Token::LineBreak))
+            .then(atom.clone())
+            .map_with_span(|((ident, body), then), span| {
+                (Expr::Let(ident, Box::new(body), Box::new(then)), span)
+            })
+            .labelled("let");
+        let block = recursive(|block| {
+            let function_s = just(Token::Function)
+                .ignore_then(lvar)
+                .then(
+                    lvar.map_with_span(|e, s| (e, s))
+                        .separated_by(just(Token::Comma))
+                        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+                )
+                .then(block.clone())
+                .map_with_span(|((fname, ids), block), _s: Span| {
+                    (
+                        Expr::LetRec(
+                            fname,
+                            Box::new((Expr::Function(ids, Box::new(block)), _s.clone())),
+                        ),
+                        _s,
+                    )
+                });
+            let statements = let_e
+                .clone()
+                .or(function_s)
+                .labelled("statement")
+                .repeated();
+            statements
+                .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
+                .map_with_span(|lines, span| (Expr::Block(lines, None), span))
+        })
+        .labelled("block");
 
         let_e
             .or(apply)
             .or(lambda)
-            .or(val)
+            .or(val.map_with_span(|e, s| (e, s)))
             .or(block)
-            .map_with_span(|e, s| (e, s))
+            .map(|(e, _s)| e)
         // atom.or(apply)
         // .or(lambda)
         // .or(add)
         // .or(r#let)
     });
-    expr.then_ignore(end()).map(|(e, _s)| e)
+    expr.then_ignore(end()).map_with_span(|e, s| (e, s))
 }
 #[cfg(test)]
 mod tests {
@@ -237,7 +263,7 @@ mod tests {
                 Box::new((Expr::Var("myfun".to_string(), None), 0..5)),
                 Box::new((Expr::Var("callee".to_string(), None), 6..12)),
             ),
-            0..12,
+            0..13,
         );
         test_string!("myfun(callee)", ans);
     }

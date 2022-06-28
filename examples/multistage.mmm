@@ -1,0 +1,16 @@
+fn filterbank(filter:(num,num)->num,basefreq:num,num:int) -> <(num,num)->num> {
+    << |input,basefreq| {
+        ~~(filterbank(filter,basefreq*2,num-1)) + filter(_,freq)
+    } >>
+}
+//the syntactic sugar will be...
+macro filterbank(filter:(num,num)->num,basefreq:num,num:int) -> (num,num)->num{
+     |input,basefreq| {
+        filterbank!(filter,basefreq*2,num-1) + filter(_,freq)
+    } 
+}
+
+fn dsp(input:(num,num))->(num,num){
+    mono =  ~~filterbank(lowpass,100,16)
+    mono(input)
+}
