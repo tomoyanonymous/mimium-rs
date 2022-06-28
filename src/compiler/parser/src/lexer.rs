@@ -88,10 +88,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .or(float)
         .or(str_)
         // .or(ctrl)
-        .or(parens)
-        .or(ident)
         .or(macro_expand)
+        .or(ident)
         .or(op)
+        .or(parens)
         .or(linebreak)
         .recover_with(skip_then_retry_until([]));
 

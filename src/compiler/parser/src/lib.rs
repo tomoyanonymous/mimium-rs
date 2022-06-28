@@ -163,7 +163,9 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             });
         let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
             .map_with_span(|e, s| (e, s))
+            .then_ignore(just(Token::ParenBegin))
             .then(expr.clone().map_with_span(|e, s| (e, s)))
+            .then_ignore(just(Token::ParenEnd))
             .map_with_span(|(id, then), s: Span| {
                 (
                     Expr::Escape(Box::new((
@@ -172,10 +174,11 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     ))),
                     s,
                 )
-            });
+            })
+            .labelled("macroexpand");
         let_e
-            .or(apply)
             .or(macro_expand)
+            .or(apply)
             .or(lambda)
             .or(val.map_with_span(|e, s| (e, s)))
             .or(block)
@@ -301,6 +304,20 @@ mod tests {
             0..13,
         );
         test_string!("myfun(callee)", ans);
+    }
+    #[test]
+    pub fn test_macroexpand() {
+        let ans = (
+            Expr::Escape(Box::new((
+                Expr::Apply(
+                    Box::new((Expr::Var("myfun".to_string(), None), 0..6)),
+                    Box::new((Expr::Var("callee".to_string(), None), 7..13)),
+                ),
+                0..14,
+            ))),
+            0..14,
+        );
+        test_string!("myfun!(callee)", ans);
     }
     #[test]
     #[should_panic]
