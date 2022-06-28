@@ -9,7 +9,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     let float = text::int(10)
         .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
         .collect::<String>()
-        .map(|s| Token::Float(s.parse().unwrap()));
+        .map(|s| Token::Float(s));
 
     // A parser for strings
     let str_ = just('"')

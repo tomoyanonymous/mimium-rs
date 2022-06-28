@@ -1,7 +1,7 @@
 use crate::metadata::WithMeta;
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Type {
     //basic types
     Unit,

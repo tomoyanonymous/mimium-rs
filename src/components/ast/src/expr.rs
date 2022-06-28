@@ -2,23 +2,23 @@ use crate::{metadata::WithMeta, ty::Type};
 
 pub type Id = String;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct TypedId {
     pub ty: Option<Type>,
     pub id: Id,
 }
 pub type Time = i64;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Literal {
     String(String),
     Int(i64),
-    Float(f64),
+    Float(String),
     SelfLit(),
     Now(),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Expr {
     Literal(Literal),
     Var(Id, Option<Time>),
