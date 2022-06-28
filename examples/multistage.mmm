@@ -1,12 +1,20 @@
 fn filterbank(filter:(num,num)->num,basefreq:num,num:int) -> <(num,num)->num> {
     << |input,basefreq| {
-        ~~(filterbank(filter,basefreq*2,num-1)) + filter(_,freq)
+        if(num>0) {
+            ~~(filterbank(filter,basefreq*2,num-1)) + filter(_,freq)
+            }else{
+            + filter(_,freq)
+        }
     } >>
 }
 //the syntactic sugar will be...
 macro filterbank(filter:(num,num)->num,basefreq:num,num:int) -> (num,num)->num{
      |input,basefreq| {
+    if(num>0) {
         filterbank!(filter,basefreq*2,num-1) + filter(_,freq)
+        }else{
+        filter(_,freq)
+    }
     } 
 }
 
