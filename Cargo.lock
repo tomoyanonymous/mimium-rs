@@ -103,8 +103,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mimium-mirgen"
+name = "mimium-hirgen"
 version = "0.0.1"
+dependencies = [
+ "mimium-ast",
+ "mimium-type",
+ "mimium-utils",
+]
 
 [[package]]
 name = "mimium-parser"

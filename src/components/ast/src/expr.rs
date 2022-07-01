@@ -9,11 +9,11 @@ pub enum Literal {
     String(String),
     Int(i64),
     Float(String),
-    SelfLit(),
-    Now(),
+    SelfLit,
+    Now,
 }
 
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Var(Id, Option<Time>),
@@ -21,7 +21,7 @@ pub enum Expr {
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
-    Lambda(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda
+    Lambda(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),

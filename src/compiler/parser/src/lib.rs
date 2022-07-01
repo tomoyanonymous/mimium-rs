@@ -70,8 +70,8 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
         Token::Int(x) => Expr::Literal(Literal::Int(x)),
         Token::Float(x) =>Expr::Literal(Literal::Float(x.parse().unwrap())),
         Token::Str(s) => Expr::Literal(Literal::String(s)),
-        Token::SelfLit => Expr::Literal(Literal::SelfLit()),
-        Token::Now => Expr::Literal(Literal::Now()),
+        Token::SelfLit => Expr::Literal(Literal::SelfLit),
+        Token::Now => Expr::Literal(Literal::Now),
     }
     .labelled("value");
 

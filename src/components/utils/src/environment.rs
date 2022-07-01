@@ -6,7 +6,7 @@ pub struct Environment<T>(LinkedList<HashMap<String, T>>);
 
 pub struct Error(String);
 
-impl<T> Environment<T> {
+impl<T:Clone> Environment<T> {
 
     pub fn extend(&mut self) {
         self.0.push_front(HashMap::new());
@@ -16,7 +16,7 @@ impl<T> Environment<T> {
         self.0.front_mut().unwrap().insert(name, e);
     }
 
-    pub fn get_bound_value(&self, name: String) -> Result<&T, Error> {
+    pub fn get_bound_value(&self, name: String) -> Result<T, Error> {
         let mut res: Option<&T> = None;
         for hashmap in self.0.iter() {
             let r = hashmap.get(&name);
@@ -27,7 +27,7 @@ impl<T> Environment<T> {
         }
 
         match res {
-            Some(v) => Ok(v),
+            Some(v) => Ok((*v).clone()),
             None => Err(Error(
                 "The value is not found in the environment.".to_string(),
             )),
