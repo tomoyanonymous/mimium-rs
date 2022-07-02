@@ -1,6 +1,6 @@
 use mmmtype::*;
+use std::rc::Rc;
 use utils::metadata::WithMeta;
-
 pub type Time = i64;
 
 // High-Level Intermediate Representation is mostly W-calculus based format without multi-stage computation factors.
@@ -14,29 +14,42 @@ pub enum Literal {
     Float(String),
 }
 
-type UniqueId = (String,i64);
+// type UniqueId = (String, i64);
 
 #[derive(Clone, Debug, PartialEq, Hash)]
+pub struct Value(pub String);
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Var(Rc<WithMeta<Self>>, Option<Time>),
-    Block(Option<Rc<WithMeta<Self>>>),
+    Var(Rc<WithMeta<Value>>, Option<Time>),
+    Block(Option<Box<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
-    Proj(Rc<WithMeta<Self>>, i64),
-    Apply(Rc<WithMeta<Self>>, Rc<WithMeta<Self>>),
-    Function(Vec<WithMeta<TypedId>>, Rc<WithMeta<Self>>), //lambda
-    Feed(Id, Rc<WithMeta<Self>>),                         //feedback connection primitive
-    Let(TypedId, Rc<WithMeta<Self>>, Option<Rc<WithMeta<Self>>>),
-    LetRec(TypedId, Rc<WithMeta<Self>>, Option<Rc<WithMeta<Self>>>),
+    Proj(Box<WithMeta<Self>>, i64),
+    Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    Lambda(Vec<Rc<WithMeta<Value>>>, Box<WithMeta<Self>>), //lambda
+    Feed(Rc<WithMeta<Value>>, Box<WithMeta<Self>>),                         //feedback connection primitive
+    Let(
+        Rc<WithMeta<Value>>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
+    ),
+    LetRec(
+        Rc<WithMeta<Value>>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
+    ),
     LetTuple(
-        Vec<TypedId>,
-        Rc<WithMeta<Self>>,
-        Option<Rc<WithMeta<Self>>>,
+        Vec<Rc<WithMeta<Value>>>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
     ),
     If(
-        Rc<WithMeta<Self>>,
-        Rc<WithMeta<Self>>,
-        Option<Rc<WithMeta<Self>>>,
+        Box<WithMeta<Self>>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
     ),
+    Bracket(Box<WithMeta<Self>>),
+    Escape(Box<WithMeta<Self>>),
     Error,
 }

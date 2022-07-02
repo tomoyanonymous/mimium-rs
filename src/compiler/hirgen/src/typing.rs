@@ -1,6 +1,6 @@
 use ast::expr::*;
 use mmmtype::*;
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use utils::{environment::*, metadata::*};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -10,7 +10,17 @@ pub struct Error(String);
 pub struct InferContext {
     interm_idx: i64,
     subst_map: HashMap<i64, Type>,
-    env: Environment<Type>, // interm_map:HashMap<i64,Type>
+    pub env: Environment<Type>, // interm_map:HashMap<i64,Type>
+}
+
+impl InferContext {
+    pub fn new() -> Self {
+        Self {
+            interm_idx: 0,
+            subst_map: HashMap::<i64, Type>::new(),
+            env: Environment::<Type>::new(),
+        }
+    }
 }
 
 impl InferContext {
@@ -40,7 +50,7 @@ impl InferContext {
             Type::Function(p, r, s) => {
                 vec_cls(p) && cls(r.0) && cls(s.unwrap_or(Box::new((Type::Unknown, 0..1))).0)
             }
-            Type::Struct(s) => todo!(),
+            Type::Struct(_s) => todo!(),
             _ => false,
         }
     }
@@ -105,7 +115,7 @@ impl InferContext {
                 Ok(Type::Array(Box::new((self.unify_types(a1.0, a2.0)?, a1.1))))
             }
             (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?)),
-            (Type::Struct(a1), Type::Struct(a2)) => todo!(), //todo
+            (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
                 Box::new((self.unify_types(r1.0, r2.0)?, r1.1)),
@@ -119,7 +129,7 @@ impl InferContext {
             (Type::Int, Type::Int) => Ok(Type::Int),
             (Type::String, Type::String) => Ok(Type::String),
             (Type::Unit, Type::Unit) => Ok(Type::Unit),
-            (Type::Code(p1), Type::Code(p2)) => {
+            (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
             (_p1, _p2) => Err(Error("type unification error".to_string())),
@@ -199,7 +209,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
                 None => Ok(Type::Unit),
             }
         }
-        Expr::LetTuple(ids, body, then) => {
+        Expr::LetTuple(_ids, _body, _then) => {
             todo!("should be de-sugared before type inference")
         }
         Expr::LetRec(id, body, then) => {
@@ -219,7 +229,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Var(name, _time) => ctx
             .env
             .get_bound_value(name)
-            .map_err(|_e| Error("variable not found".to_string())),
+            .map_or(Err(Error("variable not found".to_string())), |v| Ok(v.clone())),
         Expr::Apply(fun, callee) => {
             let c = ctx;
             let fnl = infer_type(fun.0, c)?;

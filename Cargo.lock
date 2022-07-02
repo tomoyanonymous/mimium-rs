@@ -107,6 +107,7 @@ name = "mimium-hirgen"
 version = "0.0.1"
 dependencies = [
  "mimium-ast",
+ "mimium-hir",
  "mimium-type",
  "mimium-utils",
 ]
