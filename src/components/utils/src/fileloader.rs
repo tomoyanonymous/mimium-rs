@@ -1,5 +1,5 @@
 use std::{
-    env,
+    env, fmt,
     path::{self, PathBuf},
 };
 
@@ -10,6 +10,19 @@ pub enum Error {
     UtfConversionError(std::string::FromUtf8Error),
     PathJoinError(env::JoinPathsError),
 }
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::IoError(e) => write!(f, "IoError{:?}", e),
+            Error::FileNotFound(e, p) => write!(f, "File {} not found: {:?}", p.display(), e),
+            Error::UtfConversionError(e) => write!(f, "Failed to convert into UTF{:?}", e),
+            Error::PathJoinError(e) => write!(f, "Failed to join paths{:?}", e),
+        }
+    }
+}
+
+impl std::error::Error for Error{}
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {

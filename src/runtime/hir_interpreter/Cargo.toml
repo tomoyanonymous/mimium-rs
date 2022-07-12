@@ -16,3 +16,4 @@ parser ={ path = "../../compiler/parser", package = "mimium-parser"}
 hirgen ={ path = "../../compiler/hirgen", package = "mimium-hirgen"}
 mirgen ={ path = "../../compiler/mirgen", package = "mimium-mirgen"}
 clap = { version = "3.2.10", features = ["derive"] }
+anyhow = "1.0.58"

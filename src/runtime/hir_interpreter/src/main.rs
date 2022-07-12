@@ -1,11 +1,12 @@
-use utils::fileloader;
-use clap::Parser;
+use anyhow::Result;
+use clap::Parser as _;
 use hirgen::*;
 use lexer::*;
 use mirgen::*;
 use parser::*;
+use utils::{fileloader, metadata::WithMeta};
 /// Simple program to greet a person
-#[derive(Parser, Debug)]
+#[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// File name
@@ -17,18 +18,21 @@ struct Args {
     count: u8,
 }
 
-
-
-fn main() {
+fn eval(content: String) -> anyhow::Result<WithMeta<ast::expr::Expr>, parser::Errors> {
+    parser::parse(content)
+}
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     for _ in 0..args.count {
-        let res = fileloader::load(args.file.clone());
-        match res {
-            Ok((content, fullpath)) => {
+        let (content, fullpath) = fileloader::load(args.file.clone())?;
+        match eval(content) {
+            Ok(ast) => {
                 println!("Filename: {}", fullpath.display());
-                println!("{}", content)
+
+                println!("AST:\n{:?}", ast)
             }
             Err(e) => panic!("Error here: \n{:?}", e),
         }
     }
+    Ok(())
 }

@@ -1,6 +1,7 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use ast::expr::*;
 use chumsky::prelude::*;
+use chumsky::Parser;
 use std::fmt::Display;
 use std::hash::Hash;
 use token::*;
@@ -58,7 +59,7 @@ pub fn report_error<E: Hash + Eq + Display>(src: &String, errs: Vec<Simple<E>>) 
     }
 }
 
-pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
+fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = select! { Token::Ident(s) => TypedId { id: s, ty: None } }.labelled("lvar");
     let fnparams = lvar
         .map_with_span(|e, s| WithMeta::<_>(e, s))
@@ -233,6 +234,50 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
     });
     expr.then_ignore(end())
         .map_with_span(|e, s| WithMeta::<_>(e, s))
+}
+
+#[derive(Debug, Clone)]
+pub enum Error {
+    ParserError(Simple<Token>),
+    LexerError(Simple<char>),
+}
+
+impl From<Simple<Token>> for Error {
+    fn from(e: Simple<Token>) -> Self {
+        Error::ParserError(e)
+    }
+}
+impl From<Simple<char>> for Error {
+    fn from(e: Simple<char>) -> Self {
+        Error::LexerError(e)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Errors(Vec<Error>);
+
+pub fn parse(src: String) -> Result<WithMeta<Expr>, Errors> {
+    let len = src.chars().count();
+    let mut errs = Errors(vec![]);
+    let (tokens, lex_errs) = lexer::lexer().parse_recovery(src.clone());
+    lex_errs
+        .iter()
+        .for_each(|e| errs.0.push(Error::LexerError(e.clone())));
+
+    let t = match tokens {
+        Some(t) => Ok(t),
+        None => Err(errs.clone()),
+    }?;
+    let (ast, parse_errs) =
+        parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+    ast.ok_or_else(|| {
+        let mut ne = parse_errs
+            .into_iter()
+            .map(|e: Simple<Token>| Error::ParserError(e))
+            .collect();
+        errs.0.append(&mut ne);
+        errs
+    })
 }
 #[cfg(test)]
 mod tests {

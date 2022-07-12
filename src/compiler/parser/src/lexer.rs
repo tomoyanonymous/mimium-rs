@@ -1,5 +1,5 @@
 use chumsky::prelude::*;
-pub use chumsky::Parser;
+use chumsky::Parser;
 use token::*;
 use utils::metadata::*;
 
