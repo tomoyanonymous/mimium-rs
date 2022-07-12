@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "src/components/*",
-    "src/compiler/*"
+    "src/compiler/*",
+    "src/runtime/*"
     ]
