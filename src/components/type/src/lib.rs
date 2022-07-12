@@ -18,6 +18,7 @@ pub enum Type {
         Box<WithMeta<Self>>,
         Option<Box<WithMeta<Self>>>,
     ),
+    Ref(Box<WithMeta<Self>>),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(Box<WithMeta<Self>>),
     Intermediate(i64),
@@ -38,11 +39,11 @@ impl Type {
         F: Fn(Self) -> Self,
     {
         let apply_box = |a: &Box<WithMeta<Self>>| -> Box<WithMeta<Self>> {
-            Box::new((closure(a.0.clone()), a.1.clone()))
+            Box::new(WithMeta::<_>(closure(a.0.clone()), a.1.clone()))
         };
         let apply_vec = |v: &Vec<WithMeta<Self>>| -> Vec<WithMeta<Self>> {
             v.iter()
-                .map(|a| (closure(a.0.clone()), a.1.clone()))
+                .map(|a| WithMeta::<_>(closure(a.0.clone()), a.1.clone()))
                 .collect()
         };
         match self {
@@ -56,6 +57,7 @@ impl Type {
             Type::Function(p, r, s) => {
                 Type::Function(apply_vec(p), apply_box(r), s.as_ref().map(|a| apply_box(a)))
             }
+            Type::Ref(x) => Type::Ref(apply_box(x)),
             Type::Code(c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
             Type::Unknown => Type::Unknown,
@@ -83,6 +85,8 @@ impl fmt::Display for Type {
                 write!(f, "({:?})->", p)?;
                 write!(f, "{:?}[{:?}]", r, s)
             }
+            Type::Ref(x) => write!(f, "&{:?}", x),
+
             Type::Code(c) => write!(f, "<{:?}>", c),
             Type::Intermediate(id) => {
                 write!(f, "intermediate[{}]", id,)

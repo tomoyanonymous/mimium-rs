@@ -6,5 +6,5 @@ pub type Span = std::ops::Range<usize>;
 //     pub value : T
 // }
 
-// #[derive(Clone, Debug, PartialEq)]
-pub type WithMeta<T> = (T,Span);
+#[derive(Clone, Debug, PartialEq)]
+pub struct WithMeta<T: Clone + PartialEq>(pub T, pub Span);

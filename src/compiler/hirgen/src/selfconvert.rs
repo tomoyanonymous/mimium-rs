@@ -1,6 +1,6 @@
 use ast::expr::*;
-use mmmtype::*;
-use utils::{environment::*, metadata::*};
+
+use utils::metadata::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
@@ -17,14 +17,14 @@ fn convert_literal(e: Literal) -> bool {
 fn try_find_self(e: Expr) -> bool {
     match e {
         Expr::Literal(l) => convert_literal(l),
-        Expr::Let(id, body, then) => {
+        Expr::Let(_id, body, then) => {
             try_find_self(body.0) || then.map_or(false, |e| try_find_self(e.0))
         }
-        Expr::LetRec(id, body, then) => {
+        Expr::LetRec(_id, body, then) => {
             //todo: detect self in recursive function in same stage
             try_find_self(body.0) || then.map_or(false, |e| try_find_self(e.0))
         }
-        Expr::Lambda(ids, body) => {
+        Expr::Lambda(_ids, _body) => {
             // convert_self(body)
             false
         }
@@ -61,7 +61,7 @@ fn get_feedvar_name(fid: i64) -> String {
 
 pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
     let cls = |e: WithMeta<Expr>| -> WithMeta<Expr> { convert_self(e, feedctx) };
-    let (e, span) = expr.clone();
+    let WithMeta::<_>(e, span) = expr.clone();
     match e {
         Expr::Literal(l) => match l {
             Literal::SelfLit => {
@@ -69,20 +69,20 @@ pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
                     FeedId::Global => Expr::Error,
                     FeedId::Local(i) => Expr::Var(get_feedvar_name(i), None),
                 };
-                (res, span.clone())
+                WithMeta::<_>(res, span.clone())
             }
             _ => expr.clone(),
         },
-        Expr::Tuple(v) => (
+        Expr::Tuple(v) => WithMeta::<_>(
             Expr::Tuple(v.into_iter().map(|e| cls(e)).collect()),
             span.clone(),
         ),
-        Expr::Proj(e, idx) => (Expr::Proj(Box::new(cls(*e)), idx), span.clone()),
-        Expr::Let(id, body, then) => (
+        Expr::Proj(e, idx) => WithMeta::<_>(Expr::Proj(Box::new(cls(*e)), idx), span.clone()),
+        Expr::Let(id, body, then) => WithMeta::<_>(
             Expr::Let(id, Box::new(cls(*body)), then.map(|t| Box::new(cls(*t)))),
             span.clone(),
         ),
-        Expr::LetRec(id, body, then) => (
+        Expr::LetRec(id, body, then) => WithMeta::<_>(
             Expr::LetRec(id, Box::new(cls(*body)), then.map(|t| Box::new(cls(*t)))),
             span.clone(),
         ),
@@ -91,10 +91,13 @@ pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
             let feedid = get_feedvar_name(nfctx);
             if try_find_self(body.clone().0) {
                 let nbody = convert_self(*body, FeedId::Local(nfctx));
-                (
+                WithMeta::<_>(
                     Expr::Feed(
                         feedid,
-                        Box::new((Expr::Lambda(params, Box::new(nbody)), span.clone())),
+                        Box::new(WithMeta::<_>(
+                            Expr::Lambda(params, Box::new(nbody)),
+                            span.clone(),
+                        )),
                     ),
                     span.clone(),
                 )
@@ -102,11 +105,11 @@ pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
                 expr
             }
         }
-        Expr::Apply(fun, callee) => (
+        Expr::Apply(fun, callee) => WithMeta::<_>(
             Expr::Apply(Box::new(cls(*fun)), Box::new(cls(*callee))),
             span.clone(),
         ),
-        Expr::If(cond, then, opt_else) => (
+        Expr::If(cond, then, opt_else) => WithMeta::<_>(
             Expr::If(
                 Box::new(cls(*cond)),
                 Box::new(cls(*then)),
@@ -114,7 +117,9 @@ pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
             ),
             span.clone(),
         ),
-        Expr::Block(body) => (Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone()),
+        Expr::Block(body) => {
+            WithMeta::<_>(Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone())
+        }
         _ => todo!(),
     }
 }
@@ -124,22 +129,22 @@ mod test {
 
     #[test]
     pub fn test_selfconvert() {
-        let src = (
+        let src = WithMeta::<_>(
             Expr::Let(
                 TypedId {
                     id: "lowpass".to_string(),
                     ty: None,
                 },
-                Box::new((
+                Box::new(WithMeta::<_>(
                     Expr::Lambda(
-                        vec![(
+                        vec![WithMeta::<_>(
                             TypedId {
                                 id: "input".to_string(),
                                 ty: None,
                             },
                             0..1,
                         )],
-                        Box::new((Expr::Literal(Literal::SelfLit), 0..1)),
+                        Box::new(WithMeta::<_>(Expr::Literal(Literal::SelfLit), 0..1)),
                     ),
                     0..1,
                 )),
@@ -153,19 +158,19 @@ mod test {
                 ty: None,
                 id: "lowpass".to_string(),
             },
-            Box::new((
+            Box::new(WithMeta::<_>(
                 Expr::Feed(
                     "feed_id0".to_string(),
-                    Box::new((
+                    Box::new(WithMeta::<_>(
                         Expr::Lambda(
-                            vec![(
+                            vec![WithMeta::<_>(
                                 TypedId {
                                     ty: None,
                                     id: "input".to_string(),
                                 },
                                 0..1,
                             )],
-                            Box::new((Expr::Var("feed_id0".to_string(), None), 0..1)),
+                            Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_string(), None), 0..1)),
                         ),
                         0..1,
                     )),

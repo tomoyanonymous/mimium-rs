@@ -1,0 +1,12 @@
+[package]
+name = "mimium-scheduler"
+version = "0.0.1"
+license = "MPL 2.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ast = { path = "../../components/ast", version = "0.0.1", package = "mimium-ast" }
+mmmtype = { path = "../../components/type", version = "0.0.1", package = "mimium-type" }
+utils = { path = "../../components/utils", version = "0.0.1", package = "mimium-utils" }

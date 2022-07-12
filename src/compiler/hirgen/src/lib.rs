@@ -48,7 +48,10 @@ fn gen_hir(
     let span = expr.1;
 
     let hir: Result<Hir, Error> = match expr.0 {
-        expr::Expr::Literal(l) => Ok(Hir::Literal(generate_literal((l, span.clone())))),
+        expr::Expr::Literal(l) => Ok(Hir::Literal(generate_literal(WithMeta::<_>(
+            l,
+            span.clone(),
+        )))),
         expr::Expr::Var(s, opt_time) => Ok(Hir::Var(
             evalenv
                 .get_bound_value(s.clone())
@@ -70,8 +73,8 @@ fn gen_hir(
         expr::Expr::Lambda(params, body) => {
             let hparams: Vec<Rc<WithMeta<Hvalue>>> = params
                 .iter()
-                .map(|(p, s)| {
-                    let nv = Rc::new((Hvalue(p.id.clone()), s.clone()));
+                .map(|WithMeta::<_>(p, s)| {
+                    let nv = Rc::new(WithMeta::<_>(Hvalue::new(p.id.clone()), s.clone()));
                     evalenv.add_bind(p.id.clone(), Rc::clone(&nv));
                     nv
                 })
@@ -82,17 +85,17 @@ fn gen_hir(
         expr::Expr::Let(id, body, then) => {
             let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
             evalenv.extend();
-            let nv = Rc::new((Hvalue(id.id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id.id, nv.clone());
+            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.id.clone()), span.clone())); //todo add span to typedid
+            evalenv.add_bind(id.id, Rc::clone(&nv));
             let hthen = then
                 .map(|t| Ok(Box::new(gen_hir(*t, typeenv, evalenv)?)))
                 .transpose()?;
-            Ok(Hir::Let(nv.clone(), hbody, hthen))
+            Ok(Hir::Let(Rc::clone(&nv), hbody, hthen))
         }
         expr::Expr::LetRec(id, body, then) => {
             evalenv.extend();
-            let nv = Rc::new((Hvalue(id.id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id.id, nv.clone());
+            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.id.clone()), span.clone())); //todo add span to typedid
+            evalenv.add_bind(id.id, Rc::clone(&nv));
             let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
             let hthen = then
                 .map(|t| Ok(Box::new(gen_hir(*t, typeenv, evalenv)?)))
@@ -101,8 +104,8 @@ fn gen_hir(
         }
         expr::Expr::Feed(id, body) => {
             evalenv.extend();
-            let nv = Rc::new((Hvalue(id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id, nv.clone());
+            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.clone()), span.clone())); //todo add span to typedid
+            evalenv.add_bind(id, Rc::clone(&nv));
             let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
             Ok(Hir::Feed(Rc::clone(&nv), hbody))
         }
@@ -121,7 +124,7 @@ fn gen_hir(
         }
         _ => todo!(),
     };
-    hir.map(|h| (h, span))
+    hir.map(|h| WithMeta::<_>(h, span))
 }
 
 pub fn generate_hir(expr: WithMeta<expr::Expr>) -> Result<WithMeta<Hir>, Error> {

@@ -1,6 +1,7 @@
-use utils::metadata::*;
 use chumsky::prelude::*;
+pub use chumsky::Parser;
 use token::*;
+use utils::metadata::*;
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // A parser for numbers

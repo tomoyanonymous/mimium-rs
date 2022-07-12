@@ -1,10 +1,10 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use ast::expr::*;
-use utils::metadata::*;
 use chumsky::prelude::*;
 use std::fmt::Display;
 use std::hash::Hash;
 use token::*;
+use utils::metadata::*;
 // pub mod chumsky_test;
 pub mod lexer;
 
@@ -61,7 +61,7 @@ pub fn report_error<E: Hash + Eq + Display>(src: &String, errs: Vec<Simple<E>>) 
 pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = select! { Token::Ident(s) => TypedId { id: s, ty: None } }.labelled("lvar");
     let fnparams = lvar
-        .map_with_span(|e, s| (e, s))
+        .map_with_span(|e, s| WithMeta::<_>(e, s))
         .separated_by(just(Token::Comma))
         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
 
@@ -80,7 +80,9 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             .clone()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
 
-        let atom = val.or(parenexpr).map_with_span(|e, span: Span| (e, span));
+        let atom = val
+            .or(parenexpr)
+            .map_with_span(|e, span: Span| WithMeta::<_>(e, span));
 
         let apply = atom
             .clone()
@@ -88,30 +90,39 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             .then(atom.clone())
             .then_ignore(just(Token::ParenEnd))
             .map(|(fun, callee)| {
-                (
+                WithMeta::<_>(
                     Expr::Apply(Box::new(fun.clone()), Box::new(callee.clone())),
                     fun.1.start..callee.1.end,
                 )
             })
             .labelled("apply");
         let lambda = lvar
-            .map_with_span(|id, span| (id, span))
+            .map_with_span(|id, span| WithMeta::<TypedId>(id, span))
             .separated_by(just(Token::Comma))
             .delimited_by(
                 just(Token::LambdaArgBeginEnd),
                 just(Token::LambdaArgBeginEnd),
             )
-            .then(expr.clone().map_with_span(|e, s| (e, s)))
-            .map_with_span(|(ids, block), s| (Expr::Lambda(ids, Box::new(block)), s))
+            .then(expr.clone().map_with_span(|e, s| WithMeta::<_>(e, s)))
+            .map_with_span(|(ids, block), s| WithMeta::<_>(Expr::Lambda(ids, Box::new(block)), s))
             .labelled("lambda");
 
         let let_e = just(Token::Let)
             .ignore_then(lvar)
             .then_ignore(just(Token::Assign))
-            .then(expr.clone().map_with_span(|e, s| Box::new((e, s))))
+            .then(
+                expr.clone()
+                    .map_with_span(|e, s| Box::new(WithMeta::<_>(e, s))),
+            )
             .then_ignore(just(Token::LineBreak))
-            .then(expr.clone().map_with_span(|e, s| Box::new((e, s))).or_not())
-            .map_with_span(|((ident, body), then), span| (Expr::Let(ident, body, then), span))
+            .then(
+                expr.clone()
+                    .map_with_span(|e, s| Box::new(WithMeta::<_>(e, s)))
+                    .or_not(),
+            )
+            .map_with_span(|((ident, body), then), span| {
+                WithMeta::<_>(Expr::Let(ident, body, then), span)
+            })
             .labelled("let");
         let block = expr
             .clone()
@@ -121,7 +132,12 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     .repeated()
                     .ignore_then(just(Token::BlockEnd)),
             )
-            .map_with_span(|e, span: Span| (Expr::Block(Some(Box::new((e, span.clone())))), span))
+            .map_with_span(|e, span: Span| {
+                WithMeta::<_>(
+                    Expr::Block(Some(Box::new(WithMeta::<_>(e, span.clone())))),
+                    span,
+                )
+            })
             .recover_with(nested_delimiters(
                 Token::BlockBegin,
                 Token::BlockEnd,
@@ -129,19 +145,26 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
                     (Token::ArrayBegin, Token::ArrayEnd),
                     (Token::ParenBegin, Token::ParenEnd),
                 ],
-                |span| (Expr::Error, span),
+                |span| WithMeta::<_>(Expr::Error, span),
             ))
             .labelled("block");
         let function_s = just(Token::Function)
             .ignore_then(lvar)
             .then(fnparams.clone())
             .then(block.clone())
-            .then(expr.clone().map_with_span(|e, s| Box::new((e, s))).or_not())
+            .then(
+                expr.clone()
+                    .map_with_span(|e, s| Box::new(WithMeta::<_>(e, s)))
+                    .or_not(),
+            )
             .map_with_span(|(((fname, ids), block), then), _s: Span| {
-                (
+                WithMeta::<_>(
                     Expr::LetRec(
                         fname,
-                        Box::new((Expr::Lambda(ids, Box::new(block)), _s.clone())),
+                        Box::new(WithMeta::<_>(
+                            Expr::Lambda(ids, Box::new(block)),
+                            _s.clone(),
+                        )),
                         then,
                     ),
                     _s,
@@ -151,35 +174,42 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
         let macro_s = just(Token::Macro)
             .ignore_then(lvar)
             .then(fnparams.clone())
-            .then(block.clone().map(|(e, s)| {
+            .then(block.clone().map(|WithMeta::<_>(e, s)| {
                 let content = match e {
                     Expr::Block(Some(x)) => Ok(Expr::Bracket(x)),
                     _ => Err(()),
                 };
-                (
-                    Expr::Block(Some(Box::new((content.unwrap(), s.clone())))),
+                WithMeta::<_>(
+                    Expr::Block(Some(Box::new(WithMeta::<_>(content.unwrap(), s.clone())))),
                     s,
                 )
             }))
-            .then(expr.clone().map_with_span(|e, s| Box::new((e, s))).or_not())
+            .then(
+                expr.clone()
+                    .map_with_span(|e, s| Box::new(WithMeta::<_>(e, s)))
+                    .or_not(),
+            )
             .map_with_span(|(((fname, ids), block), then), _s: Span| {
-                (
+                WithMeta::<_>(
                     Expr::LetRec(
                         fname,
-                        Box::new((Expr::Lambda(ids, Box::new(block)), _s.clone())),
+                        Box::new(WithMeta::<_>(
+                            Expr::Lambda(ids, Box::new(block)),
+                            _s.clone(),
+                        )),
                         then,
                     ),
                     _s,
                 )
             });
         let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
-            .map_with_span(|e, s| (e, s))
+            .map_with_span(|e, s| WithMeta::<_>(e, s))
             .then_ignore(just(Token::ParenBegin))
-            .then(expr.clone().map_with_span(|e, s| (e, s)))
+            .then(expr.clone().map_with_span(|e, s| WithMeta::<_>(e, s)))
             .then_ignore(just(Token::ParenEnd))
             .map_with_span(|(id, then), s: Span| {
-                (
-                    Expr::Escape(Box::new((
+                WithMeta::<_>(
+                    Expr::Escape(Box::new(WithMeta::<_>(
                         Expr::Apply(Box::new(id), Box::new(then)),
                         s.clone(),
                     ))),
@@ -191,23 +221,24 @@ pub fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + C
             .or(macro_expand)
             .or(apply)
             .or(lambda)
-            .or(val.map_with_span(|e, s| (e, s)))
+            .or(val.map_with_span(|e, s| WithMeta::<_>(e, s)))
             .or(block)
             .or(function_s)
             .or(macro_s)
-            .map(|(e, _s)| e)
+            .map(|WithMeta::<_>(e, _s)| e)
         // atom.or(apply)
         // .or(lambda)
         // .or(add)
         // .or(r#let)
     });
-    expr.then_ignore(end()).map_with_span(|e, s| (e, s))
+    expr.then_ignore(end())
+        .map_with_span(|e, s| WithMeta::<_>(e, s))
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lexer::*;
     use chumsky::stream::Stream;
+    use lexer::*;
 
     fn parse(
         src: String,
@@ -249,14 +280,17 @@ mod tests {
 
     #[test]
     pub fn test_let() {
-        let ans = (
+        let ans = WithMeta::<_>(
             Expr::Let(
                 TypedId {
                     id: "goge".to_string(),
                     ty: None,
                 },
-                Box::new((Expr::Literal(Literal::Int(36)), 11..13)),
-                Some(Box::new((Expr::Var("goge".to_string(), None), 15..19))),
+                Box::new(WithMeta::<_>(Expr::Literal(Literal::Int(36)), 11..13)),
+                Some(Box::new(WithMeta::<_>(
+                    Expr::Var("goge".to_string(), None),
+                    15..19,
+                ))),
             ),
             0..19,
         );
@@ -264,25 +298,28 @@ mod tests {
     }
     #[test]
     pub fn test_int() {
-        let ans = (Expr::Literal(Literal::Int(3466)), 0..4);
+        let ans = WithMeta::<_>(Expr::Literal(Literal::Int(3466)), 0..4);
         test_string!("3466", ans);
     }
     #[test]
     pub fn test_string() {
-        let ans = (Expr::Literal(Literal::String("teststr".to_string())), 0..9);
+        let ans = WithMeta::<_>(Expr::Literal(Literal::String("teststr".to_string())), 0..9);
         test_string!("\"teststr\"", ans);
     }
     #[test]
     pub fn test_block() {
-        let ans = (
-            Expr::Block(Some(Box::new((
+        let ans = WithMeta::<_>(
+            Expr::Block(Some(Box::new(WithMeta::<_>(
                 Expr::Let(
                     TypedId {
                         ty: None,
                         id: "hoge".to_string(),
                     },
-                    Box::new((Expr::Literal(Literal::Int(100)), 12..15)),
-                    Some(Box::new((Expr::Var("hoge".to_string(), None), 18..22))),
+                    Box::new(WithMeta::<_>(Expr::Literal(Literal::Int(100)), 12..15)),
+                    Some(Box::new(WithMeta::<_>(
+                        Expr::Var("hoge".to_string(), None),
+                        18..22,
+                    ))),
                 ),
                 0..23,
             )))),
@@ -303,15 +340,15 @@ mod tests {
     // }
     #[test]
     pub fn test_var() {
-        let ans = (Expr::Var("hoge".to_string(), None), 0..4);
+        let ans = WithMeta::<_>(Expr::Var("hoge".to_string(), None), 0..4);
         test_string!("hoge", ans);
     }
     #[test]
     pub fn test_apply() {
-        let ans = (
+        let ans = WithMeta::<_>(
             Expr::Apply(
-                Box::new((Expr::Var("myfun".to_string(), None), 0..5)),
-                Box::new((Expr::Var("callee".to_string(), None), 6..12)),
+                Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..5)),
+                Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 6..12)),
             ),
             0..13,
         );
@@ -319,11 +356,11 @@ mod tests {
     }
     #[test]
     pub fn test_macroexpand() {
-        let ans = (
-            Expr::Escape(Box::new((
+        let ans = WithMeta::<_>(
+            Expr::Escape(Box::new(WithMeta::<_>(
                 Expr::Apply(
-                    Box::new((Expr::Var("myfun".to_string(), None), 0..6)),
-                    Box::new((Expr::Var("callee".to_string(), None), 7..13)),
+                    Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..6)),
+                    Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 7..13)),
                 ),
                 0..14,
             ))),
@@ -333,23 +370,23 @@ mod tests {
     }
     #[test]
     pub fn test_fndef() {
-        let ans = (
+        let ans = WithMeta::<_>(
             Expr::LetRec(
                 TypedId {
                     ty: None,
                     id: "hoge".to_string(),
                 },
-                Box::new((
+                Box::new(WithMeta::<_>(
                     Expr::Lambda(
                         vec![
-                            (
+                            WithMeta::<_>(
                                 TypedId {
                                     ty: None,
                                     id: "input".to_string(),
                                 },
                                 8..13,
                             ),
-                            (
+                            WithMeta::<_>(
                                 TypedId {
                                     ty: None,
                                     id: "gue".to_string(),
@@ -357,8 +394,8 @@ mod tests {
                                 14..17,
                             ),
                         ],
-                        Box::new((
-                            Expr::Block(Some(Box::new((
+                        Box::new(WithMeta::<_>(
+                            Expr::Block(Some(Box::new(WithMeta::<_>(
                                 Expr::Var("input".to_string(), None),
                                 18..28,
                             )))),
@@ -375,23 +412,23 @@ mod tests {
     }
     #[test]
     pub fn test_macrodef() {
-        let ans = (
+        let ans = WithMeta::<_>(
             Expr::LetRec(
                 TypedId {
                     ty: None,
                     id: "hoge".to_string(),
                 },
-                Box::new((
+                Box::new(WithMeta::<_>(
                     Expr::Lambda(
                         vec![
-                            (
+                            WithMeta::<_>(
                                 TypedId {
                                     ty: None,
                                     id: "input".to_string(),
                                 },
                                 11..16,
                             ),
-                            (
+                            WithMeta::<_>(
                                 TypedId {
                                     ty: None,
                                     id: "gue".to_string(),
@@ -399,9 +436,9 @@ mod tests {
                                 17..20,
                             ),
                         ],
-                        Box::new((
-                            Expr::Block(Some(Box::new((
-                                Expr::Bracket(Box::new((
+                        Box::new(WithMeta::<_>(
+                            Expr::Block(Some(Box::new(WithMeta::<_>(
+                                Expr::Bracket(Box::new(WithMeta::<_>(
                                     Expr::Var("input".to_string(), None),
                                     21..31,
                                 ))),

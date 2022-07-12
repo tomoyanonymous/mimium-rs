@@ -1,6 +1,6 @@
 use ast::expr::*;
 use mmmtype::*;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use utils::{environment::*, metadata::*};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -21,9 +21,6 @@ impl InferContext {
             env: Environment::<Type>::new(),
         }
     }
-}
-
-impl InferContext {
     pub fn gen_intermediate_type(&mut self) -> Type {
         let res = Type::Intermediate(self.interm_idx);
         self.interm_idx += 1;
@@ -48,7 +45,9 @@ impl InferContext {
             Type::Array(a) => cls(a.0),
             Type::Tuple(t) => vec_cls(t),
             Type::Function(p, r, s) => {
-                vec_cls(p) && cls(r.0) && cls(s.unwrap_or(Box::new((Type::Unknown, 0..1))).0)
+                vec_cls(p)
+                    && cls(r.0)
+                    && cls(s.unwrap_or(Box::new(WithMeta::<_>(Type::Unknown, 0..1))).0)
             }
             Type::Struct(_s) => todo!(),
             _ => false,
@@ -84,7 +83,7 @@ impl InferContext {
             Ok(a1
                 .iter()
                 .zip(res?.iter())
-                .map(|(a, r)| (r.clone(), a.clone().1))
+                .map(|(a, r)| WithMeta::<_>(r.clone(), a.clone().1))
                 .collect::<Vec<WithMeta<Type>>>())
         };
         match (t1.clone(), t2.clone()) {
@@ -111,16 +110,23 @@ impl InferContext {
                 self.subst_map.insert(i, t.clone());
                 Ok(t)
             }
-            (Type::Array(a1), Type::Array(a2)) => {
-                Ok(Type::Array(Box::new((self.unify_types(a1.0, a2.0)?, a1.1))))
-            }
+            (Type::Array(a1), Type::Array(a2)) => Ok(Type::Array(Box::new(WithMeta(
+                self.unify_types(a1.0, a2.0)?,
+                a1.1,
+            )))),
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(Box::new(WithMeta(
+                self.unify_types(x1.0, x2.0)?,
+                x1.1,
+            )))),
             (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?)),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
-                Box::new((self.unify_types(r1.0, r2.0)?, r1.1)),
+                Box::new(WithMeta(self.unify_types(r1.0, r2.0)?, r1.1)),
                 match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(Box::new((self.unify_types(e1.0, e2.0)?, e1.1))),
+                    (Some(e1), Some(e2)) => {
+                        Some(Box::new(WithMeta::<_>(self.unify_types(e1.0, e2.0)?, e1.1)))
+                    }
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
@@ -152,7 +158,9 @@ fn infer_type_literal(e: Literal) -> Result<Type, Error> {
 pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
     let mut infer_vec = |e: Vec<WithMeta<Expr>>| {
         e.iter()
-            .map(|(el, span)| (infer_type(el.clone(), ctx).unwrap(), span.clone()))
+            .map(|WithMeta::<_>(el, span)| {
+                WithMeta::<_>(infer_type(el.clone(), ctx).unwrap(), span.clone())
+            })
             .collect::<Vec<WithMeta<Type>>>()
     };
 
@@ -183,8 +191,8 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let c = ctx;
             let mut infer_params = |e: Vec<WithMeta<TypedId>>| {
                 e.iter()
-                    .map(|(id, span): &(TypedId, Span)| {
-                        (
+                    .map(|WithMeta::<_>(id, span)| {
+                        WithMeta::<_>(
                             id.ty.clone().unwrap_or(c.gen_intermediate_type()),
                             span.clone(),
                         )
@@ -193,7 +201,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             };
             Ok(Type::Function(
                 infer_params(p),
-                Box::new((infer_type(r.0, c)?, r.1.clone())),
+                Box::new(WithMeta::<_>(infer_type(r.0, c)?, r.1.clone())),
                 None,
             ))
         }
@@ -229,13 +237,19 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Var(name, _time) => ctx
             .env
             .get_bound_value(name)
-            .map_or(Err(Error("variable not found".to_string())), |v| Ok(v.clone())),
+            .map_or(Err(Error("variable not found".to_string())), |v| {
+                Ok(v.clone())
+            }),
         Expr::Apply(fun, callee) => {
             let c = ctx;
             let fnl = infer_type(fun.0, c)?;
             let callee_t = infer_type(callee.0, c)?;
             let res_t = c.gen_intermediate_type();
-            let fntype = Type::Function(vec![(callee_t, callee.1)], Box::new((res_t, fun.1)), None);
+            let fntype = Type::Function(
+                vec![WithMeta::<_>(callee_t, callee.1)],
+                Box::new(WithMeta::<_>(res_t, fun.1)),
+                None,
+            );
             c.unify_types(fnl, fntype)
         }
         Expr::If(cond, then, opt_else) => {

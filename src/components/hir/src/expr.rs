@@ -80,18 +80,18 @@ impl Expr {
         }
     }
 }
-trait TreeWalk {
+pub trait TreeWalk {
     fn walk<F>(self, f: F) -> Self
     where
         Self: Sized,
-        F: Fn(Self) -> Self;
+        F: FnMut(Self) -> Self;
 }
 
 impl TreeWalk for WithMeta<Expr> {
-    fn walk<F>(self, f: F) -> Self
+    fn walk<F>(self, mut f: F) -> Self
     where
         Self: Sized,
-        F: Fn(Self) -> Self,
+        F: FnMut(Self) -> Self,
     {
         let res: Expr = match self.0 {
             Expr::Block(x) => Expr::Block(x.map(|b| Box::new(f(*b)))),
@@ -122,6 +122,6 @@ impl TreeWalk for WithMeta<Expr> {
             Expr::Escape(x) => Expr::Escape(Box::new(f(*x))),
             _ => self.0,
         };
-        (res, self.1.clone())
+        WithMeta::<_>(res, self.1.clone())
     }
 }
