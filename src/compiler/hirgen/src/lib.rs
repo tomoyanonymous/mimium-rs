@@ -5,6 +5,7 @@ use ast::expr;
 use hir::expr::Expr as Hir;
 use hir::expr::Value as Hvalue;
 use mmmtype::Type;
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 use utils::{environment::Environment, metadata::WithMeta};
@@ -31,6 +32,7 @@ impl fmt::Display for Error {
         }
     }
 }
+impl std::error::Error for Error {}
 
 fn generate_literal(expr: WithMeta<expr::Literal>) -> hir::expr::Literal {
     match expr.0 {
@@ -53,12 +55,21 @@ fn gen_hir(
             l,
             span.clone(),
         )))),
-        expr::Expr::Var(s, opt_time) => Ok(Hir::Var(
-            evalenv
-                .get_bound_value(s.clone())
-                .map_or(Err(Error::NotFound(s)), |v| Ok(v.clone()))?,
-            opt_time,
-        )),
+        expr::Expr::Var(s, opt_time) => {
+            let v_opt = evalenv.get_bound_value(s.clone()).map_or_else(
+                || {
+                    Rc::new(WithMeta(
+                        hir::expr::Value {
+                            id: s,
+                            v: RefCell::new(None),
+                        },
+                        span.clone(),
+                    ))
+                },
+                |v| v.clone(),
+            );
+            Ok(Hir::Var(v_opt, opt_time))
+        }
         expr::Expr::Tuple(vec) => {
             let hvec: Result<Vec<_>, Error> = vec
                 .iter()
@@ -129,7 +140,7 @@ fn gen_hir(
 }
 
 pub fn generate_hir(expr: WithMeta<expr::Expr>) -> Result<WithMeta<Hir>, Error> {
-    let expr_without_self = selfconvert::convert_self(expr, selfconvert::FeedId::Global);
+    let expr_without_self = selfconvert::convert_self_top(expr);
     let mut infer_ctx = typing::InferContext::new();
     let _toptype = typing::infer_type(expr_without_self.clone().0, &mut infer_ctx);
     let mut evalenv = Evalenv::new();

@@ -64,7 +64,8 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
     let fnparams = lvar
         .map_with_span(|e, s| WithMeta::<_>(e, s))
         .separated_by(just(Token::Comma))
-        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
+        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+        .labelled("fnparams");
 
     let val = select! {
         Token::Ident(s) => Expr::Var(s,None),
@@ -74,29 +75,15 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
         Token::SelfLit => Expr::Literal(Literal::SelfLit),
         Token::Now => Expr::Literal(Literal::Now),
     }
+    .map_with_span(|e, s| WithMeta(e, s))
     .labelled("value");
-
-    let expr = recursive(|expr| {
+    recursive(|expr| {
         let parenexpr = expr
             .clone()
-            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
+            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+            .map_with_span(|e, s| WithMeta::<_>(e, s))
+            .labelled("paremexpr");
 
-        let atom = val
-            .or(parenexpr)
-            .map_with_span(|e, span: Span| WithMeta::<_>(e, span));
-
-        let apply = atom
-            .clone()
-            .then_ignore(just(Token::ParenBegin))
-            .then(atom.clone())
-            .then_ignore(just(Token::ParenEnd))
-            .map(|(fun, callee)| {
-                WithMeta::<_>(
-                    Expr::Apply(Box::new(fun.clone()), Box::new(callee.clone())),
-                    fun.1.start..callee.1.end,
-                )
-            })
-            .labelled("apply");
         let lambda = lvar
             .map_with_span(|id, span| WithMeta::<TypedId>(id, span))
             .separated_by(just(Token::Comma))
@@ -170,7 +157,8 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
                     ),
                     _s,
                 )
-            });
+            })
+            .labelled("function decl");
         //todo:add bracket to return type
         let macro_s = just(Token::Macro)
             .ignore_then(lvar)
@@ -202,7 +190,8 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
                     ),
                     _s,
                 )
-            });
+            })
+            .labelled("macro definition");
         let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
             .map_with_span(|e, s| WithMeta::<_>(e, s))
             .then_ignore(just(Token::ParenBegin))
@@ -218,22 +207,38 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
                 )
             })
             .labelled("macroexpand");
-        let_e
-            .or(macro_expand)
-            .or(apply)
+
+        let atom = val
             .or(lambda)
-            .or(val.map_with_span(|e, s| WithMeta::<_>(e, s)))
+            .or(let_e)
             .or(block)
             .or(function_s)
             .or(macro_s)
-            .map(|WithMeta::<_>(e, _s)| e)
+            .or(macro_expand)
+            .or(parenexpr)
+            .labelled("atoms");
+
+        let apply = atom
+            .clone()
+            .then(
+                expr.clone()
+                    .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+                    .map_with_span(|e, s| WithMeta(e, s)),
+            )
+            .map(|(fun, callee)| {
+                WithMeta::<_>(
+                    Expr::Apply(Box::new(fun.clone()), Box::new(callee.clone())),
+                    fun.1.start..callee.1.end,
+                )
+            })
+            .labelled("apply");
+        apply.or(atom).map(|WithMeta(e, _s)| e)
         // atom.or(apply)
         // .or(lambda)
         // .or(add)
         // .or(r#let)
-    });
-    expr.then_ignore(end())
-        .map_with_span(|e, s| WithMeta::<_>(e, s))
+    })
+    .then_ignore(end()).map_with_span(|e, s| WithMeta::<_>(e, s))
 }
 
 #[derive(Debug, Clone)]
@@ -255,6 +260,14 @@ impl From<Simple<char>> for Error {
 
 #[derive(Debug, Clone)]
 pub struct Errors(Vec<Error>);
+
+impl std::fmt::Display for Errors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?},", self)
+    }
+}
+
+impl std::error::Error for Errors {}
 
 pub fn parse(src: String) -> Result<WithMeta<Expr>, Errors> {
     let len = src.chars().count();
@@ -393,11 +406,28 @@ mod tests {
         let ans = WithMeta::<_>(
             Expr::Apply(
                 Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..5)),
-                Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 6..12)),
+                Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 5..13)),
             ),
             0..13,
         );
         test_string!("myfun(callee)", ans);
+    }
+    #[test]
+    pub fn test_applynested() {
+        let ans = WithMeta::<_>(
+            Expr::Apply(
+                Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..5)),
+                Box::new(WithMeta(
+                    Expr::Apply(
+                        Box::new(WithMeta::<_>(Expr::Var("myfun2".to_string(), None), 6..12)),
+                        Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 12..20)),
+                    ),
+                    5..21,
+                )),
+            ),
+            0..21,
+        );
+        test_string!("myfun(myfun2(callee))", ans);
     }
     #[test]
     pub fn test_macroexpand() {

@@ -59,10 +59,11 @@ fn get_feedvar_name(fid: i64) -> String {
     "feed_id".to_string() + &fid.to_string()
 }
 
-pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
+fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
     let cls = |e: WithMeta<Expr>| -> WithMeta<Expr> { convert_self(e, feedctx) };
     let WithMeta::<_>(e, span) = expr.clone();
     match e {
+        Expr::Var(v, _time) => expr.clone(),
         Expr::Literal(l) => match l {
             Literal::SelfLit => {
                 let res = match feedctx {
@@ -123,6 +124,11 @@ pub fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
         _ => todo!(),
     }
 }
+
+pub fn convert_self_top(expr: WithMeta<Expr>) -> WithMeta<Expr> {
+    convert_self(expr, FeedId::Global)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

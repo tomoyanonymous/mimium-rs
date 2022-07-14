@@ -8,9 +8,9 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     let int = text::int(10).map(|s: String| Token::Int(s.parse().unwrap()));
 
     let float = text::int(10)
-        .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
-        .collect::<String>()
-        .map(|s| Token::Float(s));
+        .then(just('.'))
+        .then(text::digits(10).or_not())
+        .map(|((s, c), opt_n)| Token::Float(s + &c.to_string() + &opt_n.unwrap_or("".to_string())));
 
     // A parser for strings
     let str_ = just('"')
@@ -85,8 +85,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .at_least(1)
         .map(|_s| Token::LineBreak);
     // A single token can be one of the above
-    let token = int
-        .or(float)
+    let token = float
+        .or(int)
         .or(str_)
         // .or(ctrl)
         .or(macro_expand)

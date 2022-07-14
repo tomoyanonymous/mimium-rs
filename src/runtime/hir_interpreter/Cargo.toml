@@ -15,5 +15,7 @@ hir ={ path = "../../components/hir", package = "mimium-hir"}
 parser ={ path = "../../compiler/parser", package = "mimium-parser"}
 hirgen ={ path = "../../compiler/hirgen", package = "mimium-hirgen"}
 mirgen ={ path = "../../compiler/mirgen", package = "mimium-mirgen"}
+builtin_fn = {path = "../builtin_fn", package = "mimium-builtin-fn"}
+
 clap = { version = "3.2.10", features = ["derive"] }
 anyhow = "1.0.58"

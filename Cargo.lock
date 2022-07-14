@@ -194,6 +194,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mimium-builtin-fn"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "mimium-type",
+ "mimium-utils",
+]
+
+[[package]]
 name = "mimium-hir"
 version = "0.0.1"
 dependencies = [
@@ -208,6 +217,7 @@ dependencies = [
  "anyhow",
  "clap",
  "mimium-ast",
+ "mimium-builtin-fn",
  "mimium-hir",
  "mimium-hirgen",
  "mimium-mirgen",

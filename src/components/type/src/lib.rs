@@ -87,6 +87,8 @@ impl fmt::Display for Type {
     }
 }
 
+pub mod builder;
+
 // #[cfg(test)]
 // mod type_test {
 //     use super::*;

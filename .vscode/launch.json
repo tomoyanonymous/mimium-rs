@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'mimium-rs'",
+            "name": "Debug unit tests in library 'mimium-parser'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=mimium-rs"
+                    "--package=mimium-parser"
                 ],
                 "filter": {
-                    "name": "mimium-rs",
+                    "name": "mimium-parser",
                     "kind": "lib"
                 }
             },
@@ -45,16 +45,37 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug test in 'mimium-hir-interpreter'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--lib",
+                    "--package=mimium-hir-interpreter",
+                    "--no-run",
+                    // "test/mmm/hello.mmm"
+                ],
+                // "filter": {
+                //     "name": "mimium-hir-interpreter",
+                //     "kind": "lib"
+                // }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            
             "name": "Debug unit tests in executable 'mimium-rs'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=mimium-rs",
-                    "--package=mimium-rs"
+                    "--bin=mimium-ast",
+                    "--package=mimium-ast"
                 ],
                 "filter": {
-                    "name": "mimium-rs",
+                    "name": "mimium-ast",
                     "kind": "bin"
                 }
             },
