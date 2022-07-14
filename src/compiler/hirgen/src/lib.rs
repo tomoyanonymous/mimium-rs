@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 pub mod selfconvert;
 pub mod typing;
 use ast::expr;

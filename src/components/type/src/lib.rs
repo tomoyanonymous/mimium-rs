@@ -9,18 +9,14 @@ pub enum Type {
     Numeric,
     String,
     //aggregate types
-    Array(Box<WithMeta<Self>>),
-    Tuple(Vec<WithMeta<Self>>),
-    Struct(Vec<(String, WithMeta<Self>)>),
+    Array(Box<Self>),
+    Tuple(Vec<Self>),
+    Struct(Vec<(String, Box<Self>)>),
     //Function that has a vector of parameters, return type, and type for internal states.
-    Function(
-        Vec<WithMeta<Self>>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
-    ),
-    Ref(Box<WithMeta<Self>>),
+    Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
+    Ref(Box<Self>),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
-    Code(Box<WithMeta<Self>>),
+    Code(Box<Self>),
     Intermediate(i64),
     Unknown,
 }
@@ -38,14 +34,9 @@ impl Type {
     where
         F: Fn(Self) -> Self,
     {
-        let apply_box = |a: &Box<WithMeta<Self>>| -> Box<WithMeta<Self>> {
-            Box::new(WithMeta::<_>(closure(a.0.clone()), a.1.clone()))
-        };
-        let apply_vec = |v: &Vec<WithMeta<Self>>| -> Vec<WithMeta<Self>> {
-            v.iter()
-                .map(|a| WithMeta::<_>(closure(a.0.clone()), a.1.clone()))
-                .collect()
-        };
+        let apply_box = |a: &Self| -> Box<Self> { Box::new(closure(a.clone())) };
+        let apply_vec =
+            |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
         match self {
             Type::Unit => Type::Unit,
             Type::Int => Type::Int,
@@ -78,7 +69,7 @@ impl fmt::Display for Type {
             Type::Int => write!(f, "int"),
             Type::Numeric => write!(f, "num"),
             Type::String => write!(f, "string"),
-            Type::Array(a) => write!(f, "[{}]", a.0),
+            Type::Array(a) => write!(f, "[{}]", a),
             Type::Tuple(v) => write!(f, "({:?})", v),
             Type::Struct(s) => write!(f, "{{{:?}}}", s),
             Type::Function(p, r, s) => {
