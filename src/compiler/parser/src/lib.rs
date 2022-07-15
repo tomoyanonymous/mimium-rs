@@ -1,35 +1,68 @@
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
+use ariadne::{Color, Fmt};
 use ast::expr::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
-use std::fmt::Display;
+use std::fmt;
 use std::hash::Hash;
 use token::*;
+use utils::error::ReportableError;
 use utils::metadata::*;
 // pub mod chumsky_test;
 pub mod lexer;
 
-pub fn report_error<E: Hash + Eq + Display>(src: &String, errs: Vec<Simple<E>>) {
-    for e in errs {
-        let message = match e.reason() {
+// pub struct LexError(chumsky::error::Simple<char>);
+#[derive(Debug)]
+pub struct ParseError<T>(chumsky::error::Simple<T>)
+where
+    T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display;
+
+impl<T> Into<chumsky::error::Simple<T>> for ParseError<T>
+where
+    T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,
+{
+    fn into(self) -> chumsky::error::Simple<T> {
+        self.0
+    }
+}
+impl<T> fmt::Display for ParseError<T>
+where
+    T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl<T> std::error::Error for ParseError<T> where T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display {}
+
+impl<T> ReportableError for ParseError<T>
+where
+    T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,
+{
+    fn get_span(&self) -> utils::metadata::Span {
+        self.0.span()
+    }
+    fn get_message(&self) -> String {
+        match self.0.reason() {
             chumsky::error::SimpleReason::Unexpected
             | chumsky::error::SimpleReason::Unclosed { .. } => {
                 format!(
                     "{}{}, expected {}",
-                    if e.found().is_some() {
+                    if self.0.found().is_some() {
                         "unexpected token"
                     } else {
                         "unexpected end of input"
                     },
-                    if let Some(label) = e.label() {
+                    if let Some(label) = self.0.label() {
                         format!(" while parsing {}", label.fg(Color::Green))
                     } else {
                         " something else".to_string()
                     },
-                    if e.expected().count() == 0 {
+                    if self.0.expected().count() == 0 {
                         "somemething else".to_string()
                     } else {
-                        e.expected()
+                        self.0
+                            .expected()
                             .map(|expected| match expected {
                                 Some(expected) => expected.to_string(),
                                 None => "end of input".to_string(),
@@ -40,22 +73,19 @@ pub fn report_error<E: Hash + Eq + Display>(src: &String, errs: Vec<Simple<E>>) 
                 )
             }
             chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
-        };
-
-        Report::build(ReportKind::Error, (), e.span().start)
-            .with_message(message)
-            .with_label(Label::new(e.span()).with_message(match e.reason() {
-                chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
-                _ => format!(
-                        "Unexpected {}",
-                        e.found()
-                            .map(|c| format!("token {}", c.fg(Color::Red)))
-                            .unwrap_or_else(|| "end of input".to_string())
-                    ),
-            }))
-            .finish()
-            .print(Source::from(src))
-            .unwrap();
+        }
+    }
+    fn get_label(&self) -> String {
+        match self.0.reason() {
+            chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
+            _ => format!(
+                "Unexpected {}",
+                self.0
+                    .found()
+                    .map(|c| format!("token {}", c.fg(Color::Red)))
+                    .unwrap_or_else(|| "end of input".to_string())
+            ),
+        }
     }
 }
 
@@ -238,7 +268,8 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
         // .or(add)
         // .or(r#let)
     })
-    .then_ignore(end()).map_with_span(|e, s| WithMeta::<_>(e, s))
+    .then_ignore(end())
+    .map_with_span(|e, s| WithMeta::<_>(e, s))
 }
 
 #[derive(Debug, Clone)]
@@ -297,25 +328,27 @@ mod tests {
     use super::*;
     use chumsky::stream::Stream;
     use lexer::*;
-
-    fn parse(
-        src: String,
-    ) -> (
-        Option<WithMeta<Expr>>,
-        Vec<Simple<char>>,
-        Vec<Simple<Token>>,
-    ) {
+    use std::path::PathBuf;
+    fn parse(src: String) -> (Option<WithMeta<Expr>>, Vec<Box<dyn ReportableError>>) {
         let len = src.chars().count();
+        let mut errs = Vec::<Box<dyn ReportableError>>::new();
         let (tokens, lex_errs) = lexer().parse_recovery(src.clone());
+        lex_errs
+            .iter()
+            .for_each(|e| errs.push(Box::new(ParseError::<_>(e.clone()))));
+
         dbg!(tokens.clone());
         let res = match tokens {
             Some(token) => {
                 let (ast, parse_errs) =
                     parser().parse_recovery(Stream::from_iter(len..len + 1, token.into_iter()));
+                parse_errs
+                    .iter()
+                    .for_each(|e| errs.push(Box::new(ParseError::<_>(e.clone()))));
                 // dbg!(ast.clone());
-                (ast, lex_errs, parse_errs)
+                (ast, errs)
             }
-            None => (None, lex_errs, Vec::new()),
+            None => (None, errs),
         };
         res
     }
@@ -323,9 +356,9 @@ mod tests {
     macro_rules! test_string {
         ($src:literal, $ans:expr) => {
             let srcstr = $src.to_string();
-            let (ast, lex_err, parse_err) = parse(srcstr.clone());
-            if (lex_err.len() > 0 || parse_err.len() > 0) {
-                report_error(&srcstr, parse_err);
+            let (ast, errs) = parse(srcstr.clone());
+            if (errs.len() > 0) {
+                utils::error::report(&srcstr, PathBuf::new(), errs);
                 panic!();
             }
             if let Some(a) = ast {
@@ -534,19 +567,9 @@ mod tests {
     #[should_panic]
     pub fn test_fail() {
         let src = "let 100 == hoge\n fuga";
-        let (_ans, lexerr, parse_err) = parse(src.clone().to_string());
-        dbg!(_ans);
-        let is_lex_err = lexerr.len() > 0;
-        let is_par_err = parse_err.len() > 0;
-        dbg!(lexerr.clone());
-        dbg!(parse_err.clone());
-        if is_lex_err {
-            report_error(&src.to_string(), lexerr.clone());
-        }
-        if is_par_err {
-            report_error(&src.to_string(), parse_err.clone());
-        }
-        if is_lex_err || is_par_err {
+        let (_ans, errs) = parse(src.clone().to_string());
+        if errs.len() > 0 {
+            utils::error::report(&src.to_string(), PathBuf::new(), errs);
             panic!()
         }
     }

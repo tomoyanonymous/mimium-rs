@@ -287,6 +287,9 @@ dependencies = [
 [[package]]
 name = "mimium-utils"
 version = "0.0.1"
+dependencies = [
+ "ariadne",
+]
 
 [[package]]
 name = "once_cell"

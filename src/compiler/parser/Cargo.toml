@@ -11,4 +11,4 @@ utils = { path = "../../components/utils", version = "0.0.1", package = "mimium-
 token = { path = "../../components/token", version = "0.0.1", package = "mimium-token" }
 ast = { path = "../../components/ast", version = "0.0.1", package = "mimium-ast" }
 chumsky = "0.8.0"
-ariadne = "0.1.2"
+ariadne = "0.1.5"
