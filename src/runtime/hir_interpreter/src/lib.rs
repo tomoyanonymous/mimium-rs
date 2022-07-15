@@ -36,12 +36,14 @@ mod hireval_test {
     use super::evaluator;
     use super::*;
     use utils::fileloader;
+    use std::env;
     #[test]
     fn test() -> anyhow::Result<()> {
-        let (content, _fullpath) = fileloader::load("test/mmm/hello.mmm".to_string())?;
+
+        let (content, _fullpath) = fileloader::load("test/hello.mmm".to_string())?;
         match eval_top(content) {
             Ok(evaluator::Value::Numeric(v)) => {
-                assert_eq!(v, 2.0_f64.sqrt())
+                assert_eq!(v, 2.0_f64.sqrt().sin())
             }
             Err(e) => panic!("Error here: \n{:?}", e),
             _ => panic!("Error"),
