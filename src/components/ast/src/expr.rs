@@ -20,7 +20,7 @@ pub enum Expr {
     Block(Option<Box<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
-    Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),

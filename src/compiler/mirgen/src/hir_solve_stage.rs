@@ -13,17 +13,19 @@ pub fn eval_stage_hir(expr: WithMeta<Expr>, ctx: &mut EvalContext) -> WithMeta<E
             let r = var.0.v.borrow().as_ref().unwrap().clone();
             WithMeta(r, span.clone())
         }
-        Expr::Apply(box WithMeta(Expr::Lambda(p, body), _fspan), box WithMeta(callee, _cspan))
-            if ctx.stage == 0 =>
-        {
-            let param = &p[0].0;
-            let mut myp = param.v.borrow_mut();
-            *myp = Some(callee);
+        Expr::Apply(box WithMeta(Expr::Lambda(params, body), _fspan), callee) if ctx.stage == 0 => {
+            params.iter().zip(callee.iter()).for_each(|(p, e)| {
+                let mut myp = p.0.v.borrow_mut();
+                *myp = Some(e.0.clone());
+            });
             eval_stage_hir(*body, ctx)
         }
-        Expr::Apply(fun, box callee) if fun.0.is_value() => {
-            let newcallee = eval_stage_hir(callee, ctx);
-            let res = WithMeta(Expr::Apply(fun, Box::new(newcallee)), span.clone());
+        Expr::Apply(fun, callee) if fun.0.is_value() => {
+            let newcallee = callee
+                .iter()
+                .map(|e| eval_stage_hir(e.clone(), ctx))
+                .collect();
+            let res = WithMeta(Expr::Apply(fun, newcallee), span.clone());
             eval_stage_hir(res, ctx)
         }
         Expr::Apply(box fun, callee) => {

@@ -142,15 +142,15 @@ fn infer_type_literal(e: Literal) -> Result<Type, Error> {
 }
 
 pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
-    let mut infer_vec = |e: Vec<WithMeta<Expr>>| {
+    let infer_vec = |e: Vec<WithMeta<Expr>>, ctx: &mut InferContext| {
         e.iter()
-            .map(|WithMeta(el, span)| Ok(infer_type(el.clone(), ctx)?))
+            .map(|WithMeta(el, _span)| Ok(infer_type(el.clone(), ctx)?))
             .collect::<Result<Vec<_>, Error>>()
     };
 
     match e {
         Expr::Literal(l) => infer_type_literal(l),
-        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e)?)),
+        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e, ctx)?)),
         Expr::Proj(e, idx) => {
             let tup = infer_type(e.0, ctx)?;
             match tup {
@@ -175,7 +175,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let c = ctx;
             let mut infer_params = |e: Vec<WithMeta<TypedId>>| {
                 e.iter()
-                    .map(|WithMeta(id, span)| id.ty.clone().unwrap_or(c.gen_intermediate_type()))
+                    .map(|WithMeta(id, _s)| id.ty.clone().unwrap_or(c.gen_intermediate_type()))
                     .collect()
             };
             Ok(Type::Function(
@@ -220,12 +220,11 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
                 Ok(v.clone())
             }),
         Expr::Apply(fun, callee) => {
-            let c = ctx;
-            let fnl = infer_type(fun.0, c)?;
-            let callee_t = infer_type(callee.0, c)?;
-            let res_t = c.gen_intermediate_type();
-            let fntype = Type::Function(vec![callee_t], Box::new(res_t), None);
-            c.unify_types(fnl, fntype)
+            let fnl = infer_type(fun.0, ctx)?;
+            let callee_t = infer_vec(callee, ctx)?;
+            let res_t = ctx.gen_intermediate_type();
+            let fntype = Type::Function(callee_t, Box::new(res_t), None);
+            ctx.unify_types(fnl, fntype)
         }
         Expr::If(cond, then, opt_else) => {
             let condt = infer_type(cond.0, ctx)?;

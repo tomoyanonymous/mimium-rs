@@ -230,7 +230,7 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
             .map_with_span(|(id, then), s: Span| {
                 WithMeta::<_>(
                     Expr::Escape(Box::new(WithMeta::<_>(
-                        Expr::Apply(Box::new(id), Box::new(then)),
+                        Expr::Apply(Box::new(id), vec![then]),
                         s.clone(),
                     ))),
                     s,
@@ -247,18 +247,23 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
             .or(macro_expand)
             .or(parenexpr)
             .labelled("atoms");
-
+        let items = expr
+            .clone()
+            .map_with_span(|e, s| WithMeta(e, s))
+            .separated_by(just(Token::Comma))
+            .allow_trailing();
         let apply = atom
             .clone()
             .then(
-                expr.clone()
+                items
+                    .clone()
                     .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                    .map_with_span(|e, s| WithMeta(e, s)),
+                    .map_with_span(|e, s: Span| (e, s)),
             )
-            .map(|(fun, callee)| {
+            .map(|(fun, (callee, cspan))| {
                 WithMeta::<_>(
-                    Expr::Apply(Box::new(fun.clone()), Box::new(callee.clone())),
-                    fun.1.start..callee.1.end,
+                    Expr::Apply(Box::new(fun.clone()), callee),
+                    fun.1.start..cspan.end,
                 )
             })
             .labelled("apply");
@@ -438,8 +443,8 @@ mod tests {
     pub fn test_apply() {
         let ans = WithMeta::<_>(
             Expr::Apply(
-                Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..5)),
-                Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 5..13)),
+                Box::new(WithMeta(Expr::Var("myfun".to_string(), None), 0..5)),
+                vec![WithMeta(Expr::Var("callee".to_string(), None), 6..12)],
             ),
             0..13,
         );
@@ -449,14 +454,14 @@ mod tests {
     pub fn test_applynested() {
         let ans = WithMeta::<_>(
             Expr::Apply(
-                Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..5)),
-                Box::new(WithMeta(
+                Box::new(WithMeta(Expr::Var("myfun".to_string(), None), 0..5)),
+                vec![WithMeta(
                     Expr::Apply(
-                        Box::new(WithMeta::<_>(Expr::Var("myfun2".to_string(), None), 6..12)),
-                        Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 12..20)),
+                        Box::new(WithMeta(Expr::Var("myfun2".to_string(), None), 6..12)),
+                        vec![WithMeta(Expr::Var("callee".to_string(), None), 13..19)],
                     ),
-                    5..21,
-                )),
+                    6..20,
+                )],
             ),
             0..21,
         );
@@ -464,11 +469,11 @@ mod tests {
     }
     #[test]
     pub fn test_macroexpand() {
-        let ans = WithMeta::<_>(
-            Expr::Escape(Box::new(WithMeta::<_>(
+        let ans = WithMeta(
+            Expr::Escape(Box::new(WithMeta(
                 Expr::Apply(
-                    Box::new(WithMeta::<_>(Expr::Var("myfun".to_string(), None), 0..6)),
-                    Box::new(WithMeta::<_>(Expr::Var("callee".to_string(), None), 7..13)),
+                    Box::new(WithMeta(Expr::Var("myfun".to_string(), None), 0..6)),
+                    vec![WithMeta(Expr::Var("callee".to_string(), None), 7..13)],
                 ),
                 0..14,
             ))),

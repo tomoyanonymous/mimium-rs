@@ -38,7 +38,7 @@ pub enum Expr {
     Block(Option<Box<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
-    Apply(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
     Lambda(Vec<Rc<WithMeta<Value>>>, Box<WithMeta<Self>>), //lambda
     Feed(Rc<WithMeta<Value>>, Box<WithMeta<Self>>),        //feedback connection primitive
     Let(
@@ -97,7 +97,9 @@ impl TreeWalk for WithMeta<Expr> {
             Expr::Block(x) => Expr::Block(x.map(|b| Box::new(f(*b)))),
             Expr::Tuple(vec) => Expr::Tuple(vec.into_iter().map(|b| f(b)).collect()),
             Expr::Proj(x, idx) => Expr::Proj(Box::new(f(*x)), idx),
-            Expr::Apply(e1, e2) => Expr::Apply(Box::new(f(*e1)), Box::new(f(*e2))),
+            Expr::Apply(e1, e2) => {
+                Expr::Apply(Box::new(f(*e1)), e2.into_iter().map(|b| f(b)).collect())
+            }
             Expr::Lambda(params, body) => Expr::Lambda(params, Box::new(f(*body))),
             Expr::Feed(id, body) => Expr::Feed(id, Box::new(f(*body))),
             Expr::Let(id, body, opt_then) => Expr::Let(

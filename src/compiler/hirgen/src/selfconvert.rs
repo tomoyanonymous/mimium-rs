@@ -30,7 +30,9 @@ fn try_find_self(e: Expr) -> bool {
         }
         Expr::Proj(body, _idx) => try_find_self(body.0),
         Expr::Block(body) => body.map_or(false, |b| try_find_self(b.0)),
-        Expr::Apply(fun, callee) => try_find_self(fun.0) || try_find_self(callee.0),
+        Expr::Apply(fun, callee) => {
+            try_find_self(fun.0) || callee.into_iter().any(|v| try_find_self(v.0))
+        }
         Expr::Tuple(vec) => vec.into_iter().any(|v| try_find_self(v.0)),
         Expr::If(cond, then, opt_else) => {
             try_find_self(cond.0)
@@ -61,29 +63,29 @@ fn get_feedvar_name(fid: i64) -> String {
 
 fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
     let cls = |e: WithMeta<Expr>| -> WithMeta<Expr> { convert_self(e, feedctx) };
-    let WithMeta::<_>(e, span) = expr.clone();
+    let WithMeta(e, span) = expr.clone();
     match e {
-        Expr::Var(v, _time) => expr.clone(),
+        Expr::Var(_v, _time) => expr.clone(),
         Expr::Literal(l) => match l {
             Literal::SelfLit => {
                 let res = match feedctx {
                     FeedId::Global => Expr::Error,
                     FeedId::Local(i) => Expr::Var(get_feedvar_name(i), None),
                 };
-                WithMeta::<_>(res, span.clone())
+                WithMeta(res, span.clone())
             }
             _ => expr.clone(),
         },
-        Expr::Tuple(v) => WithMeta::<_>(
+        Expr::Tuple(v) => WithMeta(
             Expr::Tuple(v.into_iter().map(|e| cls(e)).collect()),
             span.clone(),
         ),
-        Expr::Proj(e, idx) => WithMeta::<_>(Expr::Proj(Box::new(cls(*e)), idx), span.clone()),
-        Expr::Let(id, body, then) => WithMeta::<_>(
+        Expr::Proj(e, idx) => WithMeta(Expr::Proj(Box::new(cls(*e)), idx), span.clone()),
+        Expr::Let(id, body, then) => WithMeta(
             Expr::Let(id, Box::new(cls(*body)), then.map(|t| Box::new(cls(*t)))),
             span.clone(),
         ),
-        Expr::LetRec(id, body, then) => WithMeta::<_>(
+        Expr::LetRec(id, body, then) => WithMeta(
             Expr::LetRec(id, Box::new(cls(*body)), then.map(|t| Box::new(cls(*t)))),
             span.clone(),
         ),
@@ -92,7 +94,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
             let feedid = get_feedvar_name(nfctx);
             if try_find_self(body.clone().0) {
                 let nbody = convert_self(*body, FeedId::Local(nfctx));
-                WithMeta::<_>(
+                WithMeta(
                     Expr::Feed(
                         feedid,
                         Box::new(WithMeta::<_>(
@@ -106,11 +108,14 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
                 expr
             }
         }
-        Expr::Apply(fun, callee) => WithMeta::<_>(
-            Expr::Apply(Box::new(cls(*fun)), Box::new(cls(*callee))),
+        Expr::Apply(fun, callee) => WithMeta(
+            Expr::Apply(
+                Box::new(cls(*fun)),
+                callee.into_iter().map(|e| cls(e)).collect(),
+            ),
             span.clone(),
         ),
-        Expr::If(cond, then, opt_else) => WithMeta::<_>(
+        Expr::If(cond, then, opt_else) => WithMeta(
             Expr::If(
                 Box::new(cls(*cond)),
                 Box::new(cls(*then)),
@@ -119,7 +124,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
             span.clone(),
         ),
         Expr::Block(body) => {
-            WithMeta::<_>(Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone())
+            WithMeta(Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone())
         }
         _ => todo!(),
     }
@@ -135,7 +140,7 @@ mod test {
 
     #[test]
     pub fn test_selfconvert() {
-        let src = WithMeta::<_>(
+        let src = WithMeta(
             Expr::Let(
                 TypedId {
                     id: "lowpass".to_string(),

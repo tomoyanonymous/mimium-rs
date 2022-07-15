@@ -80,7 +80,13 @@ fn gen_hir(
         expr::Expr::Proj(v, idx) => Ok(Hir::Proj(Box::new(gen_hir(*v, typeenv, evalenv)?), idx)),
         expr::Expr::Apply(fun, callee) => {
             let mut this = |e| Ok(Box::new(gen_hir(e, typeenv, evalenv)?));
-            Ok(Hir::Apply(this(*fun)?, this(*callee)?))
+            Ok(Hir::Apply(
+                this(*fun)?,
+                callee
+                    .iter()
+                    .map(|v| gen_hir(v.clone(), typeenv, evalenv))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
         }
         expr::Expr::Lambda(params, body) => {
             let hparams: Vec<Rc<WithMeta<Hvalue>>> = params

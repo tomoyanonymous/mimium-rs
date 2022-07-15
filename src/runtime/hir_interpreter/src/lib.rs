@@ -1,14 +1,7 @@
 #![feature(box_patterns)]
-
 pub mod evaluator;
+use anyhow;
 
-use anyhow::Result;
-use clap::Parser as _;
-use hirgen::*;
-use lexer::*;
-use mirgen::*;
-use parser::*;
-/// Simple program to greet a person
 #[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct Args {
@@ -36,7 +29,6 @@ mod hireval_test {
     use super::evaluator;
     use super::*;
     use utils::fileloader;
-    use std::env;
     #[test]
     fn test() -> anyhow::Result<()> {
 

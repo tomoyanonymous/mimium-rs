@@ -1,10 +1,10 @@
-use builtin_fn::*;
+use builtin_fn;
 use hir::expr::*;
 use utils::metadata::WithMeta;
 
 use std::fmt;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
     Numeric(f64),
@@ -68,31 +68,57 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
                 None => Err(Error::Unbounded(WithMeta(var.0.id.clone(), var.1.clone()))),
             }
         }
-        Expr::Apply(box WithMeta(Expr::Lambda(p, body), _fspan), box WithMeta(callee, _cspan)) => {
-            let param = &p[0].0;
-            let mut myp = param.v.borrow_mut();
-            *myp = Some(callee);
+        Expr::Apply(box WithMeta(Expr::Lambda(params, body), _fspan), callee) => {
+            params.iter().zip(callee.iter()).for_each(|(p, e)| {
+                let mut myp = p.0.v.borrow_mut();
+                *myp = Some(e.0.clone());
+            });
             eval_i(*body, ctx)
         }
-        Expr::Apply(fun, box callee) if fun.0.is_value() => {
-            let newcallee = eval_i(callee, ctx)?;
-            let res = WithMeta(Expr::Apply(fun, Box::new(newcallee)), span.clone());
+        Expr::Apply(fun, callee) if fun.0.is_value() => {
+            let newcallee = callee
+                .iter()
+                .map(|c| eval_i(c.clone(), ctx))
+                .collect::<Result<Vec<_>, _>>()?;
+            let res = WithMeta(Expr::Apply(fun, newcallee), span.clone());
             eval_i(res, ctx)
         }
-        Expr::Apply(box WithMeta(Expr::Var(v, time), _fspan), box callee) => {
-            //expand fun until it becomes value
-            let newcallee = eval_i(callee, ctx)?;
-            if let Expr::Literal(Literal::Float(x)) = newcallee.0 {
-                let res = ctx.eval_float1(&v.0.id, x.parse::<f64>().unwrap());
-                match res {
-                    Some(x) => Ok(WithMeta(
-                        Expr::Literal(Literal::Float(x.to_string())),
-                        span.clone(),
-                    )),
-                    None => Err(Error::FloatParse),
+        Expr::Apply(box WithMeta(Expr::Var(v, _time), _fspan), callee)
+            if v.0.v.borrow().is_none() =>
+        {
+            //eval builtin function
+            let newcallee = callee
+                .iter()
+                .map(|c| eval_i(c.clone(), ctx))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            match &newcallee[..] {
+                [WithMeta(Expr::Literal(Literal::Float(x)), _)] => {
+                    let res = ctx.eval_float1(&v.0.id, x.parse::<f64>().unwrap());
+                    match res {
+                        Some(x) => Ok(WithMeta(
+                            Expr::Literal(Literal::Float(x.to_string())),
+                            span.clone(),
+                        )),
+                        None => Err(Error::FloatParse),
+                    }
                 }
-            } else {
-                Err(Error::InvalidType)
+                [WithMeta(Expr::Literal(Literal::Float(x)), _), WithMeta(Expr::Literal(Literal::Float(y)), _)] =>
+                {
+                    let res = ctx.eval_float2(
+                        &v.0.id,
+                        x.parse::<f64>().unwrap(),
+                        y.parse::<f64>().unwrap(),
+                    );
+                    match res {
+                        Some(x) => Ok(WithMeta(
+                            Expr::Literal(Literal::Float(x.to_string())),
+                            span.clone(),
+                        )),
+                        None => Err(Error::FloatParse),
+                    }
+                }
+                _ => Err(Error::InvalidType),
             }
         }
         Expr::Apply(box fun, callee) => {
@@ -103,7 +129,7 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
             );
             eval_i(res, ctx)
         }
-        Expr::Bracket(b) | Expr::Escape(b) => todo!(),
+        Expr::Bracket(_b) | Expr::Escape(_b) => todo!(),
 
         _ => {
             let mut evec = Vec::<Error>::new();
@@ -127,7 +153,7 @@ pub fn eval(expr: WithMeta<Expr>) -> Value {
     match res {
         Ok(WithMeta(e, s)) if e.is_value() => match e {
             Expr::Literal(x) => eval_v(x),
-            Expr::Lambda(p, r) => Value::Function,
+            Expr::Lambda(_p, _r) => Value::Function,
             _ => {
                 eprintln!("Unknwon Error at {:?}", s);
                 panic!()
