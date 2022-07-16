@@ -22,6 +22,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(|e| Type::Tuple(e))
+            .boxed()
             .labelled("Tuple");
         // let _struct_t = todo!();
         let func = ty
@@ -31,11 +32,12 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .then_ignore(just(Token::Arrow))
             .then(ty.clone())
             .map(|(from, to)| Type::Function(from, Box::new(to), None))
+            .boxed()
             .labelled("function");
 
         // .map_with_span(|e, s| WithMeta(e, s))
 
-        primitive.or(tuple).or(func)
+        primitive.or(tuple).or(func).boxed()
     })
 }
 
