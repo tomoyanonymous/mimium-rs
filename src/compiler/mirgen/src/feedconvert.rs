@@ -1,5 +1,3 @@
-#![feature(box_patterns)]
-
 use hir::expr::Expr;
 use utils::metadata::WithMeta;
 

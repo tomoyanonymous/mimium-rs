@@ -216,12 +216,16 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         .separated_by(just(Token::Comma))
         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
         .labelled("fnparams");
+    let blockstart = just(Token::BlockBegin).then_ignore(just(Token::LineBreak).repeated());
+    let blockend = just(Token::LineBreak)
+        .repeated()
+        .ignore_then(just(Token::BlockEnd));
     let function_s = just(Token::Function)
         .ignore_then(lvar.clone())
         .then(fnparams.clone())
         .then(
             expr.clone()
-                .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd)),
+                .delimited_by(blockstart.clone(), blockend.clone()),
         )
         .then(expr.clone().map(|e| Box::new(e)).or_not())
         .map_with_span(|(((fname, ids), block), then), _s: Span| {
@@ -240,7 +244,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         .then(fnparams.clone())
         .then(
             expr.clone()
-                .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
+                .delimited_by(blockstart.clone(), blockend.clone())
                 .map(|WithMeta(e, s)| WithMeta(Expr::Bracket(Box::new(WithMeta(e, s.clone()))), s)),
         )
         .then(expr.clone().map(|e| Box::new(e)).or_not())
@@ -256,8 +260,8 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         })
         .labelled("macro definition");
 
-    // function_s.or(macro_s).or(expr_parser()).then_ignore(end())
-    expr_parser().then_ignore(end())
+    function_s.or(macro_s).or(expr_parser()).then_ignore(end())
+    // expr_parser().then_ignore(end())
 }
 
 fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
@@ -376,23 +380,26 @@ mod tests {
                         18..22,
                     ))),
                 ),
-                0..23,
+                1..22,
             )))),
             0..23,
         );
         test_string!("{let hoge = 100 \n hoge}", ans);
     }
-    // #[test]
-    // pub fn test_add() {
-    //     let ans = WithMeta {
-    //         location: 0..4,
-    //         value: Expr::Literal(WithMeta {
-    //             location: 0..4,
-    //             value: Literal::Int(3466),
-    //         }),
-    //     };
-    //     test_string!("3466+2000", ans);
-    // }
+    #[test]
+    pub fn test_add() {
+        let ans = WithMeta(
+            Expr::Apply(
+                Box::new(WithMeta(Expr::Var("add".to_string(), None), 6..7)),
+                vec![
+                    WithMeta(Expr::Literal(Literal::Float("3466.0".to_string())), 0..6),
+                    WithMeta(Expr::Literal(Literal::Float("2000.0".to_string())), 7..13),
+                ],
+            ),
+            0..13,
+        );
+        test_string!("3466.0+2000.0", ans);
+    }
     #[test]
     pub fn test_var() {
         let ans = WithMeta(Expr::Var("hoge".to_string(), None), 0..4);
@@ -466,13 +473,7 @@ mod tests {
                                 14..17,
                             ),
                         ],
-                        Box::new(WithMeta(
-                            Expr::Block(Some(Box::new(WithMeta(
-                                Expr::Var("input".to_string(), None),
-                                18..28,
-                            )))),
-                            18..28,
-                        )),
+                        Box::new(WithMeta(Expr::Var("input".to_string(), None), 21..26)),
                     ),
                     0..28,
                 )),
@@ -509,14 +510,11 @@ mod tests {
                             ),
                         ],
                         Box::new(WithMeta(
-                            Expr::Block(Some(Box::new(WithMeta(
-                                Expr::Bracket(Box::new(WithMeta(
-                                    Expr::Var("input".to_string(), None),
-                                    21..31,
-                                ))),
-                                21..31,
-                            )))),
-                            21..31,
+                            Expr::Bracket(Box::new(WithMeta(
+                                Expr::Var("input".to_string(), None),
+                                24..29,
+                            ))),
+                            24..29,
                         )),
                     ),
                     0..31,
