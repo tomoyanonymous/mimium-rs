@@ -10,5 +10,7 @@ edition = "2021"
 utils = { path = "../../components/utils", version = "0.0.1", package = "mimium-utils" }
 token = { path = "../../components/token", version = "0.0.1", package = "mimium-token" }
 ast = { path = "../../components/ast", version = "0.0.1", package = "mimium-ast" }
+mmmtype = { path = "../../components/type", version = "0.0.1", package = "mimium-type" }
+
 chumsky = "0.8.0"
 ariadne = "0.1.5"

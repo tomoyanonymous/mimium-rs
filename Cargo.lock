@@ -261,6 +261,7 @@ dependencies = [
  "chumsky",
  "mimium-ast",
  "mimium-token",
+ "mimium-type",
  "mimium-utils",
 ]
 

@@ -1,6 +1,7 @@
 use ast::expr::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
+use mmmtype::*;
 use token::*;
 use utils::error::ReportableError;
 use utils::metadata::*;
@@ -8,9 +9,36 @@ use utils::metadata::*;
 mod error;
 pub mod lexer;
 
-fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
-    select! { Token::Ident(s) => TypedId { id: s, ty: None } }.labelled("lvar")
+fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
+    recursive(|ty| {
+        let primitive = select! {
+           Token::FloatType => Type::Numeric,
+           Token::IntegerType => Type::Int,
+           Token::StringType => Type::String
+        };
+        let tuple = ty
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+            .map(|e| Type::Tuple(e))
+            .labelled("Tuple");
+        // let _struct_t = todo!();
+        let func = ty
+            .clone()
+            .separated_by(just(Token::Comma))
+            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+            .then_ignore(just(Token::Arrow))
+            .then(ty.clone())
+            .map(|(from, to)| Type::Function(from, Box::new(to), None))
+            .labelled("function");
+
+        // .map_with_span(|e, s| WithMeta(e, s))
+
+        primitive.or(tuple).or(func)
+    })
 }
+
 fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     select! {
         Token::Ident(s) => Expr::Var(s,None),
@@ -22,6 +50,13 @@ fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     }
     // .map_with_span(|e, s| WithMeta(e, s))
     .labelled("value")
+}
+fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
+    select! { Token::Ident(s) => s }
+        .then_ignore(just(Token::Colon))
+        .then(type_parser().or_not())
+        .map(|(id, t)| TypedId { id: id, ty: t })
+        .labelled("lvar")
 }
 fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser();

@@ -30,6 +30,11 @@ pub enum Token {
     Ident(String),
     MacroExpand(String),
 
+    FloatType,
+    IntegerType,
+    StringType,
+    StructType,
+
     Float(String),
     Int(i64),
     Str(String),
@@ -41,6 +46,9 @@ pub enum Token {
 
     Comma,
     Dot,
+
+    Colon,
+    SemiColon,
 
     Let,
     Assign,
@@ -122,6 +130,10 @@ impl fmt::Display for Token {
             Token::Comment(x) => write!(f, "{}", x),
             Token::Ident(x) => write!(f, "{}", x),
             Token::MacroExpand(x) => write!(f, "{}!", x),
+            Token::FloatType=> write!(f,"float"),
+            Token::IntegerType=> write!(f,"int"),
+            Token::StringType=> write!(f,"string"),
+            Token::StructType=> write!(f,"struct"),
             Token::Int(x) => write!(f, "{}", x),
             Token::Float(x) => write!(f, "{}", x),
             Token::Str(x) => write!(f, "\"{}\"", x),
@@ -131,6 +143,8 @@ impl fmt::Display for Token {
             Token::At => write!(f, "@"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
+            Token::Colon => write!(f,":"),
+            Token::SemiColon => write!(f,";"),
             Token::Let => write!(f, "let"),
             Token::Assign => write!(f, "="),
             Token::Reference => write!(f, "&"),

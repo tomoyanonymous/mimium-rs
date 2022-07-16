@@ -45,9 +45,11 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "|>" => Token::Op(Op::Pipe),
             _ => Token::Op(Op::Unknown(s)),
         });
-    let separator = one_of::<_, _, Simple<char>>(",.").map(|c| match c {
+    let separator = one_of::<_, _, Simple<char>>(",.:;").map(|c| match c {
         ',' => Token::Comma,
         '.' => Token::Dot,
+        ':' => Token::Colon,
+        ';' => Token::SemiColon,
         _ => Token::Ident(c.to_string()),
     });
     // A parser for identifiers and keywords
@@ -65,6 +67,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         // "true" => Token::Bool(true),
         // "false" => Token::Bool(false),
         // "null" => Token::Null,
+        "float" => Token::FloatType,
+        "int" => Token::IntegerType,
+        "string" => Token::StringType,
+        "structt" => Token::StructType,
         _ => Token::Ident(ident),
     });
     let macro_expand = text::ident::<_, Simple<char>>()
