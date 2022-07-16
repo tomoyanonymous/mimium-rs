@@ -1,6 +1,7 @@
 #![feature(box_patterns)]
 pub mod evaluator;
 use anyhow;
+use utils::error::ReportableError;
 
 #[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -18,10 +19,10 @@ struct Context {
     src: String, //for debug
 }
 
-pub fn eval_top(content: String) -> anyhow::Result<evaluator::Value> {
+pub fn eval_top(content: String) -> Result<evaluator::Value,Vec<Box<dyn ReportableError>>> {
     let ast = parser::parse(content)?;
     let hir = hirgen::generate_hir(ast)?;
-    Ok(evaluator::eval(hir))
+    evaluator::eval(hir).map_err(|e| vec![e])
 }
 
 #[cfg(test)]

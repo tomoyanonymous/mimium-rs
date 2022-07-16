@@ -1,10 +1,25 @@
 use ast::expr::*;
-
+use std::fmt;
 use utils::metadata::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
     NoParentSelf(Span),
+}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::NoParentSelf(_s) => write!(f, "self cannot be used in global context."),
+        }
+    }
+}
+impl std::error::Error for Error {}
+impl utils::error::ReportableError for Error {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        match self {
+            Self::NoParentSelf(s) => s.clone(),
+        }
+    }
 }
 
 fn convert_literal(e: Literal) -> bool {
@@ -123,9 +138,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> WithMeta<Expr> {
             ),
             span.clone(),
         ),
-        Expr::Block(body) => {
-            WithMeta(Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone())
-        }
+        Expr::Block(body) => WithMeta(Expr::Block(body.map(|b| Box::new(cls(*b)))), span.clone()),
         _ => todo!(),
     }
 }

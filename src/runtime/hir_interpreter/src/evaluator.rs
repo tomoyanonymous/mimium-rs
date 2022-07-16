@@ -1,6 +1,9 @@
 use builtin_fn;
 use hir::expr::*;
-use utils::metadata::WithMeta;
+use utils::{
+    error::ReportableError,
+    metadata::{Span, WithMeta},
+};
 
 use std::fmt;
 
@@ -25,27 +28,39 @@ impl fmt::Display for Value {
     }
 }
 
-#[derive(Debug)]
-pub enum Error {
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorKind {
     InvalidStage,
     InvalidType,
-    Unbounded(WithMeta<String>),
+    Unbounded(String),
     FloatParse,
     Multiple(Vec<Error>),
+    NotAValue,
+    Unknown,
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct Error(ErrorKind, Span);
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::InvalidStage => write!(f, "Stage will be removed before evaluation"),
-            Error::InvalidType => write!(f, "Internal Type Mismatch"),
-            Error::Unbounded(v) => write!(f, "Value {} not found", v.0),
-            Error::FloatParse => write!(f, "Invald floating point number format"),
-            Error::Multiple(v) => write!(f, "{:?}", v),
+        match &self.0 {
+            ErrorKind::InvalidStage => write!(f, "Stage will be removed before evaluation"),
+            ErrorKind::InvalidType => write!(f, "Internal Type Mismatch"),
+            ErrorKind::Unbounded(v) => write!(f, "Value {} not found", v),
+            ErrorKind::FloatParse => write!(f, "Invalid floating point number format"),
+            ErrorKind::Multiple(v) => write!(f, "{:?}", v),
+            ErrorKind::NotAValue => write!(f, "Evaluated result was not a value"),
+            ErrorKind::Unknown => write!(f, "Unknown Error"),
         }
     }
 }
 
 impl std::error::Error for Error {}
+impl utils::error::ReportableError for Error {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        self.1.clone()
+    }
+}
 
 fn eval_v(e: Literal) -> Value {
     match e {
@@ -64,8 +79,8 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
         Expr::Var(var, _time) => {
             let v = var.0.v.borrow().clone();
             match v {
-                Some(e) => eval_i(WithMeta(e, span), ctx),
-                None => Err(Error::Unbounded(WithMeta(var.0.id.clone(), var.1.clone()))),
+                Some(e) => eval_i(WithMeta(e, span.clone()), ctx),
+                None => Err(Error(ErrorKind::Unbounded(var.0.id.clone()), span)),
             }
         }
         Expr::Apply(box WithMeta(Expr::Lambda(params, body), _fspan), callee) => {
@@ -100,7 +115,7 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
                             Expr::Literal(Literal::Float(x.to_string())),
                             span.clone(),
                         )),
-                        None => Err(Error::FloatParse),
+                        None => Err(Error(ErrorKind::FloatParse, span)),
                     }
                 }
                 [WithMeta(Expr::Literal(Literal::Float(x)), _), WithMeta(Expr::Literal(Literal::Float(y)), _)] =>
@@ -115,10 +130,10 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
                             Expr::Literal(Literal::Float(x.to_string())),
                             span.clone(),
                         )),
-                        None => Err(Error::FloatParse),
+                        None => Err(Error(ErrorKind::FloatParse, span)),
                     }
                 }
-                _ => Err(Error::InvalidType),
+                _ => Err(Error(ErrorKind::InvalidType, span)),
             }
         }
         Expr::Apply(box fun, callee) => {
@@ -140,32 +155,23 @@ fn eval_i(expr: WithMeta<Expr>, ctx: &builtin_fn::Context) -> Result<WithMeta<Ex
                 })
             });
             if evec.len() > 0 {
-                Err(Error::Multiple(evec))
+                Err(Error(ErrorKind::Multiple(evec), span))
             } else {
                 Ok(res)
             }
         }
     }
 }
-pub fn eval(expr: WithMeta<Expr>) -> Value {
+pub fn eval(expr: WithMeta<Expr>) -> Result<Value, Box<dyn ReportableError>> {
     let ctx = builtin_fn::Context::new();
     let res = eval_i(expr, &ctx);
     match res {
         Ok(WithMeta(e, s)) if e.is_value() => match e {
-            Expr::Literal(x) => eval_v(x),
-            Expr::Lambda(_p, _r) => Value::Function,
-            _ => {
-                eprintln!("Unknwon Error at {:?}", s);
-                panic!()
-            }
+            Expr::Literal(x) => Ok(eval_v(x)),
+            Expr::Lambda(_p, _r) => Ok(Value::Function),
+            _ => Err(Box::new(Error(ErrorKind::NotAValue, s.clone()))),
         },
-        Ok(e) => {
-            eprintln!("Expr not evaluated: {:?}", e);
-            panic!()
-        }
-        Err(e) => {
-            eprintln!("{:?}", e);
-            panic!()
-        }
+        Ok(WithMeta(e, s)) => Err(Box::new(Error(ErrorKind::Unknown, s.clone()))),
+        Err(e) => Err(Box::new(e)),
     }
 }

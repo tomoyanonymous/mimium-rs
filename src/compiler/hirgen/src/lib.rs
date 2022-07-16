@@ -8,31 +8,40 @@ use mmmtype::Type;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-use utils::{environment::Environment, metadata::WithMeta};
+use utils::error::ReportableError;
+use utils::{environment::Environment, error, metadata::WithMeta};
 
 type Evalenv = Environment<Rc<WithMeta<Hvalue>>>;
 
 #[derive(Clone, Debug)]
-pub enum Error {
+pub enum ErrorKind {
     InvalidValue(ast::expr::Literal),
     NotFound(String),
     Misc(&'static str),
 }
+#[derive(Clone, Debug)]
+pub struct Error(ErrorKind, utils::metadata::Span);
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::InvalidValue(x) => write!(
+        match &self.0 {
+            ErrorKind::InvalidValue(x) => write!(
                 f,
                 "The Literal {:?} should not be found in ast evaluation",
                 x
             ),
-            Error::NotFound(s) => write!(f, "The value {} not found", s),
-            Error::Misc(s) => write!(f, "{}", s),
+            ErrorKind::NotFound(s) => write!(f, "The value {} not found", s),
+            ErrorKind::Misc(s) => write!(f, "{}", s),
         }
     }
 }
 impl std::error::Error for Error {}
+
+impl error::ReportableError for Error {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        self.1.clone()
+    }
+}
 
 fn generate_literal(expr: WithMeta<expr::Literal>) -> hir::expr::Literal {
     match expr.0 {
@@ -145,10 +154,15 @@ fn gen_hir(
     hir.map(|h| WithMeta::<_>(h, span))
 }
 
-pub fn generate_hir(expr: WithMeta<expr::Expr>) -> Result<WithMeta<Hir>, Error> {
+pub fn generate_hir(
+    expr: WithMeta<expr::Expr>,
+) -> Result<WithMeta<Hir>, Vec<Box<dyn ReportableError>>> {
     let expr_without_self = selfconvert::convert_self_top(expr);
     let mut infer_ctx = typing::InferContext::new();
     let _toptype = typing::infer_type(expr_without_self.clone().0, &mut infer_ctx);
     let mut evalenv = Evalenv::new();
-    gen_hir(expr_without_self, &infer_ctx.env, &mut evalenv)
+    let mut errs = Vec::<Box::<dyn ReportableError>>::new();
+    let res = gen_hir(expr_without_self, &infer_ctx.env, &mut evalenv)
+        .map_err(|e: Error| errs.push(Box::new(e.clone())));
+    res.map_err(|_e|errs)
 }

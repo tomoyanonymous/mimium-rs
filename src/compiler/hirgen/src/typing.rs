@@ -1,10 +1,43 @@
 use ast::expr::*;
 use mmmtype::*;
 use std::collections::HashMap;
+use std::fmt;
 use utils::{environment::*, metadata::*};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Error(String);
+pub enum ErrorKind {
+    TypeMismatch,
+    CircularType,
+    IndexOutOfRange(u16, u16),
+    IndexForNonTuple,
+    VariableNotFound(String),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct Error(ErrorKind, Span);
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.0 {
+            ErrorKind::TypeMismatch => write!(f, "Type Mismatch"),
+            ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
+            ErrorKind::IndexOutOfRange(len, idx) => write!(
+                f,
+                "Length of tuple elements is {} but index was {}",
+                len, idx
+            ),
+            ErrorKind::IndexForNonTuple => write!(f, "Index access for non-tuple variable"),
+            ErrorKind::VariableNotFound(v) => {
+                write!(f, "Variable {} not found in this scope", v)
+            }
+        }
+    }
+}
+impl std::error::Error for Error {}
+impl utils::error::ReportableError for Error {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        self.1.clone()
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
@@ -79,9 +112,7 @@ impl InferContext {
         match (t1.clone(), t2.clone()) {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 if self.occur_check(i1, t2.clone()) {
-                    Err(Error(
-                        "Circular Loop of Type Definition Detected.".to_string(),
-                    ))
+                    Err(Error(ErrorKind::CircularType, 0..0)) //todo:span
                 } else {
                     if i1 < i2 {
                         self.subst_map.insert(i1, t2);
@@ -124,7 +155,7 @@ impl InferContext {
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
-            (_p1, _p2) => Err(Error("type unification error".to_string())),
+            (_p1, _p2) => Err(Error(ErrorKind::TypeMismatch, 0..0)), //todo:span
         }
     }
 }
@@ -135,9 +166,7 @@ fn infer_type_literal(e: Literal) -> Result<Type, Error> {
         Literal::Int(_s) => Ok(Type::Int),
         Literal::String(_s) => Ok(Type::String),
         Literal::Now => Ok(Type::Numeric),
-        Literal::SelfLit => Err(Error(
-            "\"self\" should not be shown at type inference stage".to_string(),
-        )),
+        Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
     }
 }
 
@@ -156,12 +185,15 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             match tup {
                 Type::Tuple(vec) => {
                     if vec.len() < idx as usize {
-                        Err(Error("index for tuple is out of bound".to_string()))
+                        Err(Error(
+                            ErrorKind::IndexOutOfRange(vec.len() as u16, idx as u16),
+                            e.1.clone(),
+                        ))
                     } else {
                         Ok(vec[idx as usize].clone())
                     }
                 }
-                _ => Err(Error("Index access for non-tuple type".to_string())),
+                _ => Err(Error(ErrorKind::IndexForNonTuple, e.1.clone())),
             }
         }
         Expr::Feed(id, body) => {
@@ -213,12 +245,10 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
                 None => Ok(Type::Unit),
             }
         }
-        Expr::Var(name, _time) => ctx
-            .env
-            .get_bound_value(name)
-            .map_or(Err(Error("variable not found".to_string())), |v| {
-                Ok(v.clone())
-            }),
+        Expr::Var(name, _time) => ctx.env.get_bound_value(name.clone()).map_or(
+            Err(Error(ErrorKind::VariableNotFound(name), 0..0)), //todo:Span
+            |v| Ok(v.clone()),
+        ),
         Expr::Apply(fun, callee) => {
             let fnl = infer_type(fun.0, ctx)?;
             let callee_t = infer_vec(callee, ctx)?;

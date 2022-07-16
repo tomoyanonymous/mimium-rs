@@ -60,7 +60,7 @@ impl Context {
         match name.as_str() {
             "add" => Some(x + y),
             "sub" => Some(x - y),
-            "mul" => Some(x * y),
+            "mult" => Some(x * y),
             "div" => Some(x / y),
             "mod" => Some(x % y),
             "eq" => Some(if x == y { 1. } else { 0. }),

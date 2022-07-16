@@ -70,6 +70,28 @@ pub enum Token {
     LineBreak,
     EndOfInput,
 }
+impl Op {
+    pub fn get_associated_fn_name(&self) -> String {
+        match self {
+            Op::Sum => "add".to_string(),
+            Op::Minus => "sub".to_string(),
+            Op::Product => "mult".to_string(),
+            Op::Divide => "div".to_string(),
+            Op::Equal => "eq".to_string(),
+            Op::NotEqual => "ne".to_string(),
+            Op::LessThan => "lt".to_string(),
+            Op::LessEqual => "le".to_string(),
+            Op::GreaterThan => "gt".to_string(),
+            Op::GreaterEqual => "ge".to_string(),
+            Op::Modulo => "mod".to_string(),
+            Op::Exponent => "exp".to_string(),
+            Op::And => "and".to_string(),
+            Op::Or => "or".to_string(),
+            Op::Pipe => "pipe".to_string(),
+            Op::Unknown(x) => x.clone(),
+        }
+    }
+}
 
 impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
