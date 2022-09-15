@@ -1,6 +1,5 @@
 #![feature(box_patterns)]
 pub mod evaluator;
-use anyhow;
 use utils::error::ReportableError;
 
 #[derive(clap::Parser, Debug)]

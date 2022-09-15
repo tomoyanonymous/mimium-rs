@@ -1,7 +1,7 @@
 use mimium_hir_interpreter::*;
 
 use clap::Parser as _;
-use utils::{error, fileloader, metadata::WithMeta};
+use utils::{error, fileloader};
 
 fn main() -> anyhow::Result<()> {
     let args = mimium_hir_interpreter::Args::parse();

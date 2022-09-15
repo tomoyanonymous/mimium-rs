@@ -171,7 +171,7 @@ pub fn eval(expr: WithMeta<Expr>) -> Result<Value, Box<dyn ReportableError>> {
             Expr::Lambda(_p, _r) => Ok(Value::Function),
             _ => Err(Box::new(Error(ErrorKind::NotAValue, s.clone()))),
         },
-        Ok(WithMeta(e, s)) => Err(Box::new(Error(ErrorKind::Unknown, s.clone()))),
+        Ok(WithMeta(_e, s)) => Err(Box::new(Error(ErrorKind::Unknown, s.clone()))),
         Err(e) => Err(Box::new(e)),
     }
 }

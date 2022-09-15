@@ -1,5 +1,4 @@
 use std::collections::{HashMap, LinkedList};
-use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment<T>(pub LinkedList<HashMap<String, T>>);

@@ -1,7 +1,5 @@
 use mmmtype::*;
 use std::collections::HashMap;
-use utils::metadata::WithMeta;
-type float = f64;
 
 #[derive(Clone)]
 pub struct BuiltinFn(fn(f64) -> f64, Type);
