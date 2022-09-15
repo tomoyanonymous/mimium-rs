@@ -25,7 +25,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .at_least(1)
         .collect::<String>()
         .map(|s: String| match s.as_str() {
-            "=" => Token::Assign,
             "->" => Token::Arrow,
             "|" => Token::LambdaArgBeginEnd,
             "+" => Token::Op(Op::Sum),
@@ -38,6 +37,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "<=" => Token::Op(Op::LessEqual),
             ">" => Token::Op(Op::GreaterThan),
             ">=" => Token::Op(Op::GreaterEqual),
+            "=" => Token::Assign,
             "%" => Token::Op(Op::Modulo),
             "^" => Token::Op(Op::Exponent),
             "&&" => Token::Op(Op::And),

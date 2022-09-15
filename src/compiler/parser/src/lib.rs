@@ -6,7 +6,7 @@ use token::*;
 use utils::error::ReportableError;
 use utils::metadata::*;
 // pub mod chumsky_test;
-mod error;
+pub mod error;
 pub mod lexer;
 
 fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
@@ -55,8 +55,7 @@ fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 }
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     select! { Token::Ident(s) => s }
-        .then_ignore(just(Token::Colon))
-        .then(type_parser().or_not())
+        .then(just(Token::Colon).ignore_then(type_parser()).or_not())
         .map(|(id, t)| TypedId { id: id, ty: t })
         .labelled("lvar")
 }
