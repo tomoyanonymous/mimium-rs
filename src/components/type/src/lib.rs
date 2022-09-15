@@ -1,6 +1,6 @@
-use std::{cell::RefCell, fmt, rc::Rc};
-use utils::metadata::WithMeta;
+use std::fmt;
 
+use utils::miniprint::MiniPrint;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     //basic types
@@ -65,6 +65,7 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+
             Type::Unit => write!(f, "()"),
             Type::Int => write!(f, "int"),
             Type::Numeric => write!(f, "num"),
@@ -83,6 +84,15 @@ impl fmt::Display for Type {
                 write!(f, "intermediate[{}]", id,)
             }
             Type::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl MiniPrint for TypedId {
+    fn simple_print(&self) -> String {
+        match &self.ty {
+            Some(t) => format!("(tid {} {:#?})", self.id, t), //todo:type
+            None => self.id.clone(),
         }
     }
 }

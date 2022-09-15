@@ -224,10 +224,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .boxed();
 
             pipe
-            // atom.or(apply)
-            // .or(lambda)
-            // .or(add)
-            // .or(r#let)
+
         });
         // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
         let block = expr
