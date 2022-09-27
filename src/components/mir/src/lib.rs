@@ -43,3 +43,9 @@ pub struct Function {
     pub selfref: Option<Rc<Label>>,
     pub body: Block,
 }
+
+pub enum TopLevel{
+    Function(Function),
+    //other declaration continues...
+}
+pub struct Mir(pub Vec<TopLevel>);

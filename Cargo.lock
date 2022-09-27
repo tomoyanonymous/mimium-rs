@@ -249,6 +249,7 @@ name = "mimium-mirgen"
 version = "0.0.1"
 dependencies = [
  "mimium-hir",
+ "mimium-mir",
  "mimium-type",
  "mimium-utils",
 ]

@@ -10,3 +10,4 @@ edition = "2021"
 mmmtype = { path = "../../components/type", version = "0.0.1", package = "mimium-type" }
 utils = { path = "../../components/utils", version = "0.0.1", package = "mimium-utils" }
 hir ={ path = "../../components/hir", package = "mimium-hir"}
+mir = {path = "../../components/mir", package = "mimium-mir"}

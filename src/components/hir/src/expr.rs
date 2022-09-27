@@ -1,4 +1,3 @@
-use mmmtype::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use utils::metadata::WithMeta;
@@ -39,6 +38,7 @@ pub enum Expr {
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
+    
     Lambda(Vec<Rc<WithMeta<Value>>>, Box<WithMeta<Self>>), //lambda
     Feed(Rc<WithMeta<Value>>, Box<WithMeta<Self>>),        //feedback connection primitive
     Let(
@@ -61,6 +61,9 @@ pub enum Expr {
         Box<WithMeta<Self>>,
         Option<Box<WithMeta<Self>>>,
     ),
+    //id of function,free variables
+    MakeClosure(Rc<WithMeta<Value>>, Vec<Rc<WithMeta<Value>>>),
+    ApplyDir(Rc<WithMeta<Value>>, Vec<WithMeta<Self>>),
     Bracket(Box<WithMeta<Self>>),
     Escape(Box<WithMeta<Self>>),
     Error,
@@ -120,6 +123,7 @@ impl TreeWalk for WithMeta<Expr> {
                 Box::new(f(*then)),
                 opt_else.map(|b| Box::new(f(*b))),
             ),
+            Expr::MakeClosure(id, fvs) => Expr::MakeClosure(id.clone(),fvs.clone()),
             Expr::Bracket(x) => Expr::Bracket(Box::new(f(*x))),
             Expr::Escape(x) => Expr::Escape(Box::new(f(*x))),
             _ => self.0,
