@@ -186,111 +186,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 
 [[package]]
-name = "mimium-ast"
-version = "0.0.1"
-dependencies = [
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-builtin-fn"
+name = "mimium-rs"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-hir"
-version = "0.0.1"
-dependencies = [
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-hir-interpreter"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "clap",
- "mimium-ast",
- "mimium-builtin-fn",
- "mimium-hir",
- "mimium-hirgen",
- "mimium-mirgen",
- "mimium-parser",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-hirgen"
-version = "0.0.1"
-dependencies = [
- "mimium-ast",
- "mimium-hir",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-mir"
-version = "0.0.1"
-dependencies = [
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-mirgen"
-version = "0.0.1"
-dependencies = [
- "mimium-hir",
- "mimium-mir",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-parser"
-version = "0.0.1"
-dependencies = [
  "ariadne",
  "chumsky",
- "mimium-ast",
- "mimium-token",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-scheduler"
-version = "0.0.1"
-dependencies = [
- "mimium-ast",
- "mimium-type",
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-token"
-version = "0.0.1"
-
-[[package]]
-name = "mimium-type"
-version = "0.0.1"
-dependencies = [
- "mimium-utils",
-]
-
-[[package]]
-name = "mimium-utils"
-version = "0.0.1"
-dependencies = [
- "ariadne",
+ "clap",
 ]
 
 [[package]]

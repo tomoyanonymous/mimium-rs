@@ -1,8 +1,33 @@
-
 use std::rc::Rc;
 pub type Natural = i64;
 pub type Real = f64;
 pub type Id = String;
+
+enum Env<T> {
+    Nil,
+    Some((Id, Rc<T>), Rc<Env<T>>),
+}
+impl<T> Env<T> {
+    fn new() -> Self {
+        Self::Nil
+    }
+    fn prepend(Rc<Self>, other: (Id, Rc<T>)) -> Rc<Self> {
+        Self::Some(other, self.clone())
+    }
+    fn lookup(&self, target: Id) -> Option<Rc<T>> {
+        match &self {
+            Nil => None,
+            Some((id, t), next) => {
+                if id == target {
+                    Some(t.clone)
+                } else {
+                    next.lookup(target)
+                }
+            }
+        }
+    }
+}
+
 pub enum Time {
     Constant(Natural),
     RuntimeV { offset: Natural },
@@ -100,7 +125,6 @@ macro_rules! feed {
 
 #[macro_export]
 macro_rules! lambda {
-    
     ($id:literal,$e:expr) => {
         std::rc::Rc::new(Expr::Lambda {
             a: String::from($id),
