@@ -1,9 +1,9 @@
-use crate::compiler::ast::expr::{Expr, Literal};
-use crate::compiler::types::{Type,TypedId};
+use crate::compiler::ast::{Expr, Literal};
+use crate::compiler::types::{Type, TypedId};
 use crate::compiler::utils::{
     environment::Environment,
+    error::ReportableError,
     metadata::{Span, WithMeta},
-    error::ReportableError
 };
 use std::collections::HashMap;
 use std::fmt;
@@ -177,7 +177,7 @@ fn infer_type_literal(e: Literal) -> Result<Type, Error> {
 pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
     let infer_vec = |e: Vec<WithMeta<Expr>>, ctx: &mut InferContext| {
         e.iter()
-            .map(|WithMeta(el, _span)| Ok(infer_type(el.clone(), ctx)?))
+            .map(|WithMeta(el, _s)| Ok(infer_type(el.clone(), ctx)?))
             .collect::<Result<Vec<_>, Error>>()
     };
 

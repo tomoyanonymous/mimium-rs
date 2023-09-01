@@ -1,5 +1,4 @@
 use crate::compiler::utils::metadata::{Span, WithMeta};
-use std::cell::RefCell;
 use std::rc::Rc;
 pub type Time = i64;
 
@@ -19,7 +18,7 @@ pub enum Literal {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Value(pub String);
 
-pub type NodeRef<T> = Rc<WithMeta<T>>;
+pub type NodeRef<T> = Box<WithMeta<T>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
@@ -39,13 +38,13 @@ pub enum Expr {
     //id of function,free variables
     MakeClosure(NodeRef<Value>, Vec<NodeRef<Value>>),
     ApplyDir(NodeRef<Value>, Vec<NodeRef<Self>>),
-    Bracket(Box<WithMeta<Self>>),
-    Escape(Box<WithMeta<Self>>),
+    Bracket(NodeRef<Self>),
+    Escape(NodeRef<Self>),
     Error,
 }
 impl Expr {
     pub fn gen_node(e: Self, span: Span) -> NodeRef<Self> {
-        Rc::new(WithMeta(e, span))
+        NodeRef::new(WithMeta(e, span))
     }
     pub fn is_value(&self) -> bool {
         match self {
@@ -55,7 +54,7 @@ impl Expr {
     }
     pub fn eval_condition(&self) -> bool {
         match self {
-            Expr::Literal(Literal::Int(i)) => (*i > 0),
+            Expr::Literal(Literal::Int(i)) => *i > 0,
             Expr::Literal(Literal::Float(s)) => s.parse::<f64>().unwrap() > 0.0,
             _ => panic!(),
         }
@@ -94,6 +93,6 @@ impl TreeWalk for NodeRef<Expr> {
             Expr::Escape(x) => Expr::Escape(f(x)),
             _ => self.0,
         };
-        WithMeta::<_>(res, self.1.clone())
+        Box::new(WithMeta::<_>(res, self.1.clone()))
     }
 }

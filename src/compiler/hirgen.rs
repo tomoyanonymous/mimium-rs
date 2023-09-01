@@ -1,7 +1,7 @@
 pub mod selfconvert;
 pub mod typing;
 
-use super::ast::expr;
+use super::ast;
 use super::hir::expr::Expr as Hir;
 use super::hir::expr::Literal as HLiteral;
 use super::hir::expr::Value as Hvalue;
@@ -12,15 +12,14 @@ use super::utils::{
     error,
     metadata::{Span, WithMeta},
 };
-use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-type Evalenv = Environment<Rc<WithMeta<Hvalue>>>;
+type Evalenv = Environment<Box<WithMeta<Hvalue>>>;
 
 #[derive(Clone, Debug)]
 pub enum ErrorKind {
-    InvalidValue(expr::Literal),
+    InvalidValue(ast::Literal),
     NotFound(String),
     Misc(&'static str),
 }
@@ -48,43 +47,41 @@ impl error::ReportableError for Error {
     }
 }
 
-fn generate_literal(expr: WithMeta<expr::Literal>) -> HLiteral {
+fn generate_literal(expr: WithMeta<ast::Literal>) -> HLiteral {
     match expr.0 {
-        expr::Literal::Int(i) => HLiteral::Int(i),
-        expr::Literal::Float(s) => HLiteral::Float(s),
-        expr::Literal::String(s) => HLiteral::String(s),
+        ast::Literal::Int(i) => HLiteral::Int(i),
+        ast::Literal::Float(s) => HLiteral::Float(s),
+        ast::Literal::String(s) => HLiteral::String(s),
         _ => unreachable!(),
     }
 }
 
 fn gen_hir(
-    expr: WithMeta<expr::Expr>,
+    expr_meta: WithMeta<ast::Expr>,
     typeenv: &Environment<Type>,
     evalenv: &mut Evalenv,
-) -> Result<WithMeta<Hir>, Error> {
-    let span = expr.1;
+) -> Result<Box<WithMeta<Hir>>, Error> {
+    let WithMeta(expr, span) = expr_meta;
 
-    let hir: Result<Hir, Error> = match expr.0 {
-        expr::Expr::Literal(l) => Ok(Hir::Literal(generate_literal(WithMeta::<_>(
-            l,
-            span.clone(),
-        )))),
-        expr::Expr::Var(s, opt_time) => {
-            let v_opt = evalenv
-                .get_bound_value(s.clone())
-                .map_or_else(|| Rc::new(WithMeta(Hvalue(s), span.clone())), |v| v.clone());
-            Ok(Hir::Var(WithMeta(Hvalue(s), span.clone()), opt_time))
+    let hir: Result<Hir, Error> = match expr {
+        ast::Expr::Literal(l) => Ok(Hir::Literal(generate_literal(WithMeta(l, span.clone())))),
+        ast::Expr::Var(s, opt_time) => {
+            let v_opt = evalenv.get_bound_value(s.clone()).map_or_else(
+                || Box::new(WithMeta(Hvalue(s.clone()), span.clone())),
+                |v| v.clone(),
+            );
+            Ok(Hir::Var(WithMeta(Hvalue(s), span.clone()).into(), opt_time))
         }
-        expr::Expr::Tuple(vec) => {
+        ast::Expr::Tuple(vec) => {
             let hvec: Result<Vec<_>, Error> = vec
                 .iter()
                 .map(|v| gen_hir(v.clone(), typeenv, evalenv))
                 .collect();
             Ok(Hir::Tuple(hvec?))
         }
-        expr::Expr::Proj(v, idx) => Ok(Hir::Proj(Box::new(gen_hir(*v, typeenv, evalenv)?), idx)),
-        expr::Expr::Apply(fun, callee) => {
-            let mut this = |e| Ok(Box::new(gen_hir(e, typeenv, evalenv)?));
+        ast::Expr::Proj(v, idx) => Ok(Hir::Proj(gen_hir(*v, typeenv, evalenv)?, idx)),
+        ast::Expr::Apply(fun, callee) => {
+            let mut this = |e| Ok(gen_hir(e, typeenv, evalenv)?);
             Ok(Hir::Apply(
                 this(*fun)?,
                 callee
@@ -93,52 +90,53 @@ fn gen_hir(
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         }
-        expr::Expr::Lambda(params, body) => {
-            let hparams: Vec<Rc<WithMeta<Hvalue>>> = params
+        ast::Expr::Lambda(params, body) => {
+            let hparams: Vec<Box<WithMeta<Hvalue>>> = params
                 .iter()
-                .map(|WithMeta::<_>(p, s)| {
-                    let nv = p.clone();
-                    evalenv.add_bind(p.id.clone(), Rc::clone(&nv));
-                    nv
+                .map(|WithMeta(p, s)| {
+                    // let nv = p.clone();
+                    // evalenv.add_bind(p.id.clone(), WithMeta(nv.id, s));
+                    Box::new(WithMeta(Hvalue(p.id.clone()), s.clone()))
                 })
                 .collect();
             let mut this = |e| Ok(Box::new(gen_hir(e, typeenv, evalenv)?));
-            Ok(Hir::Lambda(hparams, this(*body)?))
+            Ok(Hir::Lambda(hparams, *this(*body)?))
         }
-        expr::Expr::Let(id, body, then) => {
-            let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
-            evalenv.extend();
-            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id.id, Rc::clone(&nv));
+        ast::Expr::Let(id, body, then) => {
+            let hbody = gen_hir(*body, typeenv, evalenv)?;
+            // evalenv.extend();
+            let nv = Box::new(WithMeta::<_>(Hvalue(id.id.clone()), span.clone())); //todo add span to typedid
+                                                                                   // evalenv.add_bind(id.id, Rc::clone(&nv));
             let hthen = then
-                .map(|t| Ok(Box::new(gen_hir(*t, typeenv, evalenv)?)))
+                .map(|t| Ok(gen_hir(*t, typeenv, evalenv)?))
                 .transpose()?;
-            Ok(Hir::Let(Rc::clone(&nv), hbody, hthen))
+
+            Ok(Hir::Let(nv, hbody, hthen))
         }
-        expr::Expr::LetRec(id, body, then) => {
-            evalenv.extend();
-            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id.id, Rc::clone(&nv));
-            let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
+        ast::Expr::LetRec(id, body, then) => {
+            // evalenv.extend();s
+            let nv = Box::new(WithMeta::<_>(Hvalue(id.id.clone()), span.clone())); //todo add span to typedid
+                                                                                   // evalenv.add_bind(id.id, Rc::clone(&nv));
+            let hbody = gen_hir(*body, typeenv, evalenv)?;
             let hthen = then
-                .map(|t| Ok(Box::new(gen_hir(*t, typeenv, evalenv)?)))
+                .map(|t| Ok(gen_hir(*t, typeenv, evalenv)?))
                 .transpose()?;
-            Ok(Hir::Let(Rc::clone(&nv), hbody, hthen))
+            Ok(Hir::Let(nv, hbody, hthen))
         }
-        expr::Expr::Feed(id, body) => {
-            evalenv.extend();
-            let nv = Rc::new(WithMeta::<_>(Hvalue::new(id.clone()), span.clone())); //todo add span to typedid
-            evalenv.add_bind(id, Rc::clone(&nv));
-            let hbody = Box::new(gen_hir(*body, typeenv, evalenv)?);
-            Ok(Hir::Feed(Rc::clone(&nv), hbody))
+        ast::Expr::Feed(id, body) => {
+            // evalenv.extend();
+            let nv = Box::new(WithMeta::<_>(Hvalue(id.clone()), span.clone())); //todo add span to typedid
+                                                                                // evalenv.add_bind(id, Rc::clone(&nv));
+            let hbody = gen_hir(*body, typeenv, evalenv)?;
+            Ok(Hir::Feed(nv, hbody))
         }
-        expr::Expr::Block(opt_body) => Ok(Hir::Block(
+        ast::Expr::Block(opt_body) => Ok(Hir::Block(
             opt_body
-                .map(|body| Ok(Box::new(gen_hir(*body, typeenv, evalenv)?)))
+                .map(|body| Ok(gen_hir(*body, typeenv, evalenv)?))
                 .transpose()?,
         )),
-        expr::Expr::If(cond, then, opt_else) => {
-            let mut this = |e| Ok(Box::new(gen_hir(e, typeenv, evalenv)?));
+        ast::Expr::If(cond, then, opt_else) => {
+            let mut this = |e| Ok(gen_hir(e, typeenv, evalenv)?);
             Ok(Hir::If(
                 this(*cond)?,
                 this(*then)?,
@@ -147,11 +145,11 @@ fn gen_hir(
         }
         _ => todo!(),
     };
-    hir.map(|h| WithMeta::<_>(h, span))
+    hir.map(|h| Box::new(WithMeta::<_>(h, span)))
 }
 
 pub fn generate_hir(
-    expr: WithMeta<expr::Expr>,
+    expr: WithMeta<ast::Expr>,
 ) -> Result<WithMeta<Hir>, Vec<Box<dyn ReportableError>>> {
     let expr_without_self = selfconvert::convert_self_top(expr);
     let mut infer_ctx = typing::InferContext::new();
@@ -160,5 +158,5 @@ pub fn generate_hir(
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
     let res = gen_hir(expr_without_self, &infer_ctx.env, &mut evalenv)
         .map_err(|e: Error| errs.push(Box::new(e.clone())));
-    res.map_err(|_e| errs)
+    res.map(|h| *h).map_err(|_e| errs)
 }

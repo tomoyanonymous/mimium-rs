@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
 
-    use ast::expr::*;
+    use ast::*;
     use mimium_parser::*;
     use std::path::PathBuf;
     use utils::metadata::*;

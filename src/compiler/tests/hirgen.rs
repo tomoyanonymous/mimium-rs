@@ -3,7 +3,7 @@
 mod test {
     use mimium_hirgen::typing::{infer_type, InferContext};
     use mmmtype::*;
-    use ast::expr::*;
+    use ast::*;
     use utils::metadata::WithMeta;
     #[test]
     pub fn unify_prim() {
