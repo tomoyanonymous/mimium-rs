@@ -151,12 +151,20 @@ fn gen_hir(
 pub fn generate_hir(
     expr: WithMeta<ast::Expr>,
 ) -> Result<WithMeta<Hir>, Vec<Box<dyn ReportableError>>> {
-    let expr_without_self = selfconvert::convert_self_top(expr);
-    let mut infer_ctx = typing::InferContext::new();
-    let _toptype = typing::infer_type(expr_without_self.clone().0, &mut infer_ctx);
-    let mut evalenv = Evalenv::new();
-    let mut errs = Vec::<Box<dyn ReportableError>>::new();
-    let res = gen_hir(expr_without_self, &infer_ctx.env, &mut evalenv)
-        .map_err(|e: Error| errs.push(Box::new(e.clone())));
-    res.map(|h| *h).map_err(|_e| errs)
+    match selfconvert::convert_self_top(expr) {
+        Ok(expr_without_self) => {
+            let mut infer_ctx = typing::InferContext::new();
+            let _toptype = typing::infer_type(expr_without_self.clone().0, &mut infer_ctx);
+            let mut evalenv = Evalenv::new();
+            let mut errs = Vec::<Box<dyn ReportableError>>::new();
+            let res = gen_hir(expr_without_self, &infer_ctx.env, &mut evalenv)
+                .map_err(|e: Error| errs.push(Box::new(e.clone())));
+            res.map(|h| *h).map_err(|_e| errs)
+        }
+        Err(err) => {
+            let mut errs = Vec::<Box<dyn ReportableError>>::new();
+            errs.push(Box::new(err));
+            Err(errs)
+        }
+    }
 }

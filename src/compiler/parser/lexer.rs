@@ -116,7 +116,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 #[test]
 pub fn test_let() {
     let src = "let hoge = 36\nfuga";
-    let (res, _errs) = lexer().parse_recovery(src.clone());
+    let (res, _errs) = lexer().parse_recovery(src);
     let ans = [
         (Token::Let, 0..3),
         (Token::Ident("hoge".to_string()), 4..8),
