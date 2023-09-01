@@ -1,5 +1,5 @@
-use crate::compiler::hir::expr::Expr;
-use crate::compiler::utils::metadata::WithMeta;
+use crate::hir::expr::Expr;
+use crate::utils::metadata::WithMeta;
 
 
 struct FeedConvContext{

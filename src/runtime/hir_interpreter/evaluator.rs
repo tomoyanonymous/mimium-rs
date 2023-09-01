@@ -1,6 +1,6 @@
 use crate::runtime::builtin_fn;
-use crate::compiler::hir::expr::*;
-use crate::compiler::utils::{
+use crate::hir::expr::*;
+use crate::utils::{
     error::ReportableError,
     metadata::{Span, WithMeta},
 };

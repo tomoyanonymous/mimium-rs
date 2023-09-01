@@ -1,7 +1,7 @@
 pub mod evaluator;
-use crate::compiler::hirgen;
+use crate::hirgen;
 use crate::compiler::parser;
-use crate::compiler::utils::error::ReportableError;
+use crate::utils::error::ReportableError;
 
 #[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -29,7 +29,7 @@ pub fn eval_top(content: String) -> Result<evaluator::Value, Vec<Box<dyn Reporta
 mod hireval_test {
     use super::evaluator;
     use super::*;
-    use crate::compiler::utils::fileloader;
+    use crate::utils::fileloader;
     #[test]
     fn test() -> anyhow::Result<()> {
         let (content, _fullpath) = fileloader::load("test/hello.mmm".to_string())?;

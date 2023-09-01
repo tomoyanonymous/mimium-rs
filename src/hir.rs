@@ -1,5 +1,4 @@
-use crate::compiler::utils::metadata::{Span, WithMeta};
-use std::rc::Rc;
+use crate::utils::metadata::{Span, WithMeta};
 pub type Time = i64;
 
 // High-Level Intermediate Representation is mostly W-calculus based format without multi-stage computation factors.

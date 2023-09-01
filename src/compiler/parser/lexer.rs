@@ -1,7 +1,7 @@
 use chumsky::prelude::*;
 use chumsky::Parser;
 use super::token::*;
-use crate::compiler::utils::metadata::*;
+use crate::utils::metadata::*;
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // A parser for numbers

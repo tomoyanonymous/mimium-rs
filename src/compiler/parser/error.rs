@@ -1,4 +1,4 @@
-use crate::compiler::utils::{error::ReportableError, metadata::Span};
+use crate::utils::{error::ReportableError, metadata::Span};
 use ariadne::{Color, Fmt};
 use chumsky;
 use std::fmt;

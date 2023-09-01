@@ -1,9 +1,9 @@
 pub mod builder;
 
-pub use crate::compiler::types::TypedId;
-use crate::compiler::types::*;
-use crate::compiler::utils::metadata::WithMeta;
-use crate::compiler::utils::miniprint::MiniPrint;
+pub use crate::types::TypedId;
+use crate::types::*;
+use crate::utils::metadata::WithMeta;
+use crate::utils::miniprint::MiniPrint;
 use std::fmt;
 pub type Time = i64;
 

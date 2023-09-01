@@ -1,6 +1,6 @@
-use super::utils::metadata::WithMeta;
-use super::mir;
-use super::hir;
+use crate::utils::metadata::WithMeta;
+use crate::mir;
+use crate::hir;
 
 // pub mod closure_convert;
 // pub mod feedconvert;

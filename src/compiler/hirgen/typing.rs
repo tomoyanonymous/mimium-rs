@@ -1,6 +1,6 @@
-use crate::compiler::ast::{Expr, Literal};
-use crate::compiler::types::{Type, TypedId};
-use crate::compiler::utils::{
+use crate::ast::{Expr, Literal};
+use crate::types::{Type, TypedId};
+use crate::utils::{
     environment::Environment,
     error::ReportableError,
     metadata::{Span, WithMeta},

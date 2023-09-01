@@ -1,7 +1,7 @@
-use crate::compiler::hir::{self, expr::Expr};
-use crate::compiler::mir::*;
+use crate::hir::{self, expr::Expr};
+use crate::mir::*;
 use crate::compiler::types::{Id, Type};
-use crate::compiler::utils::{environment::Environment, metadata::WithMeta};
+use crate::utils::{environment::Environment, metadata::WithMeta};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::{collections::HashSet, convert};

@@ -1,19 +1,18 @@
-pub mod selfconvert;
-pub mod typing;
+mod selfconvert;
+mod typing;
 
-use super::ast;
-use super::hir::expr::Expr as Hir;
-use super::hir::expr::Literal as HLiteral;
-use super::hir::expr::Value as Hvalue;
-use super::types::Type;
-use super::utils::error::ReportableError;
-use super::utils::{
+use crate::ast;
+use crate::hir::Expr as Hir;
+use crate::hir::Literal as HLiteral;
+use crate::hir::Value as Hvalue;
+use crate::types::Type;
+use crate::utils::error::ReportableError;
+use crate::utils::{
     environment::Environment,
     error,
     metadata::{Span, WithMeta},
 };
 use std::fmt;
-use std::rc::Rc;
 
 type Evalenv = Environment<Box<WithMeta<Hvalue>>>;
 

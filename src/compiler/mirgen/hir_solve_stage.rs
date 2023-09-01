@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
-use crate::compiler::hir::expr::*;
-use crate::compiler::utils::metadata::WithMeta;
+use crate::hir::expr::*;
+use crate::utils::metadata::WithMeta;
 
 pub struct EvalContext {
     pub stage: u64,

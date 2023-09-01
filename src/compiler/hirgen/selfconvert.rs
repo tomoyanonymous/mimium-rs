@@ -1,5 +1,5 @@
-use crate::compiler::ast::{Expr, Literal};
-use crate::compiler::utils::{
+use crate::ast::{Expr, Literal};
+use crate::utils::{
     error::ReportableError,
     metadata::{Span, WithMeta},
 };
@@ -133,7 +133,7 @@ pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>,Error> {
 
 #[cfg(test)]
 mod test {
-    use crate::compiler::ast::TypedId;
+    use crate::ast::TypedId;
 
     use super::*;
 

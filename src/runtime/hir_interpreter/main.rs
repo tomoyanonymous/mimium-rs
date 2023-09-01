@@ -1,7 +1,7 @@
 use super::hir_interpreter::*;
 
 use clap::Parser as _;
-use crate::compiler::utils::{error, fileloader};
+use crate::utils::{error, fileloader};
 
 fn main() -> anyhow::Result<()> {
     let args = mimium_hir_interpreter::Args::parse();
