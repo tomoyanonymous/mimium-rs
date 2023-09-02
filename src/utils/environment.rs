@@ -35,13 +35,26 @@ impl<T: Clone> Environment<T> {
 
 /// Environment as a temporary object that holds mutable reference to the vector of key-value-pair.
 /// The environment is initialized by adding a vector of key value pair and remove them automatically when it is destroyed.
-struct EnvironmentT<'a, T: Clone>(&'a mut Vec<(String, T)>, usize);
+#[derive(Debug)]
+pub struct EnvironmentT<'a, T: Clone>(&'a mut Vec<(String, T)>, usize);
 
 impl<'a, T: Clone> EnvironmentT<'a, T> {
     pub fn new(vec: &'a mut Vec<(String, T)>, mut names: Vec<(String, T)>) -> Self {
         let len = vec.len();
         vec.append(&mut names);
         Self(vec, len)
+    }
+    pub fn get<'b>(&'a mut self) -> &'b mut Vec<(String, T)>
+    where
+        'a: 'b,
+    {
+        self.0
+    }
+    pub fn extend<'b: 'a>(
+        from: &'b mut EnvironmentT<'a, T>,
+        mut names: Vec<(String, T)>,
+    ) -> EnvironmentT<'b, T> {
+        Self::new(from.0, names)
     }
     pub fn lookup(&self, name: &String) -> Option<T> {
         let res = self
@@ -60,6 +73,17 @@ impl<'a, T: Clone> Drop for EnvironmentT<'a, T> {
         self.0.truncate(self.1);
     }
 }
+
+pub fn make_env<'a, T: Clone>(data: &'a mut Vec<(String, T)>) -> EnvironmentT<'a, T> {
+    EnvironmentT::new(data, vec![])
+}
+
+// pub fn env_extend<'a: 'b, 'b, T: Clone>(
+//     from: &'b mut EnvironmentT<'a, T>,
+//     names: Vec<(String, T)>,
+// ) -> EnvironmentT<'b, T> {
+//     EnvironmentT::<'b, T>::extend(from, names)
+// }
 
 #[cfg(test)]
 mod test {
