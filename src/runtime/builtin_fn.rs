@@ -36,35 +36,37 @@ impl Context {
         });
         ctx
     }
-    pub fn eval_float1(&self, name: &String, x: f64) -> Option<f64> {
-        match name.as_str() {
-            "sin" => Some(x.sin()),
-            "cos" => Some(x.cos()),
-            "not" => Some(if x == 0.0 { 1.0 } else { 0.0 }),
-            "round" => Some(x.round()),
-            "floor" => Some(x.floor()),
-            "ceil" => Some(x.ceil()),
-            "atan" => Some(x.atan()),
-            "sqrt" => Some(x.sqrt()),
-            "abs" => Some(x.abs()),
-            _ => None,
-        }
+
+}
+
+pub fn eval_float1(name: &str, x: f64) -> Option<f64> {
+    match name {
+        "sin" => Some(x.sin()),
+        "cos" => Some(x.cos()),
+        "not" => Some(if x == 0.0 { 1.0 } else { 0.0 }),
+        "round" => Some(x.round()),
+        "floor" => Some(x.floor()),
+        "ceil" => Some(x.ceil()),
+        "atan" => Some(x.atan()),
+        "sqrt" => Some(x.sqrt()),
+        "abs" => Some(x.abs()),
+        _ => None,
     }
-    pub fn eval_float2(&self, name: &String, x: f64, y: f64) -> Option<f64> {
-        match name.as_str() {
-            "add" => Some(x + y),
-            "sub" => Some(x - y),
-            "mult" => Some(x * y),
-            "div" => Some(x / y),
-            "mod" => Some(x % y),
-            "eq" => Some(if x == y { 1. } else { 0. }),
-            "ne" => Some(if x != y { 1. } else { 0. }),
-            "le" => Some(if x <= y { 1. } else { 0. }),
-            "lt" => Some(if x < y { 1. } else { 0. }),
-            "ge" => Some(if x >= y { 1. } else { 0. }),
-            "gt" => Some(if x > y { 1. } else { 0. }),
-            "atan2" => Some(x.atan2(y)),
-            _ => None,
-        }
+}
+pub fn eval_float2(name: &str, x: f64, y: f64) -> Option<f64> {
+    match name {
+        "add" => Some(x + y),
+        "sub" => Some(x - y),
+        "mult" => Some(x * y),
+        "div" => Some(x / y),
+        "mod" => Some(x % y),
+        "eq" => Some(if x == y { 1. } else { 0. }),
+        "ne" => Some(if x != y { 1. } else { 0. }),
+        "le" => Some(if x <= y { 1. } else { 0. }),
+        "lt" => Some(if x < y { 1. } else { 0. }),
+        "ge" => Some(if x >= y { 1. } else { 0. }),
+        "gt" => Some(if x > y { 1. } else { 0. }),
+        "atan2" => Some(x.atan2(y)),
+        _ => None,
     }
 }

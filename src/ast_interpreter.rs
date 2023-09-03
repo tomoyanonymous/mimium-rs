@@ -1,6 +1,6 @@
 use crate::{
     ast,
-    // runtime::builtin_fn,
+    runtime::builtin_fn,
     types::{Type, TypedId},
     utils::{
         error::ReportableError,
@@ -18,6 +18,7 @@ pub enum Value {
     //Function value holds return type
     Function(Vec<TypedId>, Box<WithMeta<ast::Expr>>, Type),
     FixPoint(TypedId, Box<WithMeta<ast::Expr>>),
+    External(String),
 }
 
 impl Value {
@@ -36,8 +37,20 @@ impl Value {
                 None,
             ),
             Value::FixPoint(TypedId { ty, id: _ }, _) => ty.clone().unwrap_or(Type::Unit),
+            //todo!
+            Value::External(_id) => Type::Unknown,
         }
     }
+}
+
+const EXTERN_ENV: [&str; 5] = ["add", "sub", "mult", "div", "mod"];
+
+fn lookup_extern_env(name: &str) -> Option<&str> {
+    let filtered = EXTERN_ENV
+        .into_iter()
+        .filter(|n| *n == name)
+        .collect::<Vec<_>>();
+    filtered.get(0).map(|s| *s)
 }
 
 #[derive(Debug)]
@@ -153,7 +166,9 @@ pub fn eval_ast<'a>(
     let WithMeta(e, span) = *e_meta;
     match e {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
-        ast::Expr::Var(v, _time) => lookup(env, &v).ok_or(Error::VariableNotFound(span.clone())),
+        ast::Expr::Var(v, _time) => lookup(env, &v)
+            .or(lookup_extern_env(&v).map(|n| Value::External(n.to_string())))
+            .ok_or(Error::VariableNotFound(span.clone())),
         ast::Expr::Block(b) => b.map_or(Ok(Value::Unit), |body| eval_ast(body, env)),
         ast::Expr::Tuple(v) => {
             let res = v
@@ -192,8 +207,33 @@ pub fn eval_ast<'a>(
                 Value::FixPoint(TypedId { id, ty: _ }, e) => {
                     eval_with_new_env(e, env, vec![(id, func)])
                 }
+                Value::External(n) => {
+                    //todo: appropreate error type
+                    let fres = match argv.len() {
+                        1 => {
+                            let v = argv.get(0).unwrap();
+                            match v {
+                                Value::Numeric(a1) => Ok(builtin_fn::eval_float1(&n, *a1).unwrap()),
+                                _ => Err(Error::TypeMisMatch(Type::Numeric, v.get_type(), span)),
+                            }
+                        }
+                        2 => {
+                            let v1 = argv.get(0).unwrap();
+                            let v2 = argv.get(1).unwrap();
+                            match (v1, v2) {
+                                (Value::Numeric(a1), Value::Numeric(a2)) => {
+                                    Ok(builtin_fn::eval_float2(&n, *a1, *a2).unwrap())
+                                }
+                                _ => Err(Error::NotApplicable(span)),
+                            }
+                        }
+                        _ => Err(Error::NotApplicable(span)),
+                    };
+                    fres.map(|n| Value::Numeric(n))
+                }
                 _ => {
                     let WithMeta(_, span) = *f;
+
                     Err(Error::NotApplicable(span))
                 }
             };

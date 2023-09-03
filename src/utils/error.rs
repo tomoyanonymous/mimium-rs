@@ -14,7 +14,7 @@ pub trait ReportableError: std::error::Error {
     }
 }
 
-pub fn report(src: &String, srcpath: path::PathBuf, errs: Vec<Box<dyn ReportableError>>) {
+pub fn report(src: &String, srcpath: path::PathBuf, errs: &Vec<Box<dyn ReportableError>>) {
     let path = srcpath.to_str().unwrap_or_default();
     for e in errs {
         let span = e.get_span();

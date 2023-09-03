@@ -32,7 +32,8 @@
                 "args": [
                     "build",
                     "--bin=mimium-rs",
-                    "--package=mimium-rs"
+                    "--package=mimium-rs",
+
                 ],
                 "filter": {
                     "name": "mimium-rs",

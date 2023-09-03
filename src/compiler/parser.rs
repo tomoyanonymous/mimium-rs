@@ -5,10 +5,10 @@ use crate::utils::metadata::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
 // pub mod chumsky_test;
-pub mod token;
+mod token;
 use token::{Op, Token};
-pub mod error;
-pub mod lexer;
+mod error;
+mod lexer;
 
 fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     recursive(|ty| {
@@ -60,6 +60,7 @@ fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
         .map(|(id, t)| TypedId { id: id, ty: t })
         .labelled("lvar")
 }
+
 fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser();
     let val = val_parser();
@@ -74,7 +75,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .ignore_then(lvar.clone())
                 .then_ignore(just(Token::Assign))
                 .then(expr.clone())
-                .then_ignore(just(Token::LineBreak))
+                .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
                 .then(expr_group.clone().map(|e| Box::new(e)).or_not())
                 .map(|((ident, body), then)| Expr::Let(ident, Box::new(body), then))
                 .boxed()
@@ -249,8 +250,10 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         .separated_by(just(Token::Comma))
         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
         .labelled("fnparams");
-    let blockstart = just(Token::BlockBegin).then_ignore(just(Token::LineBreak).repeated());
+    let blockstart = just(Token::BlockBegin)
+        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated());
     let blockend = just(Token::LineBreak)
+        .or(just(Token::SemiColon))
         .repeated()
         .ignore_then(just(Token::BlockEnd));
     let function_s = just(Token::Function)
@@ -261,14 +264,14 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .delimited_by(blockstart.clone(), blockend.clone()),
         )
         .then(expr.clone().map(|e| Box::new(e)).or_not())
-        .map_with_span(|(((fname, ids), block), then), _s: Span| {
+        .map_with_span(|(((fname, ids), block), then), s| {
             WithMeta(
                 Expr::LetRec(
                     fname,
-                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), _s.clone())),
+                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), s.clone())),
                     then,
                 ),
-                _s,
+                s,
             )
         })
         .labelled("function decl");
@@ -281,14 +284,14 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .map(|WithMeta(e, s)| WithMeta(Expr::Bracket(Box::new(WithMeta(e, s.clone()))), s)),
         )
         .then(expr.clone().map(|e| Box::new(e)).or_not())
-        .map_with_span(|(((fname, ids), block), then), _s: Span| {
+        .map_with_span(|(((fname, ids), block), then), s| {
             WithMeta(
                 Expr::LetRec(
                     fname,
-                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), _s.clone())),
+                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), s.clone())),
                     then,
                 ),
-                _s,
+                s,
             )
         })
         .labelled("macro definition");
