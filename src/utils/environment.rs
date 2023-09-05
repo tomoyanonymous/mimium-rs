@@ -1,11 +1,12 @@
-use std::collections::{HashMap, LinkedList};
+use std::collections::LinkedList;
+type EnvInner<T> = LinkedList<Vec<(String, T)>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Environment<T>(pub LinkedList<HashMap<String, T>>);
+pub struct Environment<T>(pub EnvInner<T>);
 
 impl<T> Environment<T> {
     pub fn new() -> Self {
-        Self(LinkedList::<HashMap<String, T>>::new())
+        Self(EnvInner::new())
     }
 }
 
@@ -13,102 +14,23 @@ pub struct Error(String);
 
 impl<T: Clone> Environment<T> {
     pub fn extend(&mut self) {
-        self.0.push_front(HashMap::new());
+        self.0.push_front(Vec::new());
     }
-    pub fn add_bind(&mut self, name: String, e: T) {
+    pub fn to_outer(&mut self) {
+        let _ = self.0.pop_front();
+    }
+    pub fn add_bind(&mut self, binds: &mut Vec<(String, T)>) {
         assert!(self.0.len() > 0);
-        self.0.front_mut().unwrap().insert(name, e);
+        self.0.front_mut().unwrap().append(binds);
     }
 
-    pub fn get_bound_value(&self, name: String) -> Option<&T> {
-        let mut res: Option<&T> = None;
-        for hashmap in self.0.iter() {
-            let r = hashmap.get(&name);
-            if let Some(_v) = r {
-                res = r;
-                break;
-            }
-        }
-        res
-    }
-}
-
-/// Environment as a temporary object that holds mutable reference to the vector of key-value-pair.
-/// The environment is initialized by adding a vector of key value pair and remove them automatically when it is destroyed.
-#[derive(Debug)]
-pub struct EnvironmentT<'a, T: Clone>(&'a mut Vec<(String, T)>, usize);
-
-impl<'a, T: Clone> EnvironmentT<'a, T> {
-    pub fn new(vec: &'a mut Vec<(String, T)>, mut names: Vec<(String, T)>) -> Self {
-        let len = vec.len();
-        vec.append(&mut names);
-        Self(vec, len)
-    }
-    pub fn get<'b>(&'a mut self) -> &'b mut Vec<(String, T)>
-    where
-        'a: 'b,
-    {
+    pub fn lookup(&self, name: &String) -> Option<&T> {
         self.0
-    }
-    pub fn extend<'b: 'a>(
-        from: &'b mut EnvironmentT<'a, T>,
-        mut names: Vec<(String, T)>,
-    ) -> EnvironmentT<'b, T> {
-        Self::new(from.0, names)
-    }
-    pub fn lookup(&self, name: &String) -> Option<T> {
-        let res = self
-            .0
-            .iter()
-            .rev()
-            .filter(|(n, _v)| name == n)
-            .collect::<Vec<_>>();
-        res.get(0).map(|(_, v)| v.clone())
-    }
-}
-
-impl<'a, T: Clone> Drop for EnvironmentT<'a, T> {
-    fn drop(&mut self) {
-        println!("drop called");
-        self.0.truncate(self.1);
-    }
-}
-
-pub fn make_env<'a, T: Clone>(data: &'a mut Vec<(String, T)>) -> EnvironmentT<'a, T> {
-    EnvironmentT::new(data, vec![])
-}
-
-// pub fn env_extend<'a: 'b, 'b, T: Clone>(
-//     from: &'b mut EnvironmentT<'a, T>,
-//     names: Vec<(String, T)>,
-// ) -> EnvironmentT<'b, T> {
-//     EnvironmentT::<'b, T>::extend(from, names)
-// }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn eval_environment() {
-        let mut envdata = Vec::new();
-        let src1 = vec!["hoge", "fuga", "fuge"]
-            .iter()
-            .map(|s| (s.to_string(), format!("{}_value", s)))
-            .collect::<Vec<_>>();
-        {
-            let _env = EnvironmentT::<'_, String>::new(&mut envdata, src1);
-            assert_eq!(_env.0.len(), 3);
-        }
-        assert_eq!(envdata.len(), 0);
-        let src2 = vec!["poge", "puga"]
-            .iter()
-            .map(|s| (s.to_string(), format!("{}_value", s)))
-            .collect::<Vec<_>>();
-        {
-            let _env2 = EnvironmentT::<'_, String>::new(&mut envdata, src2);
-            assert_eq!(_env2.0.len(), 2);
-        }
-        assert_eq!(envdata.len(), 0);
+            .front()
+            .map(|vec| {
+                let res: Vec<_> = vec.iter().filter(|(n, _)| n == name).collect();
+                res.get(0).map(|(_, v)| v)
+            })
+            .flatten()
     }
 }

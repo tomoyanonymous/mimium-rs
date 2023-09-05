@@ -3,6 +3,7 @@ use crate::{
     runtime::builtin_fn,
     types::{Type, TypedId},
     utils::{
+        environment::Environment,
         error::ReportableError,
         metadata::{Span, WithMeta},
     },
@@ -124,7 +125,7 @@ fn eval_literal(e: ast::Literal) -> Value {
 
 fn eval_condition<'a>(
     e: Box<WithMeta<ast::Expr>>,
-    env: &'a mut Vec<(String, Value)>,
+    env: &mut Environment<Value>,
 ) -> Result<bool, Error> {
     let c_v = eval_ast(e.clone(), env)?;
 
@@ -138,35 +139,29 @@ fn eval_condition<'a>(
     }
 }
 
-fn eval_with_new_env<'a>(
+fn eval_with_new_env(
     e_meta: Box<WithMeta<ast::Expr>>,
-    env: &'a mut Vec<(String, Value)>,
-    mut names: Vec<(String, Value)>,
+    env: &mut Environment<Value>,
+    names: &mut Vec<(String, Value)>,
 ) -> Result<Value, Error> {
-    let len_origin = env.len();
-    env.append(&mut names);
+    // let len_origin = env.len();
+    env.extend();
+    env.add_bind(names);
     let res = eval_ast(e_meta, env);
-    env.truncate(len_origin);
+    env.to_outer();
     res
 }
 
-fn lookup(env: &mut Vec<(String, Value)>, name: &String) -> Option<Value> {
-    let res = env
-        .iter()
-        .rev()
-        .filter(|(n, _v)| name == n)
-        .collect::<Vec<_>>();
-    res.get(0).map(|(_, v)| v.clone())
-}
-
-pub fn eval_ast<'a>(
+pub fn eval_ast(
     e_meta: Box<WithMeta<ast::Expr>>,
-    env: &'a mut Vec<(String, Value)>,
+    env: &mut Environment<Value>,
 ) -> Result<Value, Error> {
     let WithMeta(e, span) = *e_meta;
     match e {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
-        ast::Expr::Var(v, _time) => lookup(env, &v)
+        ast::Expr::Var(v, _time) => env
+            .lookup(&v)
+            .map(|v| v.clone())
             .or(lookup_extern_env(&v).map(|n| Value::External(n.to_string())))
             .ok_or(Error::VariableNotFound(span.clone())),
         ast::Expr::Block(b) => b.map_or(Ok(Value::Unit), |body| eval_ast(body, env)),
@@ -197,15 +192,15 @@ pub fn eval_ast<'a>(
             let func = eval_ast(f.clone(), env)?;
             let res = match func.clone() {
                 Value::Function(params, b, _r_t) => {
-                    let argvec: Vec<_> = argv
+                    let mut argvec: Vec<_> = argv
                         .iter()
                         .zip(params.iter())
                         .map(|(v, TypedId { ty: _, id })| (id.clone(), v.clone()))
                         .collect();
-                    eval_with_new_env(b, env, argvec)
+                    eval_with_new_env(b, env, &mut argvec)
                 }
                 Value::FixPoint(TypedId { id, ty: _ }, e) => {
-                    eval_with_new_env(e, env, vec![(id, func)])
+                    eval_with_new_env(e, env, &mut vec![(id, func)])
                 }
                 Value::External(n) => {
                     //todo: appropreate error type
@@ -250,7 +245,7 @@ pub fn eval_ast<'a>(
         ast::Expr::Let(TypedId { id, ty: _t }, e, then) => {
             let e_v = eval_ast(e, env)?;
             match then {
-                Some(t) => eval_with_new_env(t, env, vec![(id, e_v)]),
+                Some(t) => eval_with_new_env(t, env, &mut vec![(id, e_v)]),
                 None => Ok(Value::Unit),
             }
         }
@@ -258,9 +253,9 @@ pub fn eval_ast<'a>(
             let res_rec = eval_with_new_env(
                 e.clone(),
                 env,
-                vec![(tid.clone().id, Value::FixPoint(tid.clone(), e))],
+                &mut vec![(tid.clone().id, Value::FixPoint(tid.clone(), e))],
             )?;
-            then.map(|t| eval_with_new_env(t, env, vec![(tid.id, res_rec)]))
+            then.map(|t| eval_with_new_env(t, env, &mut vec![(tid.id, res_rec)]))
                 .unwrap_or(Ok(Value::Unit))
         }
         ast::Expr::LetTuple(_, _, _) => todo!(),
