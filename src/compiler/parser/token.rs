@@ -1,5 +1,11 @@
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Comment {
+    SingleLine(String),
+    MultiLine(String),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Op {
     Sum,     // +
@@ -26,7 +32,6 @@ pub enum Op {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Token {
-    Comment(String),
     Ident(String),
     MacroExpand(String),
 
@@ -76,6 +81,9 @@ pub enum Token {
     Alias,
 
     LineBreak,
+
+    Comment(Comment),
+
     EndOfInput,
 }
 impl Op {
@@ -127,13 +135,12 @@ impl fmt::Display for Op {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Token::Comment(x) => write!(f, "{}", x),
             Token::Ident(x) => write!(f, "{}", x),
             Token::MacroExpand(x) => write!(f, "{}!", x),
-            Token::FloatType=> write!(f,"float"),
-            Token::IntegerType=> write!(f,"int"),
-            Token::StringType=> write!(f,"string"),
-            Token::StructType=> write!(f,"struct"),
+            Token::FloatType => write!(f, "float"),
+            Token::IntegerType => write!(f, "int"),
+            Token::StringType => write!(f, "string"),
+            Token::StructType => write!(f, "struct"),
             Token::Int(x) => write!(f, "{}", x),
             Token::Float(x) => write!(f, "{}", x),
             Token::Str(x) => write!(f, "\"{}\"", x),
@@ -143,8 +150,8 @@ impl fmt::Display for Token {
             Token::At => write!(f, "@"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
-            Token::Colon => write!(f,":"),
-            Token::SemiColon => write!(f,";"),
+            Token::Colon => write!(f, ":"),
+            Token::SemiColon => write!(f, ";"),
             Token::Let => write!(f, "let"),
             Token::Assign => write!(f, "="),
             Token::Reference => write!(f, "&"),
@@ -168,6 +175,7 @@ impl fmt::Display for Token {
             Token::Type => write!(f, "type"),
             Token::Alias => write!(f, "newtype"),
             Token::LineBreak => write!(f, "linebreak"),
+            Token::Comment(_) => write!(f, "comment"),
             Token::EndOfInput => write!(f, "endofinput"),
         }
     }

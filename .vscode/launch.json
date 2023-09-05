@@ -33,7 +33,6 @@
                     "build",
                     "--bin=mimium-rs",
                     "--package=mimium-rs",
-
                 ],
                 "filter": {
                     "name": "mimium-rs",
@@ -72,12 +71,11 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=mimium-ast",
-                    "--package=mimium-ast"
+                    "--bin=mimium-rs",
                 ],
                 "filter": {
-                    "name": "mimium-ast",
-                    "kind": "bin"
+                    // "name": "mimium-rs",
+                    // "kind": "bin"
                 }
             },
             "args": [],
