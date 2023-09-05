@@ -112,8 +112,11 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
                 )
                 .then(expr.clone())
-                .then_ignore(just(Token::Else))
-                .then(expr.clone().or_not().map(|e| e.map(|e| Box::new(e))))
+                .then(
+                    just(Token::Else)
+                        .ignore_then(expr.clone().map(|e| Box::new(e)))
+                        .or_not(),
+                )
                 .map(|((cond, then), opt_else)| Expr::If(cond.into(), then.into(), opt_else))
                 .labelled("if");
 

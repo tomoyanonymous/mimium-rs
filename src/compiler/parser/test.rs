@@ -48,6 +48,18 @@ fn test_if() {
     ));
     test_string!("if (100) hoge else fuga", *ans);
 }
+#[test]
+fn test_if_noelse() {
+    let ans = Box::new(WithMeta(
+        Expr::If(
+            WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
+            WithMeta(Expr::Var("hoge".into(), None).into(), 9..13).into(),
+            None,
+        ),
+        0..13,
+    ));
+    test_string!("if (100) hoge ", *ans);
+}
 
 #[test]
 fn test_int() {
