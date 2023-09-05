@@ -26,3 +26,11 @@ pub fn report(src: &String, srcpath: path::PathBuf, errs: &Vec<Box<dyn Reportabl
         builder.eprint((path, Source::from(src.as_str()))).unwrap();
     }
 }
+
+pub fn dump_to_string(errs: &Vec<Box<dyn ReportableError>>) -> String {
+    let mut res = String::new();
+    for e in errs {
+        res += e.get_message().as_str();
+    }
+    res
+}

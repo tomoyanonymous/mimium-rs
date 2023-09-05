@@ -4,11 +4,13 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
-// pub mod chumsky_test;
 mod token;
 use token::{Op, Token};
 mod error;
 mod lexer;
+
+#[cfg(test)]
+mod test;
 
 fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     recursive(|ty| {
@@ -104,11 +106,21 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     )))
                 })
                 .labelled("macroexpand");
+            let if_ = just(Token::If)
+                .ignore_then(
+                    expr.clone()
+                        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+                )
+                .then(expr.clone())
+                .then_ignore(just(Token::Else))
+                .then(expr.clone().or_not().map(|e| e.map(|e| Box::new(e))))
+                .map(|((cond, then), opt_else)| Expr::If(cond.into(), then.into(), opt_else));
 
             let atom = val
                 .or(lambda)
                 .or(macro_expand)
                 .or(let_e)
+                .or(if_)
                 .or(parenexpr)
                 .boxed()
                 .labelled("atoms");
