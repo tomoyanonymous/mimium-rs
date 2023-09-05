@@ -19,7 +19,7 @@ macro_rules! test_string {
 }
 
 #[test]
-pub fn test_let() {
+fn test_let() {
     let ans = WithMeta(
         Expr::Let(
             TypedId {
@@ -37,17 +37,30 @@ pub fn test_let() {
     test_string!("let goge = 36\n goge", ans);
 }
 #[test]
-pub fn test_int() {
+fn test_if() {
+    let ans = Box::new(WithMeta(
+        Expr::If(
+            WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
+            WithMeta(Expr::Var("hoge".into(), None).into(), 9..13).into(),
+            Some(WithMeta(Expr::Var("fuga".into(), None).into(), 19..23).into()),
+        ),
+        0..23,
+    ));
+    test_string!("if (100) hoge else fuga", *ans);
+}
+
+#[test]
+fn test_int() {
     let ans = WithMeta(Expr::Literal(Literal::Int(3466)), 0..4);
     test_string!("3466", ans);
 }
 #[test]
-pub fn test_string() {
+fn test_string() {
     let ans = WithMeta(Expr::Literal(Literal::String("teststr".to_string())), 0..9);
     test_string!("\"teststr\"", ans);
 }
 #[test]
-pub fn test_block() {
+fn test_block() {
     let ans = WithMeta(
         Expr::Block(Some(Box::new(WithMeta(
             Expr::Let(
@@ -58,17 +71,21 @@ pub fn test_block() {
                 Box::new(WithMeta(Expr::Literal(Literal::Int(100)), 12..15)),
                 Some(Box::new(WithMeta(
                     Expr::Var("hoge".to_string(), None),
-                    18..22,
+                    16..20,
                 ))),
             ),
-            1..22,
+            1..20,
         )))),
-        0..23,
+        0..21,
     );
-    test_string!("{let hoge = 100 \n hoge}", ans);
+    test_string!(
+        "{let hoge = 100
+hoge}",
+        ans
+    );
 }
 #[test]
-pub fn test_add() {
+fn test_add() {
     let ans = WithMeta(
         Expr::Apply(
             Box::new(WithMeta(Expr::Var("add".to_string(), None), 6..7)),
@@ -82,12 +99,12 @@ pub fn test_add() {
     test_string!("3466.0+2000.0", ans);
 }
 #[test]
-pub fn test_var() {
+fn test_var() {
     let ans = WithMeta(Expr::Var("hoge".to_string(), None), 0..4);
     test_string!("hoge", ans);
 }
 #[test]
-pub fn test_apply() {
+fn test_apply() {
     let ans = WithMeta(
         Expr::Apply(
             Box::new(WithMeta(Expr::Var("myfun".to_string(), None), 0..5)),
@@ -98,7 +115,7 @@ pub fn test_apply() {
     test_string!("myfun(callee)", ans);
 }
 #[test]
-pub fn test_applynested() {
+fn test_applynested() {
     let ans = WithMeta(
         Expr::Apply(
             Box::new(WithMeta(Expr::Var("myfun".to_string(), None), 0..5)),
@@ -115,7 +132,7 @@ pub fn test_applynested() {
     test_string!("myfun(myfun2(callee))", ans);
 }
 #[test]
-pub fn test_macroexpand() {
+fn test_macroexpand() {
     let ans = WithMeta(
         Expr::Escape(Box::new(WithMeta(
             Expr::Apply(
@@ -129,7 +146,7 @@ pub fn test_macroexpand() {
     test_string!("myfun!(callee)", ans);
 }
 #[test]
-pub fn test_fndef() {
+fn test_fndef() {
     let ans = WithMeta(
         Expr::LetRec(
             TypedId {
@@ -165,7 +182,7 @@ pub fn test_fndef() {
     test_string!("fn hoge(input,gue){\n input\n}", ans);
 }
 #[test]
-pub fn test_macrodef() {
+fn test_macrodef() {
     let ans = WithMeta(
         Expr::LetRec(
             TypedId {
@@ -208,7 +225,7 @@ pub fn test_macrodef() {
 }
 #[test]
 #[should_panic]
-pub fn test_fail() {
+fn test_fail() {
     let src = "let 100 == hoge\n fuga";
     match parse(src.to_string()) {
         Err(errs) => {

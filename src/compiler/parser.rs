@@ -114,7 +114,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .then(expr.clone())
                 .then_ignore(just(Token::Else))
                 .then(expr.clone().or_not().map(|e| e.map(|e| Box::new(e))))
-                .map(|((cond, then), opt_else)| Expr::If(cond.into(), then.into(), opt_else));
+                .map(|((cond, then), opt_else)| Expr::If(cond.into(), then.into(), opt_else))
+                .labelled("if");
 
             let atom = val
                 .or(lambda)
@@ -241,6 +242,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
         let block = expr
             .clone()
+            .padded_by(just(Token::LineBreak).or_not())
             .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
             .map(|e: WithMeta<Expr>| Expr::Block(Some(Box::new(e))));
 
@@ -249,8 +251,6 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         block.map_with_span(|e, s| WithMeta(e, s)).or(expr.clone())
     });
     expr_group
-    // .then_ignore(end())
-    // .map_with_span(|e, s| WithMeta(e, s));
 }
 
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
