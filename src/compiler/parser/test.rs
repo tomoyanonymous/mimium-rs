@@ -6,7 +6,7 @@ use std::path::PathBuf;
 macro_rules! test_string {
     ($src:literal, $ans:expr) => {
         let srcstr = $src.to_string();
-        match parse(srcstr.clone()) {
+        match parse(&srcstr) {
             Ok(ast) => {
                 assert_eq!(ast, $ans);
             }
@@ -239,7 +239,7 @@ fn test_macrodef() {
 #[should_panic]
 fn test_fail() {
     let src = "let 100 == hoge\n fuga";
-    match parse(src.to_string()) {
+    match parse(&src.to_string()) {
         Err(errs) => {
             panic!("{}", utils::error::dump_to_string(&errs))
         }

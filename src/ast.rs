@@ -76,26 +76,54 @@ impl MiniPrint for Expr {
             }),
             Expr::Tuple(e) => format!(
                 "(tuple ({}))",
-                e.iter().fold("".to_string(), |a, b| {
-                    format!("{} {}", a, b.0.simple_print())
-                })
+                e.iter()
+                    .fold("".to_string(), |a, b| {
+                        format!("{a} {}", b.0.simple_print())
+                    })
+                    .split_at(1)
+                    .1
             ),
             Expr::Proj(e, idx) => format!("(proj {} {})", e.0.simple_print(), idx),
             Expr::Apply(e1, e2) => {
-                format!("(app {} {})", e1.0.simple_print(), e2[0].0.simple_print())
+                let callee = e2
+                    .iter()
+                    .fold("".to_string(), |a, b| format!("{a} {}", b.0.simple_print()))
+                    .split_at(1)
+                    .1
+                    .to_string();
+                format!("(app {} ({}))", e1.0.simple_print(), callee)
             }
             Expr::Lambda(params, body) => format!(
-                "(lambda {} ({}))",
-                params.iter().fold("".to_string(), |a, b| {
-                    format!("{} {}", a, b.0.simple_print())
-                }),
+                "(lambda ({}) {})",
+                params
+                    .iter()
+                    .fold("".to_string(), |a, b| {
+                        format!("{a} {}", b.0.simple_print())
+                    })
+                    .split_at(1)
+                    .1,
                 body.0.simple_print()
             ),
-            Expr::Feed(id, body) => format!("(feed {} ({}))", id, body.0.simple_print()),
-            Expr::Let(_, _, _) => todo!(),
-            Expr::LetRec(_, _, _) => todo!(),
+            Expr::Feed(id, body) => format!("(feed {} {})", id, body.0.simple_print()),
+            Expr::Let(id, body, then) => format!(
+                "(let {} {} {})",
+                &id.id,
+                body.0.simple_print(),
+                then.as_ref().map_or("".into(), |t| t.0.simple_print())
+            ),
+            Expr::LetRec(id, body, then) => format!(
+                "(letrec {} {} {})",
+                &id.id,
+                body.0.simple_print(),
+                then.as_ref().map_or("".into(), |t| t.0.simple_print())
+            ),
             Expr::LetTuple(_, _, _) => todo!(),
-            Expr::If(_, _, _) => todo!(),
+            Expr::If(cond, then, optelse) => format!(
+                "(if {} {} {})",
+                cond.0.simple_print(),
+                then.0.simple_print(),
+                optelse.as_ref().map_or("".into(), |e| e.0.simple_print())
+            ),
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
             Expr::Error => todo!(),

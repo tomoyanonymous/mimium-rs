@@ -101,6 +101,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         _ => Token::Ident(c.to_string()),
     });
     let linebreak = text::newline::<Simple<char>>()
+        .map(|_| '\n')
+        // .or(just::<_, _, Simple<char>>(';'))
         .repeated()
         .at_least(1)
         .map(|_s| Token::LineBreak);
@@ -182,6 +184,6 @@ another line
         assert!(errs.is_empty());
         assert!(res.is_some());
         assert_eq!(ans, res.unwrap());
-        assert_eq!(src.len(),75);
+        assert_eq!(src.len(), 75);
     }
 }

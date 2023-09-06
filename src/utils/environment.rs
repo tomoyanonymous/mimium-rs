@@ -26,11 +26,9 @@ impl<T: Clone> Environment<T> {
 
     pub fn lookup(&self, name: &String) -> Option<&T> {
         self.0
-            .front()
-            .map(|vec| {
-                let res: Vec<_> = vec.iter().filter(|(n, _)| n == name).collect();
-                res.get(0).map(|(_, v)| v)
-            })
+            .iter()
+            .find(|vec| vec.iter().find(|(n, _)| n == name).is_some())
+            .map(|vec| vec.iter().find(|(n, _)| n == name).map(|(_, v)| v))
             .flatten()
     }
 }

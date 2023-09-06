@@ -44,7 +44,9 @@ impl Value {
     }
 }
 
-const EXTERN_ENV: [&str; 5] = ["add", "sub", "mult", "div", "mod"];
+const EXTERN_ENV: [&str; 12] = [
+    "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2",
+];
 
 fn lookup_extern_env(name: &str) -> Option<&str> {
     let filtered = EXTERN_ENV

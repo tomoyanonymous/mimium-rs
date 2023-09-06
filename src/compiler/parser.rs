@@ -278,6 +278,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             expr.clone()
                 .delimited_by(blockstart.clone(), blockend.clone()),
         )
+        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
         .then(expr.clone().map(|e| Box::new(e)).or_not())
         .map_with_span(|(((fname, ids), block), then), s| {
             WithMeta(
@@ -319,9 +320,10 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
     func_parser()
 }
 
-pub fn parse(src: String) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
+pub fn parse(src: &String) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
+
     let (tokens, lex_errs) = lexer::lexer().parse_recovery(src.clone());
     lex_errs
         .iter()
