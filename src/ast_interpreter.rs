@@ -44,8 +44,9 @@ impl Value {
     }
 }
 
-const EXTERN_ENV: [&str; 12] = [
-    "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2",
+const EXTERN_ENV: [&str; 25] = [
+    "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2", "sin", "cos",
+    "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log",
 ];
 
 fn lookup_extern_env(name: &str) -> Option<&str> {
@@ -175,7 +176,7 @@ pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, E
                 (Value::Integer(a1), Value::Integer(a2)) => {
                     Ok(Value::Integer(eval_int2(&n, *a1, *a2).unwrap()))
                 }
-                _ => Err(Error::NotApplicable(span)),
+                _ => Err(Error::TypeMisMatch(v1.get_type(), v2.get_type(), span)),
             }
         }
         _ => Err(Error::NotApplicable(span)),
