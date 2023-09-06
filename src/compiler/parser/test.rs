@@ -38,27 +38,27 @@ fn test_let() {
 }
 #[test]
 fn test_if() {
-    let ans = Box::new(WithMeta(
+    let ans = WithMeta(
         Expr::If(
             WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
             WithMeta(Expr::Var("hoge".into(), None).into(), 9..13).into(),
             Some(WithMeta(Expr::Var("fuga".into(), None).into(), 19..23).into()),
         ),
         0..23,
-    ));
-    test_string!("if (100) hoge else fuga", *ans);
+    );
+    test_string!("if (100) hoge else fuga", ans);
 }
 #[test]
 fn test_if_noelse() {
-    let ans = Box::new(WithMeta(
+    let ans = WithMeta(
         Expr::If(
             WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
             WithMeta(Expr::Var("hoge".into(), None).into(), 9..13).into(),
             None,
         ),
         0..13,
-    ));
-    test_string!("if (100) hoge ", *ans);
+    );
+    test_string!("if (100) hoge ", ans);
 }
 
 #[test]

@@ -203,9 +203,11 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Feed(id, body) => {
             ctx.env.extend();
             let feedv = ctx.gen_intermediate_type();
-            ctx.env.add_bind(id, feedv.clone());
-            let res = infer_type(body.0, ctx)?;
-            ctx.unify_types(res, feedv)
+            ctx.env.add_bind(&mut vec![(id, feedv.clone())]);
+            let b = infer_type(body.0, ctx);
+            let res = ctx.unify_types(b?, feedv);
+            ctx.env.to_outer();
+            res
         }
         Expr::Lambda(p, r) => {
             let c = ctx;
@@ -226,11 +228,13 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let idt = id.ty.unwrap_or(c.gen_intermediate_type());
             let bodyt_u = c.unify_types(idt, bodyt)?;
             c.env.extend();
-            c.env.add_bind(id.id, bodyt_u);
-            match then {
+            c.env.add_bind(&mut vec![(id.id, bodyt_u)]);
+            let res = match then {
                 Some(e) => infer_type(e.0, c),
                 None => Ok(Type::Unit),
-            }
+            };
+            c.env.to_outer();
+            res
         }
         Expr::LetTuple(_ids, _body, _then) => {
             todo!("should be de-sugared before type inference")
@@ -240,16 +244,18 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let idt = id.ty.unwrap_or(c.gen_intermediate_type());
             c.env.extend();
             let body_i = c.gen_intermediate_type();
-            c.env.add_bind(id.id, body_i);
+            c.env.add_bind(&mut vec![(id.id, body_i)]);
             let bodyt = infer_type(body.0, c)?;
             let _ = c.unify_types(idt, bodyt)?;
 
-            match then {
+            let res = match then {
                 Some(e) => infer_type(e.0, c),
                 None => Ok(Type::Unit),
-            }
+            };
+            c.env.to_outer();
+            res
         }
-        Expr::Var(name, _time) => ctx.env.get_bound_value(name.clone()).map_or(
+        Expr::Var(name, _time) => ctx.env.lookup(&name).map_or(
             Err(Error(ErrorKind::VariableNotFound(name), 0..0)), //todo:Span
             |v| Ok(v.clone()),
         ),

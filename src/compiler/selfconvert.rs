@@ -122,12 +122,16 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<WithMeta<Expr>,
             opt_cls(opt_else)?,
         )),
         Expr::Block(body) => Ok(Expr::Block(opt_cls(body)?)),
+        Expr::Feed(_, _) => panic!(
+            "Feed should not be shown before conversion at {}..{}",
+            span.start, span.end
+        ),
         _ => Ok(e.clone()),
     };
     new_e_res.map(|e| WithMeta(e, span))
 }
 
-pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>,Error> {
+pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
     convert_self(expr, FeedId::Global)
 }
 
@@ -162,7 +166,7 @@ mod test {
             ),
             0..1,
         );
-        let WithMeta(res,_) = convert_self(src, FeedId::Global).unwrap();
+        let WithMeta(res, _) = convert_self(src, FeedId::Global).unwrap();
         let ans = Expr::Let(
             TypedId {
                 ty: None,
