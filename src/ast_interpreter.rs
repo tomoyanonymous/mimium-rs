@@ -154,6 +154,34 @@ fn eval_with_new_env(
     res
 }
 
+pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, Error> {
+    use builtin_fn::{eval_float1, eval_float2, eval_int1, eval_int2};
+    match argv.len() {
+        1 => {
+            let v = argv.get(0).unwrap();
+            match v {
+                Value::Numeric(a1) => Ok(Value::Numeric(eval_float1(&n, *a1).unwrap())),
+                Value::Integer(a1) => Ok(Value::Integer(eval_int1(&n, *a1).unwrap())),
+                _ => Err(Error::TypeMisMatch(Type::Numeric, v.get_type(), span)),
+            }
+        }
+        2 => {
+            let v1 = argv.get(0).unwrap();
+            let v2 = argv.get(1).unwrap();
+            match (v1, v2) {
+                (Value::Numeric(a1), Value::Numeric(a2)) => {
+                    Ok(Value::Numeric(eval_float2(&n, *a1, *a2).unwrap()))
+                }
+                (Value::Integer(a1), Value::Integer(a2)) => {
+                    Ok(Value::Integer(eval_int2(&n, *a1, *a2).unwrap()))
+                }
+                _ => Err(Error::NotApplicable(span)),
+            }
+        }
+        _ => Err(Error::NotApplicable(span)),
+    }
+}
+
 pub fn eval_ast(
     e_meta: Box<WithMeta<ast::Expr>>,
     env: &mut Environment<Value>,
@@ -206,27 +234,7 @@ pub fn eval_ast(
                 }
                 Value::External(n) => {
                     //todo: appropreate error type
-                    let fres = match argv.len() {
-                        1 => {
-                            let v = argv.get(0).unwrap();
-                            match v {
-                                Value::Numeric(a1) => Ok(builtin_fn::eval_float1(&n, *a1).unwrap()),
-                                _ => Err(Error::TypeMisMatch(Type::Numeric, v.get_type(), span)),
-                            }
-                        }
-                        2 => {
-                            let v1 = argv.get(0).unwrap();
-                            let v2 = argv.get(1).unwrap();
-                            match (v1, v2) {
-                                (Value::Numeric(a1), Value::Numeric(a2)) => {
-                                    Ok(builtin_fn::eval_float2(&n, *a1, *a2).unwrap())
-                                }
-                                _ => Err(Error::NotApplicable(span)),
-                            }
-                        }
-                        _ => Err(Error::NotApplicable(span)),
-                    };
-                    fres.map(|n| Value::Numeric(n))
+                    eval_extern(&n, &argv, span)
                 }
                 _ => {
                     let WithMeta(_, span) = *f;

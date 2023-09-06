@@ -36,7 +36,6 @@ impl Context {
         });
         ctx
     }
-
 }
 
 pub fn eval_float1(name: &str, x: f64) -> Option<f64> {
@@ -67,6 +66,31 @@ pub fn eval_float2(name: &str, x: f64, y: f64) -> Option<f64> {
         "ge" => Some(if x >= y { 1. } else { 0. }),
         "gt" => Some(if x > y { 1. } else { 0. }),
         "atan2" => Some(x.atan2(y)),
+        _ => None,
+    }
+}
+
+pub fn eval_int1(name: &str, x: i64) -> Option<i64> {
+    match name {
+        "not" => Some(if x == 0 { 1 } else { 0 }),
+        "abs" => Some(x.abs()),
+        _ => None,
+    }
+}
+
+pub fn eval_int2(name: &str, x: i64, y: i64) -> Option<i64> {
+    match name {
+        "add" => Some(x + y),
+        "sub" => Some(x - y),
+        "mult" => Some(x * y),
+        "div" => Some(x / y),
+        "mod" => Some(x % y),
+        "eq" => Some(if x == y { 1 } else { 0 }),
+        "ne" => Some(if x != y { 1 } else { 0 }),
+        "le" => Some(if x <= y { 1 } else { 0 }),
+        "lt" => Some(if x < y { 1 } else { 0 }),
+        "ge" => Some(if x >= y { 1 } else { 0 }),
+        "gt" => Some(if x > y { 1 } else { 0 }),
         _ => None,
     }
 }
