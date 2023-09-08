@@ -1,21 +1,29 @@
+use super::PType;
 use super::Type;
+
+#[macro_export]
+macro_rules! unit {
+    () => {
+        Type::Primitive(PType::Unit)
+    };
+}
 
 #[macro_export]
 macro_rules! integer {
     () => {
-        Type::Int
+        Type::Primitive(PType::Int)
     };
 }
 #[macro_export]
 macro_rules! numeric {
     () => {
-        Type::Numeric
+        Type::Primitive(PType::Numeric)
     };
 }
 #[macro_export]
 macro_rules! string_t {
     () => {
-        Type::String
+        Type::Primitive(PType::String)
     };
 }
 #[macro_export]
@@ -46,16 +54,16 @@ mod typemacro_test {
     #[test]
     fn buildertest() {
         let t = tuple!(
-            refer!(function!(vec![integer!(),integer!()],numeric!())),
+            refer!(function!(vec![integer!(), integer!()], numeric!())),
             string_t!()
         );
         let answer = Type::Tuple(vec![
             Type::Ref(Box::new(Type::Function(
-                vec![Type::Int, Type::Int],
-                Box::new(Type::Numeric),
+                vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
+                Box::new(Type::Primitive(PType::Numeric)),
                 None,
             ))),
-            Type::String,
+            Type::Primitive(PType::String),
         ]);
         assert_eq!(t, answer);
     }

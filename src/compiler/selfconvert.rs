@@ -101,12 +101,10 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<WithMeta<Expr>,
             let feedid = get_feedvar_name(nfctx);
             if try_find_self(body.clone().0) {
                 let nbody = convert_self(*body, FeedId::Local(nfctx))?;
-                Ok(Expr::Feed(
-                    feedid,
-                    Box::new(WithMeta::<_>(
-                        Expr::Lambda(params, Box::new(nbody)),
-                        span.clone(),
-                    )),
+                // the conversion must be lambda(x).feed(self).e , not feed(self).lambda(x).e
+                Ok(Expr::Lambda(
+                    params,
+                    WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone()).into(),
                 ))
             } else {
                 Ok(e.clone())

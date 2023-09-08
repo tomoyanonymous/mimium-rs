@@ -1,13 +1,19 @@
 use std::fmt;
 
 use super::utils::miniprint::MiniPrint;
+
+/// Basic types that are not boxed.
+/// They should be splitted semantically as the type of `feed x.e`cannot take function type.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Type {
-    //basic types
+pub enum PType {
     Unit,
     Int,
     Numeric,
     String,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum Type {
+    Primitive(PType),
     //aggregate types
     Array(Box<Self>),
     Tuple(Vec<Self>),
@@ -30,6 +36,13 @@ pub struct TypedId {
 }
 
 impl Type {
+    pub fn is_primitive(&self) -> bool {
+        if let Type::Primitive(_) = self {
+            true
+        } else {
+            false
+        }
+    }
     pub fn apply_fn<F>(&self, closure: F) -> Self
     where
         F: Fn(Self) -> Self,
@@ -38,10 +51,6 @@ impl Type {
         let apply_vec =
             |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
         match self {
-            Type::Unit => Type::Unit,
-            Type::Int => Type::Int,
-            Type::Numeric => Type::Numeric,
-            Type::String => Type::String,
             Type::Array(a) => Type::Array(apply_box(a)),
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
             Type::Struct(s) => todo!(),
@@ -51,7 +60,7 @@ impl Type {
             Type::Ref(x) => Type::Ref(apply_box(x)),
             Type::Code(c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
-            Type::Unknown => Type::Unknown,
+            _ => self.clone(),
         }
     }
     pub fn fold<F, R>(&self, closure: F) -> R
@@ -61,18 +70,24 @@ impl Type {
         todo!()
     }
 }
+impl fmt::Display for PType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PType::Unit => write!(f, "()"),
+            PType::Int => write!(f, "int"),
+            PType::Numeric => write!(f, "number"),
+            PType::String => write!(f, "string"),
+        }
+    }
+}
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-
-            Type::Unit => write!(f, "()"),
-            Type::Int => write!(f, "int"),
-            Type::Numeric => write!(f, "num"),
-            Type::String => write!(f, "string"),
-            Type::Array(a) => write!(f, "[{}]", a),
-            Type::Tuple(v) => write!(f, "({:?})", v),
-            Type::Struct(s) => write!(f, "{{{:?}}}", s),
+            Type::Primitive(p) => write!(f, "{p}"),
+            Type::Array(a) => write!(f, "[{a}]"),
+            Type::Tuple(v) => write!(f, "({v:?})"),
+            Type::Struct(s) => write!(f, "{{{s:?}}}"),
             Type::Function(p, r, s) => {
                 write!(f, "({:?})->", p)?;
                 write!(f, "{:?}[{:?}]", r, s)

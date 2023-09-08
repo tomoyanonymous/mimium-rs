@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::types::{Type, TypedId};
+use crate::types::{PType, Type, TypedId};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
 use chumsky::prelude::*;
@@ -15,10 +15,11 @@ mod test;
 fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     recursive(|ty| {
         let primitive = select! {
-           Token::FloatType => Type::Numeric,
-           Token::IntegerType => Type::Int,
-           Token::StringType => Type::String
+           Token::FloatType => Type::Primitive(PType::Numeric),
+           Token::IntegerType => Type::Primitive(PType::Int),
+           Token::StringType => Type::Primitive(PType::String)
         };
+
         let tuple = ty
             .clone()
             .separated_by(just(Token::Comma))

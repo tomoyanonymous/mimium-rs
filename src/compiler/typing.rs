@@ -1,5 +1,5 @@
 use crate::ast::{Expr, Literal};
-use crate::types::{Type, TypedId};
+use crate::types::{PType, Type, TypedId};
 use crate::utils::{
     environment::Environment,
     error::ReportableError,
@@ -15,6 +15,7 @@ pub enum ErrorKind {
     IndexOutOfRange(u16, u16),
     IndexForNonTuple,
     VariableNotFound(String),
+    NonPrimitiveInFeed
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Error(ErrorKind, Span);
@@ -32,6 +33,9 @@ impl fmt::Display for Error {
             ErrorKind::IndexForNonTuple => write!(f, "Index access for non-tuple variable"),
             ErrorKind::VariableNotFound(v) => {
                 write!(f, "Variable {} not found in this scope", v)
+            }
+            ErrorKind::NonPrimitiveInFeed => {
+                write!(f, "Function that uses self cannot be return function type.")
             }
         }
     }
@@ -152,10 +156,8 @@ impl InferContext {
                     (_, _) => todo!("error handling"),
                 },
             )),
-            (Type::Numeric, Type::Numeric) => Ok(Type::Numeric),
-            (Type::Int, Type::Int) => Ok(Type::Int),
-            (Type::String, Type::String) => Ok(Type::String),
-            (Type::Unit, Type::Unit) => Ok(Type::Unit),
+            (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => Ok(Type::Primitive(p1)),
+
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
@@ -165,13 +167,14 @@ impl InferContext {
 }
 
 fn infer_type_literal(e: Literal) -> Result<Type, Error> {
-    match e {
-        Literal::Float(_s) => Ok(Type::Numeric),
-        Literal::Int(_s) => Ok(Type::Int),
-        Literal::String(_s) => Ok(Type::String),
-        Literal::Now => Ok(Type::Numeric),
+    let pt = match e {
+        Literal::Float(_s) => PType::Numeric,
+        Literal::Int(_s) => PType::Int,
+        Literal::String(_s) => PType::String,
+        Literal::Now => PType::Numeric,
         Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
-    }
+    };
+    Ok(Type::Primitive(pt))
 }
 
 pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
@@ -205,9 +208,13 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let feedv = ctx.gen_intermediate_type();
             ctx.env.add_bind(&mut vec![(id, feedv.clone())]);
             let b = infer_type(body.0, ctx);
-            let res = ctx.unify_types(b?, feedv);
+            let res = ctx.unify_types(b?, feedv)?;
             ctx.env.to_outer();
-            res
+            if res.is_primitive(){
+                Ok(res)
+            }else{
+                Err(Error(ErrorKind::NonPrimitiveInFeed,body.1))
+            }
         }
         Expr::Lambda(p, r) => {
             let c = ctx;
@@ -231,7 +238,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             c.env.add_bind(&mut vec![(id.id, bodyt_u)]);
             let res = match then {
                 Some(e) => infer_type(e.0, c),
-                None => Ok(Type::Unit),
+                None => Ok(Type::Primitive(PType::Unit)),
             };
             c.env.to_outer();
             res
@@ -250,7 +257,7 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
 
             let res = match then {
                 Some(e) => infer_type(e.0, c),
-                None => Ok(Type::Unit),
+                None => Ok(Type::Primitive(PType::Unit)),
             };
             c.env.to_outer();
             res
@@ -268,15 +275,18 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         }
         Expr::If(cond, then, opt_else) => {
             let condt = infer_type(cond.0, ctx)?;
-            let _bt = ctx.unify_types(Type::Int, condt); //todo:boolean type
+            let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
             let thent = infer_type(then.0, ctx)?;
-            let elset = opt_else.map_or(Ok(Type::Unit), |e| infer_type(e.0, ctx))?;
+            let elset =
+                opt_else.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e.0, ctx))?;
             ctx.unify_types(thent, elset)
         }
-        Expr::Block(expr) => expr.map_or(Ok(Type::Unit), |e| infer_type(e.0, ctx)),
+        Expr::Block(expr) => {
+            expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e.0, ctx))
+        }
         _ => {
             // todo!();
-            Ok(Type::Unit)
+            Ok(Type::Primitive(PType::Unit))
         }
     }
 }

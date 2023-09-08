@@ -1,5 +1,8 @@
 use crate::{
-    ast_interpreter, compiler, eval_top, utils::environment::Environment, utils::error,
+    ast_interpreter::{self, PValue, Value},
+    compiler::{self, eval_top},
+    utils::environment::Environment,
+    utils::error,
     utils::miniprint::MiniPrint,
 };
 use std::{
@@ -9,18 +12,19 @@ use std::{
 
 pub enum ReplMode {
     Eval,
+    EvalMulti(u64),
     ShowAST,
 }
 pub struct ReplAppData {
     line_count: u64,
-    global_env: Environment<ast_interpreter::Value>,
+    global_ctx: ast_interpreter::Context,
     mode: ReplMode,
 }
 impl ReplAppData {
     pub fn new() -> Self {
         Self {
             line_count: 0,
-            global_env: Environment::new(),
+            global_ctx: ast_interpreter::Context::new(),
             mode: ReplMode::Eval,
         }
     }
@@ -32,37 +36,63 @@ fn process_command(mode_str: &str) -> Option<ReplMode> {
             println!("Mode:Eval");
             Some(ReplMode::Eval)
         }
+        ":m" => {
+            println!("Mode:EvalMulti");
+            Some(ReplMode::EvalMulti(3))
+        }
         ":a" => {
             println!("Mode:AST");
             Some(ReplMode::ShowAST)
         }
+
         _ => None,
     }
 }
 
 fn repl(data: &mut ReplAppData) -> ! {
+    let mut src = String::new();
     loop {
         print!("> ");
         let _ = stdout().flush();
-        let mut src = String::new();
-        let _size = stdin().read_line(&mut src).expect("stdin read error.");
+        let mut src_tmp = String::new();
+        let _size = stdin().read_line(&mut src_tmp).expect("stdin read error.");
+        src = format!("{}{}", src, src_tmp);
         if let Some(mode) = process_command(&src[0..2]) {
             data.mode = mode;
+            src.clear();
         } else {
             let _ = src.pop(); //remove last linebreak
-            match data.mode {
-                ReplMode::Eval => match eval_top(src.clone(), &mut data.global_env) {
-                    Ok(v) => {
-                        println!("{:?}", v);
+            if !src.as_str().ends_with('\\') {
+                match data.mode {
+                    ReplMode::Eval => match eval_top(src.clone(), &mut data.global_ctx) {
+                        Ok(v) => {
+                            println!("{:?}", v);
+                        }
+                        Err(e) => error::report(&src, PathBuf::new(), &e),
+                    },
+                    ReplMode::EvalMulti(n) => {
+                        let mut res = Ok(Value::Primitive(PValue::Numeric(0.0)));
+                        for _i in 0..n {
+                            res = eval_top(src.clone(), &mut data.global_ctx);
+                            data.global_ctx.history.0 = 0;
+                        }
+                        match res {
+                            Ok(v) => {
+                                println!("{:?}", v);
+                            }
+                            Err(e) => error::report(&src, PathBuf::new(), &e),
+                        }
                     }
-                    Err(e) => error::report(&src, PathBuf::new(), &e),
-                },
-                ReplMode::ShowAST => match compiler::emit_ast(&src) {
-                    Ok(ast) => {
-                        println!("{}", ast.0.pretty_print());
-                    }
-                    Err(e) => error::report(&src, PathBuf::new(), &e),
-                },
+                    ReplMode::ShowAST => match compiler::emit_ast(&src) {
+                        Ok(ast) => {
+                            println!("{}", ast.0.pretty_print());
+                        }
+                        Err(e) => error::report(&src, PathBuf::new(), &e),
+                    },
+                }
+                src.clear();
+            } else {
+                src.pop(); //remove last backslash
             }
 
             data.line_count += 1;
