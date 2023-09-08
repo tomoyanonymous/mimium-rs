@@ -1,0 +1,8 @@
+fn cascade(N,fb){
+	if(N>0.0) {
+		|x| { ((cascade(N-1.0))(x) *(1.0-fb) + self*fb)}
+	}else{
+		|x| x
+	}
+}
+(cascade(3.0,0.9))(2.0)

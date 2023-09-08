@@ -91,7 +91,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     just(Token::LambdaArgBeginEnd),
                     just(Token::LambdaArgBeginEnd),
                 )
-                .then(expr.clone())
+                .then(expr_group.clone())
                 .map(|(ids, body)| Expr::Lambda(ids, Box::new(body)))
                 .labelled("lambda");
 
@@ -107,25 +107,11 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     )))
                 })
                 .labelled("macroexpand");
-            let if_ = just(Token::If)
-                .ignore_then(
-                    expr.clone()
-                        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
-                )
-                .then(expr.clone())
-                .then(
-                    just(Token::Else)
-                        .ignore_then(expr.clone().map(|e| Box::new(e)))
-                        .or_not(),
-                )
-                .map(|((cond, then), opt_else)| Expr::If(cond.into(), then.into(), opt_else))
-                .labelled("if");
 
             let atom = val
                 .or(lambda)
                 .or(macro_expand)
                 .or(let_e)
-                .or(if_)
                 .or(parenexpr)
                 .boxed()
                 .labelled("atoms");
@@ -144,10 +130,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                         .or_not(),
                 )
-                .map(|(e, callee)| match callee {
-                    Some(c) => Expr::Apply(Box::new(e.clone()), c),
-                    None => e.0,
-                })
+                .map(|(e, callee)| Expr::Apply(Box::new(e.clone()), callee.unwrap_or_default()))
                 .labelled("apply");
 
             let op_cls = |x: WithMeta<_>, y: WithMeta<_>, op: Op, opspan: Span| {
@@ -244,6 +227,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             pipe
         });
         // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
+
         let block = expr
             .clone()
             .padded_by(just(Token::LineBreak).or_not())
@@ -251,8 +235,27 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .map(|e: WithMeta<Expr>| Expr::Block(Some(Box::new(e))));
 
         //todo:add bracket to return type
+        let if_ = just(Token::If)
+            .ignore_then(
+                expr_group
+                    .clone()
+                    .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+            )
+            .then(expr_group.clone())
+            .then(
+                just(Token::Else)
+                    .ignore_then(expr_group.clone().map(|e| Box::new(e)))
+                    .or_not(),
+            )
+            .map_with_span(|((cond, then), opt_else), s| {
+                WithMeta(Expr::If(cond.into(), then.into(), opt_else), s)
+            })
+            .labelled("if");
 
-        block.map_with_span(|e, s| WithMeta(e, s)).or(expr.clone())
+        block
+            .map_with_span(|e, s| WithMeta(e, s))
+            .or(expr.clone())
+            .or(if_)
     });
     expr_group
 }
