@@ -87,24 +87,24 @@ pub enum Token {
     EndOfInput,
 }
 impl Op {
-    pub fn get_associated_fn_name(&self) -> String {
+    pub fn get_associated_fn_name(&self) -> &str {
         match self {
-            Op::Sum => "add".to_string(),
-            Op::Minus => "sub".to_string(),
-            Op::Product => "mult".to_string(),
-            Op::Divide => "div".to_string(),
-            Op::Equal => "eq".to_string(),
-            Op::NotEqual => "ne".to_string(),
-            Op::LessThan => "lt".to_string(),
-            Op::LessEqual => "le".to_string(),
-            Op::GreaterThan => "gt".to_string(),
-            Op::GreaterEqual => "ge".to_string(),
-            Op::Modulo => "mod".to_string(),
-            Op::Exponent => "exp".to_string(),
-            Op::And => "and".to_string(),
-            Op::Or => "or".to_string(),
-            Op::Pipe => "pipe".to_string(),
-            Op::Unknown(x) => x.clone(),
+            Op::Sum => "add",
+            Op::Minus => "sub",
+            Op::Product => "mult",
+            Op::Divide => "div",
+            Op::Equal => "eq",
+            Op::NotEqual => "ne",
+            Op::LessThan => "lt",
+            Op::LessEqual => "le",
+            Op::GreaterThan => "gt",
+            Op::GreaterEqual => "ge",
+            Op::Modulo => "modulo",
+            Op::Exponent => "exp",
+            Op::And => "and",
+            Op::Or => "or",
+            Op::Pipe => "pipe",
+            Op::Unknown(x) => x.as_str(),
         }
     }
 }

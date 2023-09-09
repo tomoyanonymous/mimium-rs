@@ -100,7 +100,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         ']' => Token::ArrayEnd,
         _ => Token::Ident(c.to_string()),
     });
-    let linebreak = text::newline::<Simple<char>>()
+    let linebreak = text::newline()
         .map(|_| '\n')
         // .or(just::<_, _, Simple<char>>(';'))
         .repeated()

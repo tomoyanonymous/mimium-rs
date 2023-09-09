@@ -10,9 +10,9 @@ edition = "2021"
 
 [dependencies]
 # parser
-chumsky = "0.8.0"
+chumsky = "0.9.0"
 ariadne = "0.1.5"
-
+once_cell = "1.18.0"
 anyhow = "1.0.58"
 
 clap = { version = "3.2.10", features = ["derive"] }

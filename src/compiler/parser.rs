@@ -72,7 +72,6 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let parenexpr = expr
                 .clone()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .map(|WithMeta(e, _s)| e)
                 .labelled("paren_expr");
             let let_e = just(Token::Let)
                 .ignore_then(lvar.clone())
@@ -110,8 +109,9 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 
             let atom = val
                 .or(lambda)
-                .or(macro_expand)
+                // .or(macro_expand)
                 .or(let_e)
+                .map_with_span(|e, s| WithMeta(e, s))
                 .or(parenexpr)
                 .boxed()
                 .labelled("atoms");
@@ -119,25 +119,27 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let items = expr
                 .clone()
                 .separated_by(just(Token::Comma))
-                .allow_trailing();
+                .allow_trailing()
+                .collect::<Vec<_>>();
 
-            let apply = atom
+            let parenitems = items
                 .clone()
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                 .map_with_span(|e, s| WithMeta(e, s))
-                .then(
-                    items
-                        .clone()
-                        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                        .or_not(),
+                .repeated();
+            let folder = |f: WithMeta<Expr>, args: WithMeta<Vec<WithMeta<Expr>>>| {
+                WithMeta(
+                    Expr::Apply(Box::new(f.clone()), args.0),
+                    f.1.start..args.1.end,
                 )
-                .map(|(e, callee)| Expr::Apply(Box::new(e.clone()), callee.unwrap_or_default()))
-                .labelled("apply");
+            };
+            let apply = atom.then(parenitems).foldl(folder).labelled("apply");
 
             let op_cls = |x: WithMeta<_>, y: WithMeta<_>, op: Op, opspan: Span| {
                 WithMeta(
                     Expr::Apply(
                         Box::new(WithMeta(
-                            Expr::Var(op.get_associated_fn_name(), None),
+                            Expr::Var(op.get_associated_fn_name().to_string(), None),
                             opspan,
                         )),
                         vec![x.clone(), y.clone()],
@@ -160,11 +162,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let op = optoken(Op::Exponent);
             let exponent = apply
                 .clone()
-                .map_with_span(|e, s| WithMeta(e, s))
-                .then(
-                    op.then(apply.map_with_span(|e, s| WithMeta(e, s)))
-                        .repeated(),
-                )
+                .then(op.then(apply).repeated())
                 .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
                 .boxed();
             let op = choice((
@@ -215,6 +213,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
                 .boxed();
             let op = optoken(Op::Pipe);
+
             let pipe = cmp
                 .clone()
                 .then(op.then(cmp).repeated())
@@ -228,13 +227,13 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         });
         // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
 
-        let block = expr
+        let block = expr_group
             .clone()
             .padded_by(just(Token::LineBreak).or_not())
             .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
             .map(|e: WithMeta<Expr>| Expr::Block(Some(Box::new(e))));
 
-        //todo:add bracket to return type
+        //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
             .ignore_then(
                 expr_group
@@ -254,8 +253,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 
         block
             .map_with_span(|e, s| WithMeta(e, s))
-            .or(expr.clone())
             .or(if_)
+            .or(expr.clone())
     });
     expr_group
 }
