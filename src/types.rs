@@ -53,17 +53,17 @@ impl Type {
         match self {
             Type::Array(a) => Type::Array(apply_box(a)),
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
-            Type::Struct(s) => todo!(),
+            Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => {
                 Type::Function(apply_vec(p), apply_box(r), s.as_ref().map(|a| apply_box(a)))
             }
             Type::Ref(x) => Type::Ref(apply_box(x)),
-            Type::Code(c) => todo!(),
+            Type::Code(_c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
             _ => self.clone(),
         }
     }
-    pub fn fold<F, R>(&self, closure: F) -> R
+    pub fn fold<F, R>(&self, _closure: F) -> R
     where
         F: Fn(Self, Self) -> R,
     {

@@ -155,10 +155,10 @@ fn eval_with_new_env(
 }
 
 pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
-    use builtin_fn::builtin_fns;
+    use builtin_fn::BUILTIN_FNS;
     let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
 
-    if let Some((_, ty, ptr)) = builtin_fns.iter().find(|(name, ty, _ptr)| {
+    if let Some((_, ty, ptr)) = BUILTIN_FNS.iter().find(|(name, ty, _ptr)| {
         let ty_same = if let Type::Function(tv2, _rt, _) = ty {
             tv.eq(tv2)
         } else {

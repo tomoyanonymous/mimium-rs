@@ -214,7 +214,7 @@ macro_rules! f2_f {
     };
 }
 
-pub const builtin_fns: Lazy<[BuiltinFn; 45]> = Lazy::new(|| {
+pub const BUILTIN_FNS: Lazy<[BuiltinFn; 45]> = Lazy::new(|| {
     [
         i_i!(not),
         i_i!(abs),

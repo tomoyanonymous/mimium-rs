@@ -1,7 +1,6 @@
 use crate::{
     ast_interpreter::{self, PValue, Value},
     compiler::{self, eval_top},
-    utils::environment::Environment,
     utils::error,
     utils::miniprint::MiniPrint,
 };

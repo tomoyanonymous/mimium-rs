@@ -98,7 +98,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
                 .map_with_span(|e, s| WithMeta(e, s))
                 .then_ignore(just(Token::ParenBegin))
-                .then(expr.clone())
+                .then(expr_group.clone())
                 .then_ignore(just(Token::ParenEnd))
                 .map_with_span(|(id, then), s| {
                     Expr::Escape(Box::new(WithMeta(
@@ -110,7 +110,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 
             let atom = val
                 .or(lambda)
-                // .or(macro_expand)
+                .or(macro_expand)
                 .or(let_e)
                 .map_with_span(|e, s| WithMeta(e, s))
                 .or(parenexpr)

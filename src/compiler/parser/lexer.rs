@@ -59,7 +59,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "|>" => Token::Op(Op::Pipe),
             _ => Token::Op(Op::Unknown(s)),
         });
-    let separator = one_of::<_, _, Simple<char>>(",.:;").map(|c| match c {
+    let separator = one_of(",.:;").map(|c| match c {
         ',' => Token::Comma,
         '.' => Token::Dot,
         ':' => Token::Colon,
@@ -87,7 +87,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "structt" => Token::StructType,
         _ => Token::Ident(ident),
     });
-    let macro_expand = text::ident::<_, Simple<char>>()
+    let macro_expand = text::ident()
         .then_ignore(just('!'))
         .map(|ident: String| Token::MacroExpand(ident));
 
