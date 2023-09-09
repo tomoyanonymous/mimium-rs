@@ -97,10 +97,10 @@ fn lookup_extern_env(name: &str) -> Option<&str> {
     filtered.get(0).map(|s| *s)
 }
 
-fn eval_literal(e: ast::Literal) -> Value {
+fn eval_literal(e: &ast::Literal) -> Value {
     match e {
-        ast::Literal::String(s) => Value::String(s),
-        ast::Literal::Int(i) => Value::Primitive(PValue::Integer(i)),
+        ast::Literal::String(s) => Value::String(s.clone()),
+        ast::Literal::Int(i) => Value::Primitive(PValue::Integer(i.clone())),
         ast::Literal::Float(f) => Value::Primitive(PValue::Numeric(f.parse().unwrap())),
         ast::Literal::SelfLit => {
             panic!("self literal should not be shown in evaluation stage.")
@@ -112,19 +112,19 @@ fn eval_literal(e: ast::Literal) -> Value {
 }
 
 fn eval_condition<'a>(
-    e: Box<WithMeta<ast::Expr>>,
+    e: &Box<WithMeta<ast::Expr>>,
     ctx: &mut Context,
 ) -> Result<bool, CompileError> {
-    let c_v = eval_ast(e.clone(), ctx)?;
+    let c_v = eval_ast(e, ctx)?;
 
     match c_v.clone() {
         Value::Primitive(PValue::Numeric(f)) => Ok(f > 0.0),
         Value::Primitive(PValue::Integer(i)) => Ok(i > 0),
         _ => {
-            let WithMeta(_, span) = *e;
+            let WithMeta(_, span) = e.as_ref();
             Err(CompileError(
                 ErrorKind::TypeMismatch(numeric!(), c_v.get_type()),
-                span,
+                span.clone(),
             ))
         }
     }
@@ -143,7 +143,7 @@ fn getcell<'a, 'ctx: 'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
 }
 
 fn eval_with_new_env(
-    e_meta: Box<WithMeta<ast::Expr>>,
+    e_meta: &Box<WithMeta<ast::Expr>>,
     ctx: &mut Context,
     names: &mut Vec<(String, Value)>,
 ) -> Result<Value, CompileError> {
@@ -242,49 +242,52 @@ pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, C
 }
 
 pub fn eval_ast(
-    e_meta: Box<WithMeta<ast::Expr>>,
+    e_meta: &Box<WithMeta<ast::Expr>>,
     ctx: &mut Context,
 ) -> Result<Value, CompileError> {
     let env = &mut ctx.env;
-    let WithMeta(e, span) = *e_meta;
+    let WithMeta(e, span) = e_meta.as_ref();
     match e {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
         ast::Expr::Var(v, _time) => env
             .lookup(&v)
             .map(|v| v.clone())
             .or(lookup_extern_env(&v).map(|n| Value::External(n.to_string())))
-            .ok_or(CompileError(ErrorKind::VariableNotFound(v), span.clone())),
-        ast::Expr::Block(b) => b.map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
-            eval_ast(body, ctx)
+            .ok_or(CompileError(
+                ErrorKind::VariableNotFound(v.clone()),
+                span.clone(),
+            )),
+        ast::Expr::Block(b) => b.as_ref().map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
+            eval_ast(&body, ctx)
         }),
         ast::Expr::Tuple(v) => {
             let res = v
                 .iter()
                 //todo: collect multiple errors
-                .map(|e| eval_ast(e.clone().into(), ctx).unwrap())
+                .map(|e| eval_ast(&Box::new(e.clone()), ctx).unwrap())
                 .collect();
             Ok(Value::Tuple(res))
         }
         ast::Expr::Proj(t, i) => {
-            let v = eval_ast(t.clone(), ctx)?;
-            let WithMeta(_, span) = *t;
+            let v = eval_ast(t, ctx)?;
+            let WithMeta(_, span) = t.as_ref();
             match v {
-                Value::Tuple(t) => t.get(i as usize).map(|v| v.clone()).ok_or(CompileError(
-                    ErrorKind::IndexOutOfRange(t.len() as u16, i as u16),
-                    span,
+                Value::Tuple(t) => t.get(*i as usize).map(|v| v.clone()).ok_or(CompileError(
+                    ErrorKind::IndexOutOfRange(t.len() as u16, *i as u16),
+                    span.clone(),
                 )),
                 _ => Err(CompileError(
                     ErrorKind::IndexForNonTuple(v.get_type()),
-                    span,
+                    span.clone(),
                 )),
             }
         }
         ast::Expr::Apply(f, args) => {
             let argv: Vec<_> = args
                 .iter()
-                .map(|e| eval_ast(e.clone().into(), ctx))
+                .map(|e| eval_ast(&Box::new(e.clone()), ctx))
                 .try_collect()?;
-            let func = eval_ast(f.clone(), ctx)?;
+            let func = eval_ast(f, ctx)?;
             let res = match func.clone() {
                 Value::Function(params, b, mut n_ctx, _rt) => {
                     let mut argvec: Vec<_> = argv
@@ -292,19 +295,19 @@ pub fn eval_ast(
                         .zip(params.iter())
                         .map(|(v, TypedId { ty: _, id })| (id.clone(), v.clone()))
                         .collect();
-                    eval_with_new_env(b, &mut n_ctx, &mut argvec)
+                    eval_with_new_env(&b, &mut n_ctx, &mut argvec)
                 }
                 Value::FixPoint(TypedId { id, ty: _ }, e) => {
-                    eval_with_new_env(e, ctx, &mut vec![(id, func)])
+                    eval_with_new_env(&e, ctx, &mut vec![(id, func)])
                 }
                 Value::External(n) => {
                     //todo: appropreate error type
-                    eval_extern(&n, &argv, span)
+                    eval_extern(&n, &argv, span.clone())
                 }
                 _ => {
-                    let WithMeta(_, span) = *f;
+                    let WithMeta(_, span) = f.as_ref();
 
-                    Err(CompileError(ErrorKind::NotApplicable, span))
+                    Err(CompileError(ErrorKind::NotApplicable, span.clone()))
                 }
             };
             res
@@ -313,14 +316,14 @@ pub fn eval_ast(
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
             e.clone(),
             ctx.clone(), //todo! do not copy
-            r,
+            r.clone(),
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);
-            let res = eval_with_new_env(e, ctx, &mut vec![(a, Value::Primitive(cellv))])?;
+            let res = eval_with_new_env(e, ctx, &mut vec![(a.clone(), Value::Primitive(cellv))])?;
             let pres = match res {
                 Value::Primitive(p) => Ok(p),
-                _ => Err(CompileError(ErrorKind::NonPrimitiveInFeed, span)),
+                _ => Err(CompileError(ErrorKind::NonPrimitiveInFeed, span.clone())),
             }?;
             *getcell(ctx) = pres;
             ctx.history.0 += 1;
@@ -329,17 +332,18 @@ pub fn eval_ast(
         ast::Expr::Let(TypedId { id, ty: _t }, e, then) => {
             let e_v = eval_ast(e, ctx)?;
             match then {
-                Some(t) => eval_with_new_env(t, ctx, &mut vec![(id, e_v)]),
+                Some(t) => eval_with_new_env(t, ctx, &mut vec![(id.clone(), e_v)]),
                 None => Ok(Value::Primitive(PValue::Unit)),
             }
         }
         ast::Expr::LetRec(tid, e, then) => {
             let res_rec = eval_with_new_env(
-                e.clone(),
+                e,
                 ctx,
-                &mut vec![(tid.clone().id, Value::FixPoint(tid.clone(), e))],
+                &mut vec![(tid.clone().id, Value::FixPoint(tid.clone(), e.clone()))],
             )?;
-            then.map(|t| eval_with_new_env(t, ctx, &mut vec![(tid.id, res_rec)]))
+            then.as_ref()
+                .map(|t| eval_with_new_env(&t, ctx, &mut vec![(tid.id.clone(), res_rec)]))
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
         ast::Expr::LetTuple(_, _, _) => todo!(),
@@ -348,7 +352,8 @@ pub fn eval_ast(
                 eval_ast(then, ctx)
             } else {
                 o_else
-                    .map(|e_else| eval_ast(e_else, ctx))
+                    .as_ref()
+                    .map(|e_else| eval_ast(&e_else, ctx))
                     .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
             }
         }

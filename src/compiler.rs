@@ -83,7 +83,7 @@ pub fn eval_top(
     global_ctx:&mut ast_interpreter::Context
 ) -> Result<ast_interpreter::Value, Vec<Box<dyn ReportableError>>> {
     let ast = emit_ast(&content)?;
-    ast_interpreter::eval_ast(ast.into(), global_ctx).map_err(|e| {
+    ast_interpreter::eval_ast(&Box::new(ast), global_ctx).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         vec![eb]
     })
