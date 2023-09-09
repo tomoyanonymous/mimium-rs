@@ -1,42 +1,284 @@
-use crate::types::*;
-use crate::{function, numeric};
-use std::collections::HashMap;
+use crate::{function, integer, numeric, types::*, unit};
+use once_cell::sync::Lazy;
 
-#[derive(Clone)]
-pub struct BuiltinFn(fn(f64) -> f64, Type);
+fn b_to_f(b: bool) -> f64 {
+    if b {
+        1.
+    } else {
+        0.
+    }
+}
+fn b_to_i(b: bool) -> i64 {
+    if b {
+        1
+    } else {
+        0
+    }
+}
 
-#[derive(Clone)]
-pub struct Context {
-    fns: HashMap<String, BuiltinFn>,
+mod intrinsic {
+    pub mod integer {
+        use super::super::b_to_i;
+        pub fn not(x: i64) -> i64 {
+            if x <= 0 {
+                1
+            } else {
+                0
+            }
+        }
+        pub fn abs(x: i64) -> i64 {
+            x.abs()
+        }
+        pub fn add(x: i64, y: i64) -> i64 {
+            x + y
+        }
+        pub fn sub(x: i64, y: i64) -> i64 {
+            x - y
+        }
+        pub fn mult(x: i64, y: i64) -> i64 {
+            x * y
+        }
+        pub fn div(x: i64, y: i64) -> i64 {
+            x / y
+        }
+        pub fn modulo(x: i64, y: i64) -> i64 {
+            x % y
+        }
+        pub fn eq(x: i64, y: i64) -> i64 {
+            b_to_i(x == y)
+        }
+        pub fn ne(x: i64, y: i64) -> i64 {
+            b_to_i(x != y)
+        }
+        pub fn le(x: i64, y: i64) -> i64 {
+            b_to_i(x <= y)
+        }
+        pub fn lt(x: i64, y: i64) -> i64 {
+            b_to_i(x < y)
+        }
+        pub fn ge(x: i64, y: i64) -> i64 {
+            b_to_i(x >= y)
+        }
+        pub fn gt(x: i64, y: i64) -> i64 {
+            b_to_i(x > y)
+        }
+        pub fn pow(x: i64, y: i64) -> i64 {
+            x.pow(y as u32)
+        }
+        pub fn max(x: i64, y: i64) -> i64 {
+            x.max(y)
+        }
+        pub fn min(x: i64, y: i64) -> i64 {
+            x.min(y)
+        }
+        pub fn print(x: i64) {
+            print!("{x}");
+        }
+        pub fn println(x: i64) {
+            println!("{x}");
+        }
+    }
+    pub mod numeric {
+        use super::super::b_to_f;
+        pub fn sin(x: f64) -> f64 {
+            x.sin()
+        }
+        pub fn cos(x: f64) -> f64 {
+            x.cos()
+        }
+        pub fn not(x: f64) -> f64 {
+            if x <= 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        pub fn round(x: f64) -> f64 {
+            x.round()
+        }
+        pub fn floor(x: f64) -> f64 {
+            x.floor()
+        }
+        pub fn ceil(x: f64) -> f64 {
+            x.ceil()
+        }
+        pub fn atan(x: f64) -> f64 {
+            x.atan()
+        }
+        pub fn sqrt(x: f64) -> f64 {
+            x.sqrt()
+        }
+        pub fn abs(x: f64) -> f64 {
+            x.abs()
+        }
+        pub fn print(x: f64) {
+            print!("{x}");
+        }
+        pub fn println(x: f64) {
+            println!("{x}");
+        }
+
+        pub fn add(x: f64, y: f64) -> f64 {
+            x + y
+        }
+        pub fn sub(x: f64, y: f64) -> f64 {
+            x - y
+        }
+        pub fn mult(x: f64, y: f64) -> f64 {
+            x * y
+        }
+        pub fn div(x: f64, y: f64) -> f64 {
+            x / y
+        }
+        pub fn modulo(x: f64, y: f64) -> f64 {
+            x % y
+        }
+        pub fn eq(x: f64, y: f64) -> f64 {
+            b_to_f(x == y)
+        }
+        pub fn ne(x: f64, y: f64) -> f64 {
+            b_to_f(x != y)
+        }
+        pub fn le(x: f64, y: f64) -> f64 {
+            b_to_f(x < y)
+        }
+        pub fn lt(x: f64, y: f64) -> f64 {
+            b_to_f(x <= y)
+        }
+        pub fn ge(x: f64, y: f64) -> f64 {
+            b_to_f(x > y)
+        }
+        pub fn gt(x: f64, y: f64) -> f64 {
+            b_to_f(x >= y)
+        }
+        pub fn pow(x: f64, y: f64) -> f64 {
+            x.powf(y)
+        }
+        pub fn log(x: f64, y: f64) -> f64 {
+            x.log(y)
+        }
+        pub fn atan2(x: f64, y: f64) -> f64 {
+            x.atan2(y)
+        }
+        pub fn max(x: f64, y: f64) -> f64 {
+            x.max(y)
+        }
+        pub fn min(x: f64, y: f64) -> f64 {
+            x.min(y)
+        }
+    }
 }
-#[macro_export]
-macro_rules! ftoftype {
-    () => {
-        function!(vec![numeric!()], numeric!())
-    };
-}
-#[macro_export]
-macro_rules! float1 {
+
+type BuiltinFn = (&'static str, Type, *const ());
+
+macro_rules! i_i {
     ($name:ident) => {
         (
-            stringify!(name),
-            BuiltinFn(move |x: f64| x.$name(), ftoftype!()),
+            stringify!($name),
+            function!(vec![integer!()], integer!()),
+            intrinsic::integer::$name as *const (),
+        )
+    };
+}
+macro_rules! i2_i {
+    ($name:ident) => {
+        (
+            stringify!($name),
+            function!(vec![integer!(), integer!()], integer!()),
+            intrinsic::integer::$name as *const (),
         )
     };
 }
 
-impl Context {
-    pub fn new() -> Self {
-        let v = vec![float1!(sin), float1!(cos)];
-        let mut ctx = Context {
-            fns: HashMap::<String, BuiltinFn>::new(),
-        };
-        v.iter().for_each(|(name, f)| {
-            ctx.fns.insert(name.to_string(), f.clone());
-        });
-        ctx
-    }
+macro_rules! f_f {
+    ($name:ident) => {
+        (
+            stringify!($name),
+            function!(vec![numeric!()], numeric!()),
+            intrinsic::numeric::$name as *const (),
+        )
+    };
 }
+macro_rules! f2toftype {
+    () => {
+        function!(vec![numeric!(), numeric!()], numeric!())
+    };
+}
+macro_rules! f2_f {
+    ($name:ident) => {
+        (
+            stringify!($name),
+            f2toftype!(),
+            intrinsic::numeric::$name as *const (),
+        )
+    };
+}
+
+pub const builtin_fns: Lazy<[BuiltinFn; 45]> = Lazy::new(|| {
+    [
+        i_i!(not),
+        i_i!(abs),
+        i2_i!(add),
+        i2_i!(sub),
+        i2_i!(mult),
+        i2_i!(div),
+        i2_i!(modulo),
+        i2_i!(eq),
+        i2_i!(ne),
+        i2_i!(le),
+        i2_i!(lt),
+        i2_i!(ge),
+        i2_i!(gt),
+        i2_i!(pow),
+        i2_i!(max),
+        i2_i!(min),
+        (
+            "print",
+            function!(vec![integer!()], unit!()),
+            intrinsic::integer::print as *const (),
+        ),
+        (
+            "println",
+            function!(vec![integer!()], unit!()),
+            intrinsic::integer::println as *const (),
+        ),
+        f_f!(sin),
+        f_f!(cos),
+        f_f!(not),
+        f_f!(round),
+        f_f!(floor),
+        f_f!(ceil),
+        f_f!(atan),
+        f_f!(sqrt),
+        f_f!(abs),
+        f2_f!(add),
+        f2_f!(sub),
+        f2_f!(mult),
+        f2_f!(div),
+        f2_f!(modulo),
+        f2_f!(eq),
+        f2_f!(ne),
+        f2_f!(le),
+        f2_f!(lt),
+        f2_f!(ge),
+        f2_f!(gt),
+        f2_f!(pow),
+        f2_f!(log),
+        f2_f!(atan2),
+        f2_f!(max),
+        f2_f!(min),
+        (
+            "print",
+            function!(vec![numeric!()], unit!()),
+            intrinsic::numeric::print as *const (),
+        ),
+        (
+            "println",
+            function!(vec![numeric!()], unit!()),
+            intrinsic::numeric::println as *const (),
+        ),
+    ]
+});
 
 pub fn eval_float1(name: &str, x: f64) -> Option<f64> {
     match name {

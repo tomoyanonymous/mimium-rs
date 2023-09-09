@@ -48,7 +48,7 @@ pub enum Expr {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Literal::Float(n) => write!(f, "(float{})", n),
+            Literal::Float(n) => write!(f, "(float {})", n),
             Literal::Int(n) => write!(f, "(int {})", n),
             Literal::String(s) => write!(f, "\"{}\"", s),
             Literal::Now => write!(f, "now"),
@@ -63,6 +63,17 @@ impl MiniPrint for Literal {
     }
 }
 
+fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
+    let callee_str = vec
+        .iter()
+        .fold("".to_string(), |a, b| format!("{a} {}", b.simple_print()));
+    if vec.len() > 1 {
+        callee_str.split_at(1).1.to_string()
+    } else {
+        callee_str
+    }
+}
+
 impl MiniPrint for Expr {
     fn simple_print(&self) -> String {
         match self {
@@ -74,36 +85,24 @@ impl MiniPrint for Expr {
             Expr::Block(e) => e.as_ref().map_or("".to_string(), |box WithMeta(v, _s)| {
                 format!("(block {})", v.simple_print())
             }),
-            Expr::Tuple(e) => format!(
-                "(tuple ({}))",
-                e.iter()
-                    .fold("".to_string(), |a, b| {
-                        format!("{a} {}", b.0.simple_print())
-                    })
-                    .split_at(1)
-                    .1
-            ),
+            Expr::Tuple(e) => {
+                let e1 = e.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
+                format!("(tuple ({}))", concat_vec(&e1))
+            }
             Expr::Proj(e, idx) => format!("(proj {} {})", e.0.simple_print(), idx),
             Expr::Apply(e1, e2) => {
-                let callee = e2
-                    .iter()
-                    .fold("".to_string(), |a, b| format!("{a} {}", b.0.simple_print()))
-                    .split_at(1)
-                    .1
-                    .to_string();
-                format!("(app {} ({}))", e1.0.simple_print(), callee)
+                let es = e2.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
+
+                format!("(app {} ({}))", e1.0.simple_print(), concat_vec(&es))
             }
-            Expr::Lambda(params, body) => format!(
-                "(lambda ({}) {})",
-                params
-                    .iter()
-                    .fold("".to_string(), |a, b| {
-                        format!("{a} {}", b.0.simple_print())
-                    })
-                    .split_at(1)
-                    .1,
-                body.0.simple_print()
-            ),
+            Expr::Lambda(params, body) => {
+                let paramstr = params.iter().map(|e| e.0.clone()).collect::<Vec<_>>();
+                format!(
+                    "(lambda ({}) {})",
+                    concat_vec(&paramstr),
+                    body.0.simple_print()
+                )
+            }
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.0.simple_print()),
             Expr::Let(id, body, then) => format!(
                 "(let {} {} {})",

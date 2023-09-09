@@ -73,9 +73,10 @@ impl Context {
     }
 }
 
-const EXTERN_ENV: [&str; 25] = [
+const EXTERN_ENV: [&str; 27] = [
     "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2", "sin", "cos",
-    "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log",
+    "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log", "print",
+    "println",
 ];
 
 fn lookup_extern_env(name: &str) -> Option<&str> {
@@ -119,13 +120,13 @@ fn eval_condition<'a>(
     }
 }
 
-fn getcell<'a,'ctx:'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
+fn getcell<'a, 'ctx: 'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
     let history_count = &mut ctx.history.0;
     let history = &mut ctx.history.1;
     let index = *history_count as usize;
-    if  history.len() < index{
+    if history.len() < index {
         history.get_mut(index).unwrap()
-    }else{
+    } else {
         history.push(PValue::Numeric(0.0));
         history.get_mut(index).unwrap()
     }
@@ -144,42 +145,90 @@ fn eval_with_new_env(
 }
 
 pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
-    use builtin_fn::{eval_float1, eval_float2, eval_int1, eval_int2};
-    let pv = match argv.len() {
-        1 => {
-            let v = argv.get(0).unwrap();
-            match v {
-                Value::Primitive(PValue::Numeric(a1)) => {
-                    Ok(PValue::Numeric(eval_float1(&n, *a1).unwrap()))
+    use builtin_fn::builtin_fns;
+    let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
+
+    if let Some((_, ty, ptr)) = builtin_fns.iter().find(|(name, ty, _ptr)| {
+        let ty_same = if let Type::Function(tv2, _, _) = ty {
+            tv.eq(tv2)
+        } else {
+            false
+        };
+        n == name && ty_same
+    }) {
+        match argv.len() {
+            1 => {
+                let v = argv.get(0).unwrap();
+                match (ty, v) {
+                    //f64 -> f64
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
+                        Value::Primitive(PValue::Numeric(fv)),
+                    ) if v.get_type() == Type::Primitive(PType::Numeric) => {
+                        let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> f64>(*ptr) };
+                        Ok(Value::Primitive(PValue::Numeric(f(*fv))))
+                    }
+                    //i64 -> i64
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Int), _),
+                        Value::Primitive(PValue::Integer(iv)),
+                    ) if v.get_type() == Type::Primitive(PType::Int) => {
+                        let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> i64>(*ptr) };
+                        Ok(Value::Primitive(PValue::Integer(f(*iv))))
+                    }
+                    //f64 -> ()
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Unit), _),
+                        Value::Primitive(PValue::Numeric(fv)),
+                    ) if v.get_type() == Type::Primitive(PType::Numeric) => {
+                        let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> ()>(*ptr) };
+                        f(*fv);
+                        Ok(Value::Primitive(PValue::Unit))
+                    }
+                    //i64 -> ()
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Unit), _),
+                        Value::Primitive(PValue::Integer(fv)),
+                    ) if v.get_type() == Type::Primitive(PType::Int) => {
+                        let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> ()>(*ptr) };
+                        f(*fv);
+                        Ok(Value::Primitive(PValue::Unit))
+                    }
+                    _ => Err(CompileError(ErrorKind::NotApplicable, span)),
                 }
-                Value::Primitive(PValue::Integer(a1)) => {
-                    Ok(PValue::Integer(eval_int1(&n, *a1).unwrap()))
-                }
-                _ => Err(CompileError(
-                    ErrorKind::TypeMismatch(numeric!(), v.get_type()),
-                    span,
-                )),
             }
-        }
-        2 => {
-            let v1 = argv.get(0).unwrap();
-            let v2 = argv.get(1).unwrap();
-            match (v1, v2) {
-                (Value::Primitive(PValue::Numeric(a1)), Value::Primitive(PValue::Numeric(a2))) => {
-                    Ok(PValue::Numeric(eval_float2(&n, *a1, *a2).unwrap()))
+            2 => {
+                let v1 = argv.get(0).unwrap();
+                let v2 = argv.get(1).unwrap();
+                match (ty, v1, v2) {
+                    // (f64,f64)->f64
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
+                        Value::Primitive(PValue::Numeric(fv1)),
+                        Value::Primitive(PValue::Numeric(fv2)),
+                    ) => {
+                        let f =
+                            unsafe { std::mem::transmute::<*const (), fn(f64, f64) -> f64>(*ptr) };
+                        Ok(Value::Primitive(PValue::Numeric(f(*fv1, *fv2))))
+                    }
+                    // (i64,i64)->i64
+                    (
+                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
+                        Value::Primitive(PValue::Integer(iv1)),
+                        Value::Primitive(PValue::Integer(iv2)),
+                    ) => {
+                        let f =
+                            unsafe { std::mem::transmute::<*const (), fn(i64, i64) -> i64>(*ptr) };
+                        Ok(Value::Primitive(PValue::Integer(f(*iv1, *iv2))))
+                    }
+                    _ => Err(CompileError(ErrorKind::NotApplicable, span)),
                 }
-                (Value::Primitive(PValue::Integer(a1)), Value::Primitive(PValue::Integer(a2))) => {
-                    Ok(PValue::Integer(eval_int2(&n, *a1, *a2).unwrap()))
-                }
-                _ => Err(CompileError(
-                    ErrorKind::TypeMismatch(v1.get_type(), v2.get_type()),
-                    span,
-                )),
             }
+            _ => Err(CompileError(ErrorKind::NotApplicable, span)),
         }
-        _ => Err(CompileError(ErrorKind::NotApplicable, span)),
-    }?;
-    Ok(Value::Primitive(pv))
+    } else {
+        Err(CompileError(ErrorKind::NotApplicable, span))
+    }
 }
 
 pub fn eval_ast(
