@@ -2,7 +2,7 @@
 use clap::Parser as _;
 
 use mimium_rs::ast_interpreter;
-use mimium_rs::utils::{environment::Environment, error::report, fileloader};
+use mimium_rs::utils::{error::report, fileloader};
 use mimium_rs::{compiler::eval_top, repl};
 
 #[derive(clap::Parser, Debug)]
@@ -13,7 +13,7 @@ pub struct Args {
     pub file: Option<String>,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let mut global_ctx = ast_interpreter::Context::new();
     match args.file {
