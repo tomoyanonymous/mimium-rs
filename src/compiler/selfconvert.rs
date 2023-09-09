@@ -42,7 +42,7 @@ fn try_find_self(e: Expr) -> bool {
             //todo: detect self in recursive function in same stage
             try_find_self(body.0) || then.map_or(false, |e| try_find_self(e.0))
         }
-        Expr::Lambda(_ids, _body) => {
+        Expr::Lambda(_ids, _, _body) => {
             // convert_self(body)
             false
         }
@@ -96,7 +96,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<WithMeta<Expr>,
         Expr::Let(id, body, then) => Ok(Expr::Let(id, Box::new(cls(*body)?), opt_cls(then)?)),
         Expr::LetRec(id, body, then) => Ok(Expr::LetRec(id, Box::new(cls(*body)?), opt_cls(then)?)),
 
-        Expr::Lambda(params, body) => {
+        Expr::Lambda(params, r_type, body) => {
             let nfctx = get_new_feedid(feedctx);
             let feedid = get_feedvar_name(nfctx);
             if try_find_self(body.clone().0) {
@@ -104,6 +104,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<WithMeta<Expr>,
                 // the conversion must be lambda(x).feed(self).e , not feed(self).lambda(x).e
                 Ok(Expr::Lambda(
                     params,
+                    r_type,
                     WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone()).into(),
                 ))
             } else {
@@ -156,6 +157,7 @@ mod test {
                             },
                             0..1,
                         )],
+                        None,
                         Box::new(WithMeta::<_>(Expr::Literal(Literal::SelfLit), 0..1)),
                     ),
                     0..1,
@@ -182,6 +184,7 @@ mod test {
                                 },
                                 0..1,
                             )],
+                            None,
                             Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_string(), None), 0..1)),
                         ),
                         0..1,

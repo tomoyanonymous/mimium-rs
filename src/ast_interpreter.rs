@@ -26,7 +26,12 @@ pub enum Value {
     String(String),
     Tuple(Vec<Value>),
     //Function value holds return type
-    Function(Vec<TypedId>, Box<WithMeta<ast::Expr>>, Type),
+    Function(
+        Vec<TypedId>,
+        Box<WithMeta<ast::Expr>>,
+        Context,
+        Option<Type>,
+    ),
     FixPoint(TypedId, Box<WithMeta<ast::Expr>>),
     External(String),
 }
@@ -45,11 +50,15 @@ impl Value {
             Value::Primitive(p) => p.get_type(),
             Value::String(_) => string_t!(),
             Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type()).collect()),
-            Value::Function(a, _e, r_type) => Type::Function(
+            Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
                     .map(|TypedId { ty, id: _ }| ty.clone().expect("function argument untyped"))
                     .collect(),
-                r_type.clone().into(),
+                r_type
+                    .as_ref()
+                    .expect("Return type cannot inferred")
+                    .clone()
+                    .into(), //todo!
                 None,
             ),
             Value::FixPoint(TypedId { ty, id: _ }, _) => ty.clone().unwrap_or(unit!()),
@@ -59,6 +68,7 @@ impl Value {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Context {
     pub env: Environment<Value>,
     ///
@@ -149,7 +159,7 @@ pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, C
     let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
 
     if let Some((_, ty, ptr)) = builtin_fns.iter().find(|(name, ty, _ptr)| {
-        let ty_same = if let Type::Function(tv2, _, _) = ty {
+        let ty_same = if let Type::Function(tv2, _rt, _) = ty {
             tv.eq(tv2)
         } else {
             false
@@ -276,13 +286,13 @@ pub fn eval_ast(
                 .try_collect()?;
             let func = eval_ast(f.clone(), ctx)?;
             let res = match func.clone() {
-                Value::Function(params, b, _r_t) => {
+                Value::Function(params, b, mut n_ctx, _rt) => {
                     let mut argvec: Vec<_> = argv
                         .iter()
                         .zip(params.iter())
                         .map(|(v, TypedId { ty: _, id })| (id.clone(), v.clone()))
                         .collect();
-                    eval_with_new_env(b, ctx, &mut argvec)
+                    eval_with_new_env(b, &mut n_ctx, &mut argvec)
                 }
                 Value::FixPoint(TypedId { id, ty: _ }, e) => {
                     eval_with_new_env(e, ctx, &mut vec![(id, func)])
@@ -299,10 +309,11 @@ pub fn eval_ast(
             };
             res
         }
-        ast::Expr::Lambda(a, e) => Ok(Value::Function(
+        ast::Expr::Lambda(a, r, e) => Ok(Value::Function(
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
             e.clone(),
-            Type::Primitive(PType::Unit), //todo! infer type
+            ctx.clone(), //todo! do not copy
+            r,
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);

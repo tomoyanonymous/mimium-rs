@@ -37,7 +37,7 @@ macro_rules! app {
 #[macro_export]
 macro_rules! lambda {
     ($arg:expr,$body:expr) => {
-        WithMeta(Expr::Lambda($arg, $body.into()), 0..0)
+        WithMeta(Expr::Lambda($arg, None, $body.into()), 0..0)
     };
 }
 
@@ -57,7 +57,6 @@ macro_rules! let_ {
         )
     };
 }
-
 
 #[macro_export]
 macro_rules! letrec {

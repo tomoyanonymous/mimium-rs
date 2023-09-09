@@ -1,0 +1,2 @@
+fn makec(n) { |x| n+x } 
+makec(3.0)(1.0)

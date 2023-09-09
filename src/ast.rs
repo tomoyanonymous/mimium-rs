@@ -24,7 +24,7 @@ pub enum Expr {
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
-    Lambda(Vec<WithMeta<TypedId>>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
+    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
@@ -95,7 +95,7 @@ impl MiniPrint for Expr {
 
                 format!("(app {} ({}))", e1.0.simple_print(), concat_vec(&es))
             }
-            Expr::Lambda(params, body) => {
+            Expr::Lambda(params, _, body) => {
                 let paramstr = params.iter().map(|e| e.0.clone()).collect::<Vec<_>>();
                 format!(
                     "(lambda ({}) {})",

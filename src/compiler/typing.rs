@@ -15,7 +15,7 @@ pub enum ErrorKind {
     IndexOutOfRange(u16, u16),
     IndexForNonTuple,
     VariableNotFound(String),
-    NonPrimitiveInFeed
+    NonPrimitiveInFeed,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Error(ErrorKind, Span);
@@ -210,24 +210,27 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let b = infer_type(body.0, ctx);
             let res = ctx.unify_types(b?, feedv)?;
             ctx.env.to_outer();
-            if res.is_primitive(){
+            if res.is_primitive() {
                 Ok(res)
-            }else{
-                Err(Error(ErrorKind::NonPrimitiveInFeed,body.1))
+            } else {
+                Err(Error(ErrorKind::NonPrimitiveInFeed, body.1))
             }
         }
-        Expr::Lambda(p, r) => {
-            let c = ctx;
+        Expr::Lambda(p, rtype, body) => {
+            let mut c = ctx.clone();
             let mut infer_params = |e: Vec<WithMeta<TypedId>>| {
                 e.iter()
                     .map(|WithMeta(id, _s)| id.ty.clone().unwrap_or(c.gen_intermediate_type()))
                     .collect()
             };
-            Ok(Type::Function(
-                infer_params(p),
-                Box::new(infer_type(r.0, c)?),
-                None,
-            ))
+
+            let bty = if let Some(r) = rtype {
+                let bty = infer_type(body.0, ctx)?;
+                ctx.unify_types(r, bty)?
+            } else {
+                infer_type(body.0, ctx)?
+            };
+            Ok(Type::Function(infer_params(p), Box::new(bty), None))
         }
         Expr::Let(id, body, then) => {
             let c = ctx;

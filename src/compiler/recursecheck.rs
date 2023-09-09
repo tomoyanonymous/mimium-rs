@@ -13,7 +13,7 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &String) -> bool {
             //todo: start new search so we return false here
             false
         }
-        Expr::Lambda(_ids, body) => {
+        Expr::Lambda(_ids, _opt_type, body) => {
             // convert_self(body)
             try_find_recurse(body, name)
         }
@@ -68,7 +68,9 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
             convert_recurse(then).into(),
             opt_else.as_ref().map(|e| Box::new(convert_recurse(&e))),
         ),
-        Expr::Lambda(ids, body) => Expr::Lambda(ids.clone(), convert_recurse(body).into()),
+        Expr::Lambda(ids, opt_type, body) => {
+            Expr::Lambda(ids.clone(), opt_type.clone(), convert_recurse(body).into())
+        }
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         _ => e.clone(),
     };

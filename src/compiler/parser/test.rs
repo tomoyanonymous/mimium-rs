@@ -183,6 +183,7 @@ fn test_fndef() {
                             14..17,
                         ),
                     ],
+                    None,
                     Box::new(WithMeta(Expr::Var("input".to_string(), None), 21..26)),
                 ),
                 0..28,
@@ -219,6 +220,7 @@ fn test_macrodef() {
                             17..20,
                         ),
                     ],
+                    None,
                     Box::new(WithMeta(
                         Expr::Bracket(Box::new(WithMeta(
                             Expr::Var("input".to_string(), None),

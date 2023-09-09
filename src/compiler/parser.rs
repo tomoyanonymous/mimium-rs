@@ -29,19 +29,19 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .boxed()
             .labelled("Tuple");
         // let _struct_t = todo!();
-        let func = ty
+        let atom = primitive.or(tuple);
+        let func = atom
             .clone()
             .separated_by(just(Token::Comma))
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .then_ignore(just(Token::Arrow))
-            .then(ty.clone())
-            .map(|(from, to)| Type::Function(from, Box::new(to), None))
+            .then(just(Token::Arrow).ignore_then(ty.clone()))
+            .map(|(a, e)| Type::Function(a, e.into(), None))
             .boxed()
             .labelled("function");
 
         // .map_with_span(|e, s| WithMeta(e, s))
 
-        primitive.or(tuple).or(func).boxed()
+        func.or(atom).boxed()
     })
 }
 
@@ -90,8 +90,9 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     just(Token::LambdaArgBeginEnd),
                     just(Token::LambdaArgBeginEnd),
                 )
+                .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
                 .then(expr_group.clone())
-                .map(|(ids, body)| Expr::Lambda(ids, Box::new(body)))
+                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, Box::new(body)))
                 .labelled("lambda");
 
             let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
@@ -277,17 +278,21 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     let function_s = just(Token::Function)
         .ignore_then(lvar.clone())
         .then(fnparams.clone())
+        .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
         .then(
             expr.clone()
                 .delimited_by(blockstart.clone(), blockend.clone()),
         )
         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
         .then(expr.clone().map(|e| Box::new(e)).or_not())
-        .map_with_span(|(((fname, ids), block), then), s| {
+        .map_with_span(|((((fname, ids), r_type), block), then), s| {
             WithMeta(
                 Expr::LetRec(
                     fname,
-                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), s.clone())),
+                    Box::new(WithMeta(
+                        Expr::Lambda(ids, r_type, Box::new(block)),
+                        s.clone(),
+                    )),
                     then,
                 ),
                 s,
@@ -307,7 +312,10 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             WithMeta(
                 Expr::LetRec(
                     fname,
-                    Box::new(WithMeta(Expr::Lambda(ids, Box::new(block)), s.clone())),
+                    Box::new(WithMeta(
+                        Expr::Lambda(ids, None, Box::new(block)),
+                        s.clone(),
+                    )),
                     then,
                 ),
                 s,

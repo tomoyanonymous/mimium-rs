@@ -1,8 +1,10 @@
-fn cascade(N,fb){
+fn cascade(N:float,fb:float)->((float)->float){
 	if(N>0.0) {
-		|x| { ((cascade(N-1.0))(x) *(1.0-fb) + self*fb)}
+		|x:float| ->float { 
+			(cascade(N-1.0,fb)(x)) *(1.0-fb) + self*fb
+		}
 	}else{
-		|x| x
+		|x:float| ->float {x}
 	}
 }
-(cascade(3.0,0.9))(2.0)
+cascade(1.0,0.9)(1.2)
