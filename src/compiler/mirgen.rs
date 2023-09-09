@@ -1,6 +1,5 @@
 use crate::utils::metadata::WithMeta;
 use crate::mir;
-use crate::hir;
 
 // pub mod closure_convert;
 // pub mod feedconvert;
