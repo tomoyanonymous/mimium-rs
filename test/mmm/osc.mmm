@@ -1,0 +1,2 @@
+fn counter(){self+1.0}
+counter()
