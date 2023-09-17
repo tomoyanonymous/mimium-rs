@@ -1,14 +1,15 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use std::rc::Rc;
+use crate::types::Type;
 pub struct Label(String);
 
-// is it OK as same as mimium base typing?
-pub enum Type{
-    Unit
-}
+pub struct Global(Label,Type);
 
+pub struct Argument(Label,Type);
 
 pub enum Value{
+    Global(Global),
+    Argument(Argument),
     // holds SSA index(position in infinite registers)
     Register(u64,Type,Option<Label>),
     // immidiate mode floating point value
@@ -33,11 +34,14 @@ pub enum Instruction {
     // Proj(Value, u64),
     // call function 
     Call(Value, Vec<Value>),
-    CallIntrinsic(Intrinsic, Vec<Value>),
+
     Closure(Label, Vec<Value>),
     //function offset  and localvar offset?
-    UpValue(u64,u64),
-    JmpIf(Value,Label,Label),
+    GetUpValue(u64,u64),
+    SetUpValue(u64,u64),
+    Feed(),
+    //jump label
+    JmpIf(Value,usize,usize),
     Return(Value),
 
     // Primitive Operations
@@ -47,6 +51,7 @@ pub enum Instruction {
     DivF(Value,Value),
     ModF(Value,Value),
     NegF(Value),
+    AbsF(Value),
     SinF(Value),
     CosF(Value),
     PowF(Value,Value),
@@ -59,6 +64,8 @@ pub enum Instruction {
     DivI(Value,Value),
     ModI(Value,Value),
     NegI(Value),
+    AbsI(Value),
+
     PowI(Value),
     LogI(Value,Value),
     // primitive Operations for bool
@@ -72,17 +79,21 @@ pub enum Instruction {
     And(Value,Value),
     Or(Value,Value),
 
-
+    CastFtoI(Value),
+    CastItoF(Value),
+    CastItoB(Value),
 }
 
 pub struct Block(Vec<Instruction>);
 
 pub struct Function {
-    pub body: Vec<Block>,
+    pub args: Vec<Argument>,
+    pub body: Vec<Instruction>,
 }
 
 pub enum TopLevel{
     Function(Function),
+    Global(Global)
     //other global declaration continues...
 }
 pub struct Mir(pub Vec<TopLevel>);
