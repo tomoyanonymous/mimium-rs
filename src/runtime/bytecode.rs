@@ -10,11 +10,15 @@ pub enum Instruction {
     // call internal function
     // Function Address,Nargs,Nret
     Call(Reg, u8, u8),
+    //call internal closure
+    CallCls(Reg, u8, u8),
     // external function
     // destination, function address, Nargs
     CallExtFun(Reg,u8,u8),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, ConstPos),
+
+    // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
     // Nrets, value start position
     Return(Reg, Reg),
@@ -22,7 +26,6 @@ pub enum Instruction {
     //destination,source
     GetUpValue(Reg, Reg),
     SetUpValue(Reg, Reg),
-    Close(),
 
     Feed(),
 

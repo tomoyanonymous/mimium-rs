@@ -14,7 +14,7 @@ fn size_of_extern_func() {
 }
 
 //single print function
-fn lib_printi(state:&Machine)->i64{
+fn lib_printi(state:&mut Machine)->i64{
     let v = state.get_top();
     let i = state.get_as::<i64>(*v);
     println!("{}",i);
@@ -51,7 +51,7 @@ fn closuretest() {
         Instruction::MoveConst(0, 2), //load 1 in reg2
         Instruction::AddI(0, 0, 2),   // beg+1, n is in reg0
         Instruction::Closure(3, 1), // make closure of constant table 1(which is the function table 0)
-        Instruction::Close(),       // convert n(at 0) and inc(at 1) into closed value
+        // Instruction::Close(),       // convert n(at 0) and inc(at 1) into closed value
         Instruction::Return(1, 3),  // return 1 closure at 3
     ];
     let makecounter_f = FuncProto {
@@ -73,6 +73,7 @@ fn closuretest() {
         Instruction::Move(4, 2),    // repeat previous 3 steps(print(c()))
         Instruction::Call(4, 0, 1),
         Instruction::CallExtFun(3, 1, 0),
+        Instruction::Return0
     ];
     let main_f = FuncProto {
         nparam: 0,
@@ -80,7 +81,16 @@ fn closuretest() {
         bytecodes: inner_inst3,
         constants: vec![2u64, 3u64, 1, 0], //2,3, makecounter, print_f
     };
-    let global_table = vec![inner_f, makecounter_f, main_f];
-    let ext_fun_table = vec![lib_printi];
-    
+    let global_fn_table = vec![inner_f, makecounter_f, main_f];
+    let ext_fun_table:Vec<ExtFunType> = vec![lib_printi];
+    let mut machine = Machine{
+        stack: vec![],
+        base_pointer: 0,
+    };
+    let code = Program{
+        global_fn_table,
+        ext_fun_table,
+    };
+    let res = machine.execute(2,&code,&vec![]);
+    assert_eq!(res,0);
 }

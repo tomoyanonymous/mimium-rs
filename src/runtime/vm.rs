@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use super::bytecode::{ConstPos, Instruction, Reg};
 
 type RawVal = u64;
@@ -5,16 +7,31 @@ type ReturnCode = i64;
 
 type ExtFunType = fn(&mut Machine) -> ReturnCode;
 
-struct Machine {
+pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
 }
+
 #[derive(Debug, Default)]
 pub struct FuncProto {
     pub nparam: usize,
     pub upindexes: Vec<usize>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
+}
+
+pub enum UpValue {
+    Open(Reg),
+    Closed(RawVal),
+}
+pub(crate) struct Closure {
+    fn_proto_pos: usize, //position of function prototype in global_ftable
+    upvalues: Vec<Rc<RefCell<UpValue>>>,
+}
+
+pub struct Program {
+    pub global_fn_table: Vec<FuncProto>,
+    pub ext_fun_table: Vec<ExtFunType>,
 }
 
 macro_rules! binop {
@@ -75,7 +92,13 @@ impl Machine {
         self.base_pointer -= func_pos as u64 + 1;
     }
     /// Execute function, return retcode.
-    pub fn execute(&mut self, func: &FuncProto) -> ReturnCode {
+    pub fn execute(
+        &mut self,
+        func_i: usize,
+        prog: &Program,
+        upvalues: &Vec<Rc<RefCell<UpValue>>>,
+    ) -> ReturnCode {
+        let func = &prog.global_fn_table[func_i];
         let mut pcounter = 0;
 
         loop {
@@ -86,15 +109,32 @@ impl Machine {
                 Instruction::MoveConst(dst, pos) => {
                     *self.get_stack_mut(dst) = func.constants[pos as usize];
                 }
+                Instruction::CallCls(func, nargs, nret_req) => {
+                    let cls = self.get_as::<Rc<RefCell<Closure>>>(self.get_stack(func));
+                    let pos_of_f = cls.borrow().fn_proto_pos;
+                    self.call_function(func, nargs, nret_req, |machine| {
+                        machine.execute(pos_of_f, prog, &cls.borrow().upvalues)
+                    });
+                }
                 Instruction::Call(func, nargs, nret_req) => {
-                    let f = self.get_as::<&FuncProto>(self.get_stack(func));
-                    self.call_function(func, nargs, nret_req, |machine| machine.execute(f));
+                    let pos_of_f = self.get_as::<usize>(self.get_stack(func));
+                    // let f = prog.global_fn_table[pos_of_f];
+                    self.call_function(pos_of_f as u8, nargs, nret_req, |machine| {
+                        machine.execute(pos_of_f, prog, &vec![])
+                    });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let f = self.get_as::<ExtFunType>(self.get_stack(func));
                     self.call_function(func, nargs, nret_req, |machine| f(machine));
                 }
-                Instruction::Closure(_, _) => todo!(),
+                Instruction::Closure(dst, fn_index) => {
+                    let c = Closure {
+                        fn_proto_pos: fn_index as usize,
+                        upvalues: vec![],
+                    };
+                    // is the reference count really work for shis?
+                    *self.get_stack_mut(dst) = self.to_value(Rc::new(RefCell::new(c)));
+                }
                 Instruction::Return0 => {
                     return 0;
                 }
@@ -107,9 +147,26 @@ impl Machine {
                     self.stack.truncate(iret + nret as usize);
                     return nret.into();
                 }
-                Instruction::GetUpValue(_, _) => todo!(),
-                Instruction::SetUpValue(_, _) => todo!(),
-                Instruction::Close() => todo!(),
+                Instruction::GetUpValue(dst, index) => {
+                    let rv: &UpValue = &upvalues[index as usize].borrow();
+                    let rawv: RawVal = match rv {
+                        UpValue::Open(i) => self.stack[*i as usize],
+                        UpValue::Closed(rawval) => *rawval,
+                    };
+                    *self.get_stack_mut(dst) = rawv;
+                }
+                Instruction::SetUpValue(src, index) => {
+                    let rv: &mut UpValue = &mut upvalues[index as usize].borrow_mut();
+                    match rv {
+                        UpValue::Open(i) => {
+                            *self.get_stack_mut(*i) = self.get_stack(src);
+                        }
+                        UpValue::Closed(_) => {
+                            *rv = UpValue::Closed(self.get_stack(src));
+                        }
+                    };
+                }
+                // Instruction::Close() => todo!(),
                 Instruction::Feed() => todo!(),
                 Instruction::Jmp(offset) => {
                     pcounter = (pcounter as isize + offset as isize) as usize;
