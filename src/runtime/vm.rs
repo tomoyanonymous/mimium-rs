@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Ordering, rc::Rc};
 
-use super::bytecode::{ConstPos, Instruction, Reg};
+use super::bytecode::{Instruction, Reg};
 
 type RawVal = u64;
 type ReturnCode = i64;
@@ -13,10 +13,16 @@ pub struct Machine {
     closures: Vec<Closure>,
 }
 
+#[derive(Debug)]
+pub enum UpIndex {
+    Local(usize),   // index of local variables in upper functions
+    Upvalue(usize), // index of upvalues in upper functions
+}
+
 #[derive(Debug, Default)]
 pub struct FuncProto {
     pub nparam: usize,
-    pub upindexes: Vec<usize>,
+    pub upindexes: Vec<UpIndex>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
 }
@@ -46,11 +52,11 @@ macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
         $self.set_stack($dst as i64,
             $self.to_value::<$t>(
-            $op $self.get_as::<$t>($self.get_stack($src as i64))));
+            $op $self.get_as::<$t>($self.get_stack($src as i64))))
     };
 }
 
-pub fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
+fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
     match i.cmp(&vec.len()) {
         Ordering::Less => vec[i] = value,
         Ordering::Equal => vec.push(value),
@@ -72,12 +78,7 @@ impl Machine {
     fn get_stack(&self, offset: i64) -> RawVal {
         self.stack[(self.base_pointer + offset as u64) as usize]
     }
-    fn get_stack_mut(&mut self, offset: Reg) -> &mut RawVal {
-        unsafe {
-            self.stack
-                .get_unchecked_mut((self.base_pointer + offset as u64) as usize)
-        }
-    }
+
     fn set_stack(&mut self, offset: i64, v: RawVal) {
         set_vec(
             &mut self.stack,
@@ -85,7 +86,7 @@ impl Machine {
             v,
         );
     }
-    fn get_top(&self) -> &RawVal {
+    pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
     fn get_as<T>(&self, v: RawVal) -> T {
@@ -94,7 +95,7 @@ impl Machine {
     fn to_value<T>(&self, v: T) -> RawVal {
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
@@ -111,12 +112,20 @@ impl Machine {
             .truncate((self.base_pointer as i64 + nret_req as i64 - 1) as usize);
         self.base_pointer -= offset;
     }
+    fn close_upvalues(&self, broker: &mut Vec<Rc<RefCell<UpValue>>>) {
+        for v in broker.iter_mut() {
+            let mut v = v.borrow_mut();
+            if let UpValue::Open(i) = *v {
+                *v = UpValue::Closed(self.get_stack(i.into()));
+            }
+        }
+    }
     /// Execute function, return retcode.
     pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
         let func = &prog.global_fn_table[func_i];
         let dummy = Vec::<Rc<RefCell<UpValue>>>::new();
+        let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
-
         if cfg!(test) {
             println!("{:?}", func);
         }
@@ -164,23 +173,33 @@ impl Machine {
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let f_proto = &prog.global_fn_table[fn_proto_pos];
-                    let upvalues = f_proto
+                    let upvalues = cls_i.map_or(&dummy, |i| &self.closures[i].upvalues);
+
+                    let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
                         .upindexes
                         .iter()
-                        .map(|i| Rc::new(RefCell::new(UpValue::Open(*i as u8))))
+                        .map(|u_i| {
+                            match u_i {
+                                UpIndex::Local(i) => {
+                                    let res = Rc::new(RefCell::new(UpValue::Open(*i as u8)));
+                                    local_upvalues.push(res.clone());
+                                    res
+                                }
+                                UpIndex::Upvalue(u_i) => {
+                                    //clone
+                                    Rc::clone(&upvalues[*u_i])
+                                }
+                            }
+                        })
                         .collect();
 
+                    //todo! garbage collection
                     self.closures.push(Closure {
                         fn_proto_pos,
-                        upvalues,
+                        upvalues: inner_upvalues,
                     });
-                    // get raw pointer of last element we pushed
-                    // let ptr = unsafe {
-                    //     std::mem::transmute::<*mut Closure, usize>(
-                    //         self.closures.as_mut_ptr_range().end,
-                    //     ) - std::mem::size_of::<Closure>()
-                    // };
-                    let vaddr = self.closures.len();
+
+                    let vaddr = self.closures.len() - 1;
                     self.set_stack(dst as i64, self.to_value(vaddr));
                 }
                 Instruction::Return0 => {
@@ -200,8 +219,8 @@ impl Machine {
                     // clean up temporary variables to ensure that `nret`
                     // at the top of the stack is the return value
                     self.stack.truncate(iret_abs as usize + nret as usize);
-                    
-                    //todo! close opening upvalues
+
+                    self.close_upvalues(&mut local_upvalues);
 
                     return nret.into();
                 }
@@ -216,7 +235,7 @@ impl Machine {
                     };
                     self.set_stack(dst as i64, rawv);
                 }
-                Instruction::SetUpValue(src, index) => {
+                Instruction::SetUpValue(index, src) => {
                     let v = self.get_stack(src as i64);
                     let upvalues = cls_i.map_or(&dummy, |i| &self.closures[i].upvalues);
                     let res = {
