@@ -167,7 +167,6 @@ dependencies = [
  "ariadne",
  "chumsky",
  "clap",
- "once_cell",
 ]
 
 [[package]]

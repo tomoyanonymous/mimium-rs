@@ -1,5 +1,6 @@
+use std::cell::LazyCell;
+
 use crate::{function, integer, numeric, types::*, unit};
-use once_cell::sync::Lazy;
 
 fn b_to_f(b: bool) -> f64 {
     if b {
@@ -214,7 +215,7 @@ macro_rules! f2_f {
     };
 }
 
-pub const BUILTIN_FNS: Lazy<[BuiltinFn; 45]> = Lazy::new(|| {
+pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 45]> = LazyCell::new(|| {
     [
         i_i!(not),
         i_i!(abs),
