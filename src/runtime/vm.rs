@@ -25,6 +25,8 @@ pub struct FuncProto {
     pub upindexes: Vec<UpIndex>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
+    // feedvalues are mapped in this vector
+    pub feedmap: Vec<usize>,
 }
 
 pub enum UpValue {
@@ -67,6 +69,13 @@ fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct FeedState {
+    pub feed: Option<RawVal>,
+    pub delays: Vec<Vec<RawVal>>, //vector of ring buffer
+    pub calltree: Vec<FeedState>,
+}
+
 impl Machine {
     pub fn new() -> Self {
         Self {
@@ -89,6 +98,24 @@ impl Machine {
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
+    fn return_general(
+        &mut self,
+        iret: Reg,
+        nret: Reg,
+        local_upvalues: &mut Vec<Rc<RefCell<UpValue>>>,
+    ) -> &[u64] {
+        self.close_upvalues(local_upvalues);
+        let base = self.base_pointer as usize;
+        let iret_abs = base + iret as usize;
+        self.stack
+            .copy_within(iret_abs..(iret_abs + nret as usize), base - 1);
+        // clean up temporary variables to ensure that `nret`
+        // at the top of the stack is the return value
+        self.stack.truncate(base - 1 as usize + nret as usize);
+        let res_slice = self.stack.split_at(base as usize).1;
+        res_slice
+    }
+
     fn get_as<T>(&self, v: RawVal) -> T {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
@@ -121,15 +148,31 @@ impl Machine {
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
+    pub fn execute(
+        &mut self,
+        func_i: usize,
+        prog: &Program,
+        cls_i: Option<usize>,
+        feed_state: &mut Option<&mut FeedState>,
+    ) -> ReturnCode {
         let func = &prog.global_fn_table[func_i];
-        let dummy = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
+        if let Some(state) = feed_state {
+            if state.calltree.len() < func.feedmap.len() {
+                state
+                    .calltree
+                    .resize(func.feedmap.len(), FeedState::default());
+            }
+        }
+        let get_feed_count = |pcount| {
+            func.feedmap
+                .binary_search(&pcount)
+                .expect("failed to get feed count")
+        };
         if cfg!(test) {
             println!("{:?}", func);
         }
-
         loop {
             if cfg!(test) {
                 print!("{} : [", func.bytecodes[pcounter]);
@@ -154,16 +197,25 @@ impl Machine {
                     let cls_i = self.get_as::<usize>(addr);
                     let cls = &self.closures[cls_i];
                     let pos_of_f = cls.fn_proto_pos;
+                    let mut feed = feed_state
+                        .as_mut()
+                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
+                        .flatten();
 
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, Some(cls_i))
+                        machine.execute(pos_of_f, prog, Some(cls_i), &mut feed)
                     });
                 }
                 Instruction::Call(func, nargs, nret_req) => {
                     // let f = prog.global_fn_table[pos_of_f];
+
                     let pos_of_f = self.get_as::<usize>(self.get_stack(func as i64));
+                    let mut feed = feed_state
+                        .as_mut()
+                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
+                        .flatten();
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, None)
+                        machine.execute(pos_of_f, prog, None, &mut feed)
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
@@ -173,7 +225,6 @@ impl Machine {
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let f_proto = &prog.global_fn_table[fn_proto_pos];
-                    let upvalues = cls_i.map_or(&dummy, |i| &self.closures[i].upvalues);
 
                     let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
                         .upindexes
@@ -186,6 +237,8 @@ impl Machine {
                                     res
                                 }
                                 UpIndex::Upvalue(u_i) => {
+                                    let up_i = cls_i.unwrap();
+                                    let upvalues = &self.closures[up_i].upvalues;
                                     //clone
                                     Rc::clone(&upvalues[*u_i])
                                 }
@@ -206,27 +259,23 @@ impl Machine {
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    // convert relative address to absolute address
-                    let iret_abs = self.base_pointer + iret as u64;
-                    if nret > 0 {
-                        for i in 0..nret {
-                            self.set_stack(i as i64 - 1, self.get_stack((iret + i) as i64));
-                        }
+                    let _ = self.return_general(iret, nret, &mut local_upvalues);
+                    return nret.into();
+                }
+                Instruction::ReturnFeed(iret, nret) => {
+                    let res = self.return_general(iret, nret, &mut local_upvalues);
+
+                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
+                        *v = res[0]; // todo: multiple return value
                     } else {
-                        panic!()
+                        panic!("failed to return feed value");
                     }
-
-                    // clean up temporary variables to ensure that `nret`
-                    // at the top of the stack is the return value
-                    self.stack.truncate(iret_abs as usize + nret as usize);
-
-                    self.close_upvalues(&mut local_upvalues);
-
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
-                        let upvalues = cls_i.map_or(&dummy, |i| &self.closures[i].upvalues);
+                        let up_i = cls_i.unwrap();
+                        let upvalues = &self.closures[up_i].upvalues;
                         let rv: &UpValue = &upvalues[index as usize].borrow();
                         match rv {
                             UpValue::Open(i) => self.get_stack(*i as i64),
@@ -237,7 +286,8 @@ impl Machine {
                 }
                 Instruction::SetUpValue(index, src) => {
                     let v = self.get_stack(src as i64);
-                    let upvalues = cls_i.map_or(&dummy, |i| &self.closures[i].upvalues);
+                    let up_i = cls_i.unwrap();
+                    let upvalues = &self.closures[up_i].upvalues;
                     let res = {
                         let rv: &mut UpValue = &mut upvalues[index as usize].borrow_mut();
                         match rv {
@@ -254,11 +304,18 @@ impl Machine {
                     }
                 }
                 // Instruction::Close() => todo!(),
-                Instruction::Feed() => todo!(),
+                Instruction::Feed(dst, _num) => {
+                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
+                        let feedv = *v;
+                        self.set_stack(dst as i64, feedv);
+                    } else {
+                        panic!("feed resolution failed when getting value");
+                    }
+                }
                 Instruction::Jmp(offset) => {
                     pcounter = (pcounter as isize + offset as isize) as usize;
                 }
-                Instruction::JmpIf(cond, offset) => {
+                Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
                     if self.get_as::<bool>(cond_v) {
                         pcounter = (pcounter as isize + offset as isize) as usize;

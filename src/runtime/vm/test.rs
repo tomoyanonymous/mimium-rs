@@ -1,7 +1,6 @@
 use super::*;
 use crate::runtime::bytecode::*;
 
-
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -48,6 +47,7 @@ fn closuretest() {
         upindexes: vec![UpIndex::Local(3), UpIndex::Local(1)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
+        feedmap: vec![],
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -63,6 +63,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: inner_insts2,
         constants: vec![1u64, 0], // 1, position of inner in global table
+        feedmap: vec![],
     };
     let inner_inst3 = vec![
         // no stack in the entry
@@ -71,13 +72,13 @@ fn closuretest() {
         Instruction::MoveConst(2, 1), //load 3 [makecounter, 2, 3]
         Instruction::Call(0, 2, 1), // [(closure)]  call makecounter on register 2 with 2 arguments and 1 return value.return value (inner closure)is on reg 0
         //print(c())
-        Instruction::Move(1,0), // move closure 0 to 1
+        Instruction::Move(1, 0),          // move closure 0 to 1
         Instruction::CallCls(1, 0, 1), // call inner closure with 0 args and 1 return value.(result is in 0)
         Instruction::Move(2, 1),       // load result to reg 2
         Instruction::MoveConst(1, 3),  //set print into reg1
         Instruction::CallExtFun(1, 1, 0), //print result
         //repeat precious 4 step : print(c())
-        Instruction::Move(1,0), // move closure 0 to 1
+        Instruction::Move(1, 0), // move closure 0 to 1
         Instruction::CallCls(1, 0, 1),
         Instruction::Move(2, 1),
         Instruction::MoveConst(1, 3),
@@ -89,6 +90,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: inner_inst3,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
+        feedmap: vec![],
     };
     let global_fn_table = vec![inner_f, makecounter_f, main_f];
     let ext_fun_table: Vec<ExtFunType> = vec![lib_printi];
@@ -97,6 +99,7 @@ fn closuretest() {
         global_fn_table,
         ext_fun_table,
     };
-    let res = machine.execute(2, &code, None);
+    // let mut feedstate = FeedState::default();
+    let res = machine.execute(2, &code, None, &mut None);
     assert_eq!(res, 0);
 }

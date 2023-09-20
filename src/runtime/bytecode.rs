@@ -18,20 +18,24 @@ pub enum Instruction {
     // destination, index of inner function prototype in global function table.
     Closure(Reg, ConstPos),
 
+    
+    //destination,source
+    GetUpValue(Reg, Reg),
+    SetUpValue(Reg, Reg),
+    
+    //destination, number of feed(because feed may want to return tuple)
+    Feed(Reg,u8),
+    
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
     // Nrets, value start position
     Return(Reg, Reg),
-
-    //destination,source
-    GetUpValue(Reg, Reg),
-    SetUpValue(Reg, Reg),
-
-    Feed(),
-
+    // Return and set feed value for current context
+    ReturnFeed(Reg,Reg),
+    
     //jump label
     Jmp(Offset),
-    JmpIf(Reg, Offset),
+    JmpIfNeg(Reg, Offset),
 
     // Primitive Operations.
     // Destination, Src1, Src2
@@ -93,11 +97,12 @@ impl std::fmt::Display for Instruction {
             }
             Instruction::Return0 => write!(f, "ret0"),
             Instruction::Return(iret, nret) => write!(f, "ret     {} {}", iret, nret),
+            Instruction::ReturnFeed(iret,nret) => write!(f,"retfeed   {} {}", iret,nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "getupv   {} {}", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "setupv   {} {}", dstup, src),
-            Instruction::Feed() => write!(f, "feed"),
+            Instruction::Feed(dst,num) => write!(f, "feed {} {}",dst,num),
             Instruction::Jmp(dst) => write!(f, "jmp     {}", dst),
-            Instruction::JmpIf(dst, cond) => write!(f, "jmpif   {} {}", dst, cond),
+            Instruction::JmpIfNeg(dst, cond) => write!(f, "jmpif   {} {}", dst, cond),
             Instruction::AddF(dst, lhs, rhs) => write!(f, "addf    {} {} {}", dst, lhs, rhs),
             Instruction::SubF(dst, lhs, rhs) => write!(f, "subf    {} {} {}", dst, lhs, rhs),
             Instruction::MulF(dst, lhs, rhs) => write!(f, "mulf    {} {} {}", dst, lhs, rhs),
