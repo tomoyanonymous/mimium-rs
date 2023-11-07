@@ -1,16 +1,23 @@
-use std::{cell::RefCell, cmp::Ordering, rc::Rc, sync::Arc, sync::Mutex};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex, hash::Hash};
 
-use super::bytecode::{Instruction, Reg};
-type RawVal = u64;
-type ReturnCode = i64;
+pub mod bytecode;
+use bytecode::*;
 
-type ExtFunType = fn(&mut Machine) -> ReturnCode;
-type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
+use crate::types::{self, Type};
+pub type RawVal = u64;
+pub type ReturnCode = i64;
+
+pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
+pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
 
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
     closures: Vec<Closure>,
+    pub ext_fun_table: Vec<(String, ExtFunType)>,
+    fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
+    pub ext_cls_table: Vec<(String, ExtClsType)>,
+    cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
 }
 
 #[derive(Debug)]
@@ -28,6 +35,17 @@ pub struct FuncProto {
     // feedvalues are mapped in this vector
     pub feedmap: Vec<usize>,
 }
+impl FuncProto {
+    pub fn new(nparam: usize) -> Self {
+        Self {
+            nparam,
+            upindexes: vec![],
+            bytecodes: vec![],
+            constants: vec![],
+            feedmap: vec![],
+        }
+    }
+}
 
 pub enum UpValue {
     Open(Reg),
@@ -40,8 +58,8 @@ pub(crate) struct Closure {
 
 pub struct Program {
     pub global_fn_table: Vec<FuncProto>,
-    pub ext_fun_table: Vec<ExtFunType>,
-    pub ext_cls_table: Vec<ExtClsType>,
+    pub ext_fun_table: Vec<(String, Type)>,
+    pub ext_cls_table: Vec<(String, Type)>,
 }
 
 macro_rules! binop {
@@ -83,6 +101,11 @@ impl Machine {
             stack: vec![],
             base_pointer: 0,
             closures: vec![],
+            ext_fun_table: vec![],
+            ext_cls_table: vec![],
+            fn_map: HashMap::new(),
+            cls_map: HashMap::new(),
+            
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -220,12 +243,19 @@ impl Machine {
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
-                    let f = prog.ext_fun_table[self.get_stack(func as i64) as usize];
+                    let ext_fn_idx = self
+                        .fn_map
+                        .get(&(self.get_stack(func as i64) as usize))
+                        .expect("ext_fn map not resolved.");
+                    let f = self.ext_fun_table[*ext_fn_idx].1;
                     self.call_function(func, nargs, nret_req, move |machine| f(machine));
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
-                    let cls_mutex =
-                        prog.ext_cls_table[self.get_stack(func as i64) as usize].clone();
+                    let cls_idx = self
+                        .cls_map
+                        .get(&(self.get_stack(func as i64) as usize))
+                        .expect("closure map not resolved.");
+                    let (_name, cls_mutex) = self.ext_cls_table[*cls_idx].clone();
                     self.call_function(func, nargs, nret_req, move |machine| {
                         if let Ok(mut cls) = cls_mutex.lock() {
                             cls(machine)
@@ -439,6 +469,48 @@ impl Machine {
             }
             pcounter += 1;
         }
+    }
+    pub fn install_extern_fn(&mut self, name: String, f: ExtFunType) {
+        self.ext_fun_table.push((name, f));
+    }
+    pub fn install_extern_cls(&mut self, name: String, f: ExtClsType) {
+        self.ext_cls_table.push((name, f));
+    }
+    pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
+        //link external functions
+        prog.ext_fun_table
+            .iter()
+            .enumerate()
+            .for_each(|(i, (name, _ty))| {
+                if let Some((j, _)) = self
+                    .ext_fun_table
+                    .iter()
+                    .enumerate()
+                    .find(|(j, (fname, _fn))| name == fname)
+                {
+                    self.fn_map.insert(i, j);
+                } else {
+                    panic!("external function {} cannot be found", name);
+                };
+            });
+        prog.ext_cls_table
+            .iter()
+            .enumerate()
+            .for_each(|(i, (name, _ty))| {
+                if let Some((j, _)) = self
+                    .ext_cls_table
+                    .iter()
+                    .enumerate()
+                    .find(|(j, (fname, _fn))| name == fname)
+                {
+                    self.cls_map.insert(i, j);
+                } else {
+                    panic!("external closure {} cannot be found", name);
+                };
+            });
+
+        //internal function table 0 is always mimium_main
+        self.execute(0, &prog, None, &mut None)
     }
 }
 
