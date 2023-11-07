@@ -13,26 +13,28 @@ pub enum Instruction {
     //call internal closure
     CallCls(Reg, u8, u8),
     // external function
-    // destination, function address, Nargs
+    // Function Address,Nargs,Nret
     CallExtFun(Reg, u8, u8),
+    //call rust closure
+    // Function Address,Nargs,Nret
+    CallExtCls(Reg, u8, u8),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, ConstPos),
 
-    
     //destination,source
     GetUpValue(Reg, Reg),
     SetUpValue(Reg, Reg),
-    
+
     //destination, number of feed(because feed may want to return tuple)
-    Feed(Reg,u8),
-    
+    Feed(Reg, u8),
+
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
-    // Nrets, value start position
+    // value start position, Nrets
     Return(Reg, Reg),
     // Return and set feed value for current context
-    ReturnFeed(Reg,Reg),
-    
+    ReturnFeed(Reg, Reg),
+
     //jump label
     Jmp(Offset),
     JmpIfNeg(Reg, Offset),
@@ -92,15 +94,18 @@ impl std::fmt::Display for Instruction {
             Instruction::CallExtFun(dst, nargs, nret_req) => {
                 write!(f, "callext {} {} {}", dst, nargs, nret_req)
             }
+            Instruction::CallExtCls(dst, nargs, nret_req) => {
+                write!(f, "callextcls {} {} {}", dst, nargs, nret_req)
+            }
             Instruction::Closure(dst, src) => {
                 write!(f, "closure {} {}", dst, src)
             }
             Instruction::Return0 => write!(f, "ret0"),
             Instruction::Return(iret, nret) => write!(f, "ret     {} {}", iret, nret),
-            Instruction::ReturnFeed(iret,nret) => write!(f,"retfeed   {} {}", iret,nret),
+            Instruction::ReturnFeed(iret, nret) => write!(f, "retfeed   {} {}", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "getupv   {} {}", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "setupv   {} {}", dstup, src),
-            Instruction::Feed(dst,num) => write!(f, "feed {} {}",dst,num),
+            Instruction::Feed(dst, num) => write!(f, "feed {} {}", dst, num),
             Instruction::Jmp(dst) => write!(f, "jmp     {}", dst),
             Instruction::JmpIfNeg(dst, cond) => write!(f, "jmpif   {} {}", dst, cond),
             Instruction::AddF(dst, lhs, rhs) => write!(f, "addf    {} {} {}", dst, lhs, rhs),

@@ -94,12 +94,55 @@ fn closuretest() {
     };
     let global_fn_table = vec![inner_f, makecounter_f, main_f];
     let ext_fun_table: Vec<ExtFunType> = vec![lib_printi];
+    let ext_cls_table: Vec<ExtClsType> = vec![];
     let mut machine = Machine::new();
     let code = Program {
         global_fn_table,
         ext_fun_table,
+        ext_cls_table,
     };
     // let mut feedstate = FeedState::default();
     let res = machine.execute(2, &code, None, &mut None);
+    assert_eq!(res, 0);
+}
+
+#[test]
+fn rust_closure_test() {
+    //fn main()->int{
+    // return rust_closure(4)
+    //}
+    let inner_insts = vec![
+        Instruction::MoveConst(0, 0), //load closure
+        Instruction::MoveConst(1, 1), //load const int 4
+        Instruction::CallExtCls(0, 1, 1),//call closure, 7 should be set at reg 0
+        Instruction::Return0, // return single value at 1
+    ];
+    let main_f = FuncProto {
+        nparam: 0,
+        upindexes: vec![],
+        bytecodes: inner_insts,
+        constants: vec![0u64,4u64], //cls, int 4
+        feedmap: vec![],
+    };
+    let global_fn_table = vec![main_f];
+    let ext_fun_table: Vec<ExtFunType> = vec![lib_printi];
+    // let mut count = 0;
+    let cls = Arc::new(Mutex::new(|m: &mut Machine| {
+        let v = m.get_top();
+        let i = m.get_as::<u64>(*v)+3;
+        println!("Call from closure: {}", i);
+        //?????
+        m.set_stack(-1, m.to_value(i));
+        return 1
+    }));
+    let ext_cls_table: Vec<ExtClsType> = vec![cls.clone()];
+    let mut machine = Machine::new();
+    let code = Program {
+        global_fn_table,
+        ext_fun_table,
+        ext_cls_table,
+    };
+    // let mut feedstate = FeedState::default();
+    let res = machine.execute(0, &code, None, &mut None);
     assert_eq!(res, 0);
 }

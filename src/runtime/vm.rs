@@ -1,11 +1,11 @@
-use std::{cell::RefCell, cmp::Ordering, rc::Rc};
+use std::{cell::RefCell, cmp::Ordering, rc::Rc, sync::Arc, sync::Mutex};
 
 use super::bytecode::{Instruction, Reg};
-
 type RawVal = u64;
 type ReturnCode = i64;
 
 type ExtFunType = fn(&mut Machine) -> ReturnCode;
+type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
 
 pub struct Machine {
     stack: Vec<RawVal>,
@@ -41,6 +41,7 @@ pub(crate) struct Closure {
 pub struct Program {
     pub global_fn_table: Vec<FuncProto>,
     pub ext_fun_table: Vec<ExtFunType>,
+    pub ext_cls_table: Vec<ExtClsType>,
 }
 
 macro_rules! binop {
@@ -122,7 +123,7 @@ impl Machine {
     fn to_value<T>(&self, v: T) -> RawVal {
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(&mut self, func_pos: u8, nargs: u8, nret_req: u8, mut action: F)
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
@@ -221,6 +222,17 @@ impl Machine {
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let f = prog.ext_fun_table[self.get_stack(func as i64) as usize];
                     self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                }
+                Instruction::CallExtCls(func, nargs, nret_req) => {
+                    let cls_mutex =
+                        prog.ext_cls_table[self.get_stack(func as i64) as usize].clone();
+                    self.call_function(func, nargs, nret_req, move |machine| {
+                        if let Ok(mut cls) = cls_mutex.lock() {
+                            cls(machine)
+                        } else {
+                            0
+                        }
+                    });
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
