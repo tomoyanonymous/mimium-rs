@@ -173,18 +173,18 @@ mod test {
                 id: "lowpass".to_string(),
             },
             Box::new(WithMeta::<_>(
-                Expr::Feed(
-                    "feed_id0".to_string(),
+                Expr::Lambda(
+                    vec![WithMeta::<_>(
+                        TypedId {
+                            ty: None,
+                            id: "input".to_string(),
+                        },
+                        0..1,
+                    )],
+                    None,
                     Box::new(WithMeta::<_>(
-                        Expr::Lambda(
-                            vec![WithMeta::<_>(
-                                TypedId {
-                                    ty: None,
-                                    id: "input".to_string(),
-                                },
-                                0..1,
-                            )],
-                            None,
+                        Expr::Feed(
+                            "feed_id0".to_string(),
                             Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_string(), None), 0..1)),
                         ),
                         0..1,
