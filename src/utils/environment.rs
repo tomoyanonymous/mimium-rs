@@ -13,6 +13,9 @@ impl<T> Environment<T> {
 pub struct Error(String);
 
 impl<T: Clone> Environment<T> {
+    pub fn is_global(&self) -> bool {
+        self.0.len() <= 1
+    }
     pub fn extend(&mut self) {
         self.0.push_front(Vec::new());
     }

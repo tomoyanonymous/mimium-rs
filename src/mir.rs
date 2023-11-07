@@ -1,5 +1,4 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use std::rc::Rc;
 use crate::types::Type;
 pub struct Label(String);
 
