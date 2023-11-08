@@ -1,7 +1,8 @@
-use super::typing;
+use super::typing::{self, infer_type};
 use crate::runtime::vm::bytecode::Instruction;
 use crate::runtime::vm::{FuncProto, RawVal};
 use crate::utils::environment::Environment;
+use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
@@ -33,15 +34,39 @@ impl Context {
             .get_mut(self.current_fn_idx)
             .expect("invalid func_proto index")
     }
+    pub fn push_inst(&mut self, inst: Instruction){
+        self.get_current_fnproto().bytecodes.push(inst);
+    }
 }
 
-pub enum CompileError {
-    TypeMismatch,
+#[derive(Clone, Debug)]
+pub enum CompileErrorKind {
+    // TypeMismatch, 
     TooManyConstants,
-    VariableNotFound,
+    VariableNotFound(String),
+}
+#[derive(Clone, Debug)]
+pub struct CompileError(CompileErrorKind,Span);
+
+
+impl std::fmt::Display for CompileError{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            // CompileError::TypeMismatch => write!(),
+            CompileError::TooManyConstants=> write!(f,"too many constants."),
+            CompileError::VariableNotFound => write!(f,"Variable"),
+        }
+        write!(f,)
+    }
+}
+impl std::error::Error for CompileError{}
+impl ReportableError for CompileError{
+    fn get_span(&self) -> std::ops::Range<usize> {
+        self.1
+    }
 }
 
-pub fn compile(src: WithMeta<Expr>) -> Result<vm::Program, CompileError> {
+pub fn compile(src: WithMeta<Expr>) -> Result<vm::Program, Box<dyn std::error::Error>> {
     todo!();
     // let mut ctx = 
     // Ok(ctx.program)
@@ -55,7 +80,7 @@ fn load_new_rawv(rawv: RawVal, func: &mut FuncProto) -> Result<u8, CompileError>
         func.constants.len() - 1
     });
     if idx > u8::MAX as usize {
-        Err(CompileError::TooManyConstants)
+        Err(Box::<dyn ReportableError>::new(CompileError(CompileErrorKind::TooManyConstants,0..=0)))
     } else {
         Ok(idx as u8)
     }
@@ -69,7 +94,7 @@ fn load_new_int(v: i64, func: &mut FuncProto) -> Result<u8, CompileError> {
     load_new_rawv(rawv, func)
 }
 
-fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<Val, CompileError> {
+fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<Val, Box<dyn ReportableError>> {
 
     ctx.stack_pos += 1;
     let stack_pos = ctx.stack_pos;
@@ -77,9 +102,9 @@ fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<Val, Co
     match lit {
         Literal::String(_) => todo!(),
         Literal::Int(i) => {
-            let const_pos = load_new_int(*i, func)?;
-            func.bytecodes
-                .push(Instruction::MoveConst(stack_pos as Reg, const_pos));
+            let const_pos = load_new_int(*i, func).map_err(|e|Box::new(e))?;
+            ctx.push_inst
+                (Instruction::MoveConst(stack_pos as Reg, const_pos));
         }
         Literal::Float(f) => {
             let fv: f64 = f.parse().expect("invalid float format");
@@ -114,7 +139,11 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<Val, CompileE
         }
         Expr::Tuple(_) => todo!(),
         Expr::Proj(_, _) => todo!(),
-        Expr::Apply(func, args) => {
+        Expr::Apply(box WithMeta(func,span), args) => {
+            let ftype = infer_type(func, &mut ctx.typeenv)?;
+            let nret = 1;
+            let nargs = args.len();
+            let stack_base = ctx.stack_pos+1;
             let a_regs = args
                 .iter()
                 .map(|a_meta| eval_expr(a_meta, ctx))
@@ -126,7 +155,9 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<Val, CompileE
                 // 
                 },
                 Val::Function(i) => {
-
+                    // let fnaddress = ctx.get_current_fnproto().bytecodes.push()
+                    ctx.push_inst(Instruction::Call())
+                    ctx.program.global_fn_table
                 },
                 Val::ExternalFun(i) => ,
                 Val::ExternalClosure(i) => todo!(),

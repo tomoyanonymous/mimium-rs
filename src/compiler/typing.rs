@@ -166,7 +166,7 @@ impl InferContext {
     }
 }
 
-fn infer_type_literal(e: Literal) -> Result<Type, Error> {
+fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
     let pt = match e {
         Literal::Float(_s) => PType::Numeric,
         Literal::Int(_s) => PType::Int,
@@ -177,10 +177,10 @@ fn infer_type_literal(e: Literal) -> Result<Type, Error> {
     Ok(Type::Primitive(pt))
 }
 
-pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
-    let infer_vec = |e: Vec<WithMeta<Expr>>, ctx: &mut InferContext| {
+pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
+    let infer_vec = |e: &Vec<WithMeta<Expr>>, ctx: &mut InferContext| {
         e.iter()
-            .map(|WithMeta(el, _s)| Ok(infer_type(el.clone(), ctx)?))
+            .map(|WithMeta(el, _s)| Ok(infer_type(el, ctx)?))
             .collect::<Result<Vec<_>, Error>>()
     };
 
@@ -188,16 +188,16 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Literal(l) => infer_type_literal(l),
         Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e, ctx)?)),
         Expr::Proj(e, idx) => {
-            let tup = infer_type(e.0, ctx)?;
+            let tup = infer_type(&e.0, ctx)?;
             match tup {
                 Type::Tuple(vec) => {
-                    if vec.len() < idx as usize {
+                    if vec.len() < *idx as usize {
                         Err(Error(
-                            ErrorKind::IndexOutOfRange(vec.len() as u16, idx as u16),
+                            ErrorKind::IndexOutOfRange(vec.len() as u16, *idx as u16),
                             e.1.clone(),
                         ))
                     } else {
-                        Ok(vec[idx as usize].clone())
+                        Ok(vec[*idx as usize].clone())
                     }
                 }
                 _ => Err(Error(ErrorKind::IndexForNonTuple, e.1.clone())),
@@ -206,8 +206,8 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Feed(id, body) => {
             ctx.env.extend();
             let feedv = ctx.gen_intermediate_type();
-            ctx.env.add_bind(&mut vec![(id, feedv.clone())]);
-            let b = infer_type(body.0, ctx);
+            ctx.env.add_bind(&mut vec![(id.clone(), feedv.clone())]);
+            let b = infer_type(&body.0, ctx);
             let res = ctx.unify_types(b?, feedv)?;
             ctx.env.to_outer();
             if res.is_primitive() {
@@ -218,29 +218,29 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         }
         Expr::Lambda(p, rtype, body) => {
             let mut c = ctx.clone();
-            let mut infer_params = |e: Vec<WithMeta<TypedId>>| {
+            let mut infer_params = |e: &Vec<WithMeta<TypedId>>| {
                 e.iter()
                     .map(|WithMeta(id, _s)| id.ty.clone().unwrap_or(c.gen_intermediate_type()))
                     .collect()
             };
 
             let bty = if let Some(r) = rtype {
-                let bty = infer_type(body.0, ctx)?;
-                ctx.unify_types(r, bty)?
+                let bty = infer_type(&body.0, ctx)?;
+                ctx.unify_types(*r, bty)?
             } else {
-                infer_type(body.0, ctx)?
+                infer_type(&body.0, ctx)?
             };
             Ok(Type::Function(infer_params(p), Box::new(bty), None))
         }
         Expr::Let(id, body, then) => {
             let c = ctx;
-            let bodyt = infer_type(body.0, c)?;
+            let bodyt = infer_type(&body.0, c)?;
             let idt = id.ty.unwrap_or(c.gen_intermediate_type());
             let bodyt_u = c.unify_types(idt, bodyt)?;
             c.env.extend();
             c.env.add_bind(&mut vec![(id.id, bodyt_u)]);
             let res = match then {
-                Some(e) => infer_type(e.0, c),
+                Some(e) => infer_type(&e.0, c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
             c.env.to_outer();
@@ -255,37 +255,37 @@ pub fn infer_type(e: Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             c.env.extend();
             let body_i = c.gen_intermediate_type();
             c.env.add_bind(&mut vec![(id.id, body_i)]);
-            let bodyt = infer_type(body.0, c)?;
+            let bodyt = infer_type(&body.0, c)?;
             let _ = c.unify_types(idt, bodyt)?;
 
             let res = match then {
-                Some(e) => infer_type(e.0, c),
+                Some(e) => infer_type(&e.0, c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
             c.env.to_outer();
             res
         }
         Expr::Var(name, _time) => ctx.env.lookup(&name).map_or(
-            Err(Error(ErrorKind::VariableNotFound(name), 0..0)), //todo:Span
+            Err(Error(ErrorKind::VariableNotFound(name.clone()), 0..0)), //todo:Span
             |v| Ok(v.clone()),
         ),
         Expr::Apply(fun, callee) => {
-            let fnl = infer_type(fun.0, ctx)?;
+            let fnl = infer_type(&fun.0, ctx)?;
             let callee_t = infer_vec(callee, ctx)?;
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, Box::new(res_t), None);
             ctx.unify_types(fnl, fntype)
         }
         Expr::If(cond, then, opt_else) => {
-            let condt = infer_type(cond.0, ctx)?;
+            let condt = infer_type(&cond.0, ctx)?;
             let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
-            let thent = infer_type(then.0, ctx)?;
+            let thent = infer_type(&then.0, ctx)?;
             let elset =
-                opt_else.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e.0, ctx))?;
+                opt_else.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))?;
             ctx.unify_types(thent, elset)
         }
         Expr::Block(expr) => {
-            expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e.0, ctx))
+            expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))
         }
         _ => {
             // todo!();
