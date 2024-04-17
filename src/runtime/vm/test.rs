@@ -43,6 +43,7 @@ fn closuretest() {
     ];
     let inner_f = FuncProto {
         nparam: 0,
+        nret: 1,
         upindexes: vec![UpIndex::Local(3), UpIndex::Local(1)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
@@ -59,6 +60,7 @@ fn closuretest() {
     ];
     let makecounter_f = FuncProto {
         nparam: 2,
+        nret: 1,
         upindexes: vec![],
         bytecodes: inner_insts2,
         constants: vec![1u64, 2], // 1, position of inner in global table
@@ -86,6 +88,7 @@ fn closuretest() {
     ];
     let main_f = FuncProto {
         nparam: 0,
+        nret: 1,
         upindexes: vec![],
         bytecodes: inner_inst3,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
@@ -118,6 +121,7 @@ fn rust_closure_test() {
     ];
     let main_f = FuncProto {
         nparam: 0,
+        nret: 1,
         upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0u64, 4u64], //cls, int 4

@@ -12,7 +12,7 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
-use crate::runtime::{vm, vm::bytecode::*};
+use crate::runtime::{vm, vm::bytecode::*,vm::Program};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -20,6 +20,7 @@ use crate::runtime::{vm, vm::bytecode::*};
 #[derive(Clone, Debug)]
 enum Val {
     Register(Reg),
+    Closure(Reg, Type),
     Function(u8),
     ExternalFun(u8),
     ExternalClosure(u8),
@@ -294,3 +295,4 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Error => todo!(),
     }
 }
+

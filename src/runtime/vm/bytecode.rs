@@ -2,7 +2,7 @@ pub type Reg = u8; // register position
 pub type ConstPos = u8;
 pub type Offset = i16;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Instruction {
     // Destination / Source
     Move(Reg, Reg),

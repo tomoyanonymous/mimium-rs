@@ -1,4 +1,6 @@
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex, hash::Hash};
+use std::{
+    cell::RefCell, cmp::Ordering, collections::HashMap, hash::Hash, rc::Rc, sync::Arc, sync::Mutex,
+};
 
 pub mod bytecode;
 use bytecode::*;
@@ -20,15 +22,16 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UpIndex {
     Local(usize),   // index of local variables in upper functions
     Upvalue(usize), // index of upvalues in upper functions
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FuncProto {
     pub nparam: usize,
+    pub nret: usize,
     pub upindexes: Vec<UpIndex>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
@@ -36,9 +39,10 @@ pub struct FuncProto {
     pub feedmap: Vec<usize>,
 }
 impl FuncProto {
-    pub fn new(nparam: usize) -> Self {
+    pub fn new(nparam: usize, nret: usize) -> Self {
         Self {
             nparam,
+            nret,
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
@@ -56,6 +60,7 @@ pub(crate) struct Closure {
     upvalues: Vec<Rc<RefCell<UpValue>>>,
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     pub global_fn_table: Vec<FuncProto>,
     pub ext_fun_table: Vec<(String, Type)>,
@@ -105,7 +110,6 @@ impl Machine {
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
-            
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
