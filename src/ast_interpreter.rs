@@ -360,5 +360,7 @@ pub fn eval_ast(
         ast::Expr::Bracket(_) => todo!(),
         ast::Expr::Escape(_) => todo!(),
         ast::Expr::Error => panic!("Some Error happend in previous stages"),
+        ast::Expr::Assign(_, _) => todo!(),
+        ast::Expr::Then(_, _) => todo!(),
     }
 }

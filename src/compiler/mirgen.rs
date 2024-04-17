@@ -12,11 +12,10 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
-use crate::runtime::{vm, vm::bytecode::*,vm::Program};
+use crate::runtime::{vm, vm::bytecode::*, vm::Program};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
-
 #[derive(Clone, Debug)]
 enum Val {
     Register(Reg),
@@ -295,4 +294,3 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Error => todo!(),
     }
 }
-
