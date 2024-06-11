@@ -13,5 +13,5 @@ edition = "2021"
 chumsky = "0.9.0"
 ariadne = "0.1.5"
 
-clap = { version = "3.2.10", features = ["derive"] }
+clap = { version = "4.5.7", features = ["derive"] }
 

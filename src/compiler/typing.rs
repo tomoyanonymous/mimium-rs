@@ -18,11 +18,11 @@ pub enum ErrorKind {
     NonPrimitiveInFeed,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct Error(ErrorKind, Span);
+pub struct Error(pub ErrorKind, pub Span);
 
-impl fmt::Display for Error {
+impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.0 {
+        match &self {
             ErrorKind::TypeMismatch => write!(f, "Type Mismatch"),
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::IndexOutOfRange(len, idx) => write!(
@@ -38,6 +38,11 @@ impl fmt::Display for Error {
                 write!(f, "Function that uses self cannot be return function type.")
             }
         }
+    }
+}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 impl std::error::Error for Error {}
@@ -213,7 +218,7 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             if res.is_primitive() {
                 Ok(res)
             } else {
-                Err(Error(ErrorKind::NonPrimitiveInFeed, body.1))
+                Err(Error(ErrorKind::NonPrimitiveInFeed, body.1.clone()))
             }
         }
         Expr::Lambda(p, rtype, body) => {
@@ -226,7 +231,7 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
 
             let bty = if let Some(r) = rtype {
                 let bty = infer_type(&body.0, ctx)?;
-                ctx.unify_types(*r, bty)?
+                ctx.unify_types(r.clone(), bty)?
             } else {
                 infer_type(&body.0, ctx)?
             };
@@ -235,10 +240,10 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::Let(id, body, then) => {
             let c = ctx;
             let bodyt = infer_type(&body.0, c)?;
-            let idt = id.ty.unwrap_or(c.gen_intermediate_type());
+            let idt = id.ty.clone().unwrap_or(c.gen_intermediate_type());
             let bodyt_u = c.unify_types(idt, bodyt)?;
             c.env.extend();
-            c.env.add_bind(&mut vec![(id.id, bodyt_u)]);
+            c.env.add_bind(&mut vec![(id.clone().id, bodyt_u)]);
             let res = match then {
                 Some(e) => infer_type(&e.0, c),
                 None => Ok(Type::Primitive(PType::Unit)),
@@ -251,10 +256,10 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
-            let idt = id.ty.unwrap_or(c.gen_intermediate_type());
+            let idt = id.clone().ty.unwrap_or(c.gen_intermediate_type());
             c.env.extend();
             let body_i = c.gen_intermediate_type();
-            c.env.add_bind(&mut vec![(id.id, body_i)]);
+            c.env.add_bind(&mut vec![(id.clone().id, body_i)]);
             let bodyt = infer_type(&body.0, c)?;
             let _ = c.unify_types(idt, bodyt)?;
 
@@ -281,11 +286,11 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
             let thent = infer_type(&then.0, ctx)?;
             let elset =
-                opt_else.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))?;
+                opt_else.clone().map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))?;
             ctx.unify_types(thent, elset)
         }
         Expr::Block(expr) => {
-            expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))
+            expr.clone().map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))
         }
         _ => {
             // todo!();

@@ -62,18 +62,24 @@ impl ReportableError for Error {
 }
 
 use crate::{
-    ast,
-    types::Type,
-    utils::{
+    ast, ast_interpreter, mir::Mir, types::Type, utils::{
         error::ReportableError,
         metadata::{Span, WithMeta},
-    }, ast_interpreter,
+    }
 };
 pub fn emit_ast(src: &String) -> Result<WithMeta<ast::Expr>, Vec<Box<dyn ReportableError>>> {
     let rawast = parser::parse(src)?;
     let res1 = recursecheck::convert_recurse(&rawast);
     selfconvert::convert_self_top(res1).map_err(|e| {
         let bres = Box::new(e) as Box<dyn ReportableError>;
+        vec![bres]
+    })
+}
+
+pub fn emit_mir(src: &String)->Result<Mir,Vec<Box<dyn ReportableError>>>{
+    let ast = parser::parse(src)?;
+    mirgen::compile(ast).map_err(|e| {
+        let bres = e as Box<dyn ReportableError>;
         vec![bres]
     })
 }

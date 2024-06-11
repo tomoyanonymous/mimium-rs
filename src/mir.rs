@@ -1,98 +1,136 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::types::Type;
-pub struct Label(String);
+use std::sync::Arc;
 
-pub struct Global(Label,Type);
+pub mod print;
+#[derive(Default, Debug)]
+pub struct Label(pub String);
 
-pub struct Argument(Label,Type);
+#[derive(Debug)]
+pub struct Global(Label, Type);
 
-pub enum Value{
+#[derive(Debug)]
+pub struct Argument(pub Label, pub Type);
+
+pub type VReg = u64;
+#[derive(Debug)]
+pub enum Value {
     Global(Global),
     Argument(Argument),
     // holds SSA index(position in infinite registers)
-    Register(u64,Type,Option<Label>),
+    Register(VReg),
     // immidiate mode floating point value
     Float(f64),
     Integer(i64),
     Bool(bool),
-    // pointer to the top-level functions
-    Function(Label),
-    //
-    Closure(Label,Vec<Box<Value>>),
-    //??
+    // idx of the function in the program
+    Function(usize),
+    ExtFunction(Label),
+    Closure(Arc<Function>),
+    FixPoint,
+    None, //??
 }
 
+pub type VPtr = Arc<Value>;
+
+#[derive(Debug)]
 pub enum Instruction {
+    Integer(i64),
+    //constant float
+    Float(f64),
     // allocate appropreate memory size depending on the type and return its pointer address
     Alloc(Type),
     // load value from the pointer type
-    Load(Value),
+    Load(VPtr),
     // store value to pointer
-    Store(Value, Value),
+    Store(VPtr, VPtr),
     // Tuple(Vec<Value>),
     // Proj(Value, u64),
-    // call function 
-    Call(Value, Vec<Value>),
-
-    Closure(Label, Vec<Value>),
+    // call function , arguments
+    Call(Arc<Value>, Vec<VPtr>),
+    // make closure with upindexes
+    Closure(Arc<Function>),
     //function offset  and localvar offset?
-    GetUpValue(u64,u64),
-    SetUpValue(u64,u64),
-    Feed(),
+    GetUpValue(u64, u64),
+    SetUpValue(u64, u64),
+    //internal state: feed and delay
+    PushStateOffset(u64),
+    PopStateOffset(u64),
+    //load internal state to register
+    GetState(VPtr),
+    SetState(VPtr),
     //jump label
-    JmpIf(Value,usize,usize),
-    Return(Value),
+    JmpIf(VPtr, Label, Label),
+    Return(VPtr),
 
     // Primitive Operations
-    AddF(Value,Value),
-    SubF(Value,Value),
-    MulF(Value,Value),
-    DivF(Value,Value),
-    ModF(Value,Value),
-    NegF(Value),
-    AbsF(Value),
-    SinF(Value),
-    CosF(Value),
-    PowF(Value,Value),
-    LogF(Value,Value),
+    AddF(VPtr, VPtr),
+    SubF(VPtr, VPtr),
+    MulF(VPtr, VPtr),
+    DivF(VPtr, VPtr),
+    ModF(VPtr, VPtr),
+    NegF(VPtr),
+    AbsF(VPtr),
+    SinF(VPtr),
+    CosF(VPtr),
+    PowF(VPtr, VPtr),
+    LogF(VPtr, VPtr),
 
     // Primitive Operations for int
-    AddI(Value,Value), 
-    SubI(Value,Value),
-    MulI(Value,Value),
-    DivI(Value,Value),
-    ModI(Value,Value),
-    NegI(Value),
-    AbsI(Value),
+    AddI(VPtr, VPtr),
+    SubI(VPtr, VPtr),
+    MulI(VPtr, VPtr),
+    DivI(VPtr, VPtr),
+    ModI(VPtr, VPtr),
+    NegI(VPtr),
+    AbsI(VPtr),
 
-    PowI(Value),
-    LogI(Value,Value),
+    PowI(VPtr),
+    LogI(VPtr, VPtr),
     // primitive Operations for bool
-    Not(Value),
-    Eq(Value),
-    Ne(Value),
-    Gt(Value,Value),
-    Ge(Value,Value),
-    Lt(Value,Value),
-    Le(Value,Value),
-    And(Value,Value),
-    Or(Value,Value),
+    Not(VPtr),
+    Eq(VPtr),
+    Ne(VPtr),
+    Gt(VPtr, VPtr),
+    Ge(VPtr, VPtr),
+    Lt(VPtr, VPtr),
+    Le(VPtr, VPtr),
+    And(VPtr, VPtr),
+    Or(VPtr, VPtr),
 
-    CastFtoI(Value),
-    CastItoF(Value),
-    CastItoB(Value),
+    CastFtoI(VPtr),
+    CastItoF(VPtr),
+    CastItoB(VPtr),
 }
 
-pub struct Block(Vec<Instruction>);
+#[derive(Debug, Default)]
+pub struct Block(pub Vec<Instruction>);
 
+#[derive(Debug)]
+pub enum UpIndex {
+    Local(usize),   // index of local variables in upper functions
+    Upvalue(usize), // index of upvalues in upper functions
+}
+
+#[derive(Clone, Debug)]
+pub struct Local {
+    pub name: String,
+    pub depth: usize,
+    pub is_captured: bool,
+}
+
+#[derive(Debug, Default)]
 pub struct Function {
+    pub label: Label,
     pub args: Vec<Argument>,
-    pub body: Vec<Instruction>,
+    // pub locals: Vec<Local>,
+    pub upindexes: Vec<UpIndex>,
+    // pub upperfn: Option<Arc<Self>>,
+    pub body: Vec<Block>,
 }
 
-pub enum TopLevel{
-    Function(Function),
-    Global(Global)
-    //other global declaration continues...
+#[derive(Debug, Default)]
+pub struct Mir {
+    pub functions: Vec<Function>,
+    pub globals: Vec<Global>,
 }
-pub struct Mir(pub Vec<TopLevel>);
