@@ -292,5 +292,8 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Bracket(_) => todo!(),
         Expr::Escape(_) => todo!(),
         Expr::Error => todo!(),
+        Expr::Assign(_, _) => todo!(),
+        Expr::Then(_, _) => todo!(),
+        
     }
 }
