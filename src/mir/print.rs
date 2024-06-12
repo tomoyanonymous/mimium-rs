@@ -3,11 +3,15 @@ use super::*;
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
-            let _ = write!(f, "fn {} {:?} \n", fun.label.0, fun.args);
-            for (i,block) in fun.body.iter().enumerate(){
+            let _ = write!(f, "fn {} [", fun.label.0);
+            fun.args.iter().for_each(|a| {
+                let _ = write!(f, "{} ", a.0);
+            });
+            let _ = write!(f, "]\n");
+            for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "  block {i}\n");
-                for insts in block.0.iter(){
-                    let _ = write!(f,"    {insts}\n");
+                for insts in block.0.iter() {
+                    let _ = write!(f, "    {insts}\n");
                 }
             }
         }
@@ -24,7 +28,7 @@ impl std::fmt::Display for Label {
 impl std::fmt::Display for Argument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Argument(label, _t) = self;
-        write!(f, "arg {}", label)
+        write!(f, "arg {}", label.0)
     }
 }
 
@@ -32,8 +36,8 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Global(_) => todo!(),
-            Value::Argument(v) => write!(f, "{v}"),
-            Value::Register(r) => write!(f, "reg {r}"),
+            Value::Argument(v) => write!(f, "{}", v.0),
+            Value::Register(r) => write!(f, "reg({r})"),
             Value::Float(n) => write!(f, "float {n}"),
             Value::Integer(i) => write!(f, "int {i}"),
             Value::Bool(_) => todo!(),
@@ -49,8 +53,8 @@ impl std::fmt::Display for Value {
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Integer(i) => write!(f, "int {i}\n"),
-            Instruction::Float(n) => write!(f, "int {n}\n"),
+            Instruction::Integer(i) => write!(f, "int {i}"),
+            Instruction::Float(n) => write!(f, "float {n}"),
             Instruction::Alloc(_) => todo!(),
             Instruction::Load(_) => todo!(),
             Instruction::Store(_, _) => todo!(),

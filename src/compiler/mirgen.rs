@@ -245,21 +245,24 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             }
         }
         Expr::Lambda(ids, types, body) => {
-            let (newf, fnid) = ctx.make_new_fn();
+            let (mut newf, fnid) = ctx.make_new_fn();
 
+            let mut binds = ids
+                .iter()
+                .map(|name| {
+                    let label = name.0.id.clone();
+                    let a = Argument(Label(label.clone()), Type::Unknown);
+                    let res = (label.clone(), Arc::new(Value::Argument(a)));
+                    res
+                })
+                .collect::<Vec<_>>();
+            binds.iter().for_each(|(_, a)| {
+                if let Value::Argument(a) = a.as_ref() {
+                    newf.args.push(a.clone());
+                }
+            });
             ctx.valenv.extend();
-            ctx.valenv.add_bind(
-                &mut ids
-                    .iter()
-                    .map(|name| {
-                        let label = name.0.id.clone();
-                        (
-                            label.clone(),
-                            Arc::new(Value::Argument(Argument(Label(label), Type::Unknown))),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            );
+            ctx.valenv.add_bind(&mut binds);
 
             let _res = eval_expr(&body, ctx);
             Ok(Arc::new(Value::Function(fnid)))
@@ -294,6 +297,5 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Error => todo!(),
         Expr::Assign(_, _) => todo!(),
         Expr::Then(_, _) => todo!(),
-        
     }
 }

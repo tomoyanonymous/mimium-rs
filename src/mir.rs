@@ -3,13 +3,13 @@ use crate::types::Type;
 use std::sync::Arc;
 
 pub mod print;
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Label(pub String);
 
 #[derive(Debug)]
 pub struct Global(Label, Type);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Argument(pub Label, pub Type);
 
 pub type VReg = u64;
