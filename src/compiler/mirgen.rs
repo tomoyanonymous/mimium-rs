@@ -127,6 +127,11 @@ impl std::fmt::Display for CompileError {
     }
 }
 impl std::error::Error for CompileError {}
+impl From<typing::Error> for CompileError {
+    fn from(value: typing::Error) -> Self {
+        Self(CompileErrorKind::TypingFailure(value.0), value.1)
+    }
+}
 impl ReportableError for CompileError {
     fn get_span(&self) -> std::ops::Range<usize> {
         self.1.clone()
@@ -249,22 +254,34 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
 
             let mut binds = ids
                 .iter()
-                .map(|name| {
+                .enumerate()
+                .map(|(idx, name)| {
                     let label = name.0.id.clone();
-                    let a = Argument(Label(label.clone()), Type::Unknown);
-                    let res = (label.clone(), Arc::new(Value::Argument(a)));
+                    let a = Argument(
+                        Label(label.clone()),
+                        name.0.ty.clone().unwrap_or(Type::Unknown),
+                    );
+                    let res = (label.clone(), Arc::new(Value::Argument(idx, Arc::new(a))));
                     res
                 })
                 .collect::<Vec<_>>();
             binds.iter().for_each(|(_, a)| {
-                if let Value::Argument(a) = a.as_ref() {
+                if let Value::Argument(_idx, a) = a.as_ref() {
                     newf.args.push(a.clone());
                 }
             });
+            ctx.reg_count += binds.len() as u64;
             ctx.valenv.extend();
             ctx.valenv.add_bind(&mut binds);
-
-            let _res = eval_expr(&body, ctx);
+            let res_type =
+                infer_type(&body.0, &mut ctx.typeenv).map_err(|e| CompileError::from(e))?;
+            let res = eval_expr(&body, ctx)?;
+            match res_type {
+                Type::Primitive(PType::Unit) | Type::Unknown => {}
+                _ => {
+                    let _ = ctx.push_inst(Instruction::Return(res.clone()));
+                }
+            };
             Ok(Arc::new(Value::Function(fnid)))
         }
         Expr::Feed(_, _) => todo!(),
@@ -283,7 +300,7 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             let bind = (id.id.clone(), Arc::new(Value::FixPoint));
             ctx.fn_label = Some(id.id.clone());
             ctx.valenv.add_bind(&mut vec![bind]);
-            eval_expr(body, ctx);
+            let _ = eval_expr(body, ctx);
             if let Some(then_e) = then {
                 eval_expr(then_e, ctx)
             } else {

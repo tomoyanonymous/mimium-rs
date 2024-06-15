@@ -16,7 +16,7 @@ pub type VReg = u64;
 #[derive(Debug)]
 pub enum Value {
     Global(Global),
-    Argument(Argument),
+    Argument(usize,Arc<Argument>),//index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
     // immidiate mode floating point value
@@ -122,11 +122,19 @@ pub struct Local {
 #[derive(Debug, Default)]
 pub struct Function {
     pub label: Label,
-    pub args: Vec<Argument>,
+    pub args: Vec<Arc<Argument>>,
     // pub locals: Vec<Local>,
     pub upindexes: Vec<UpIndex>,
     // pub upperfn: Option<Arc<Self>>,
     pub body: Vec<Block>,
+}
+impl Function {
+    pub fn new(name: &str, args: &[Arc<Argument>]) -> Self {
+        let mut res = Self::default();
+        res.label = Label(name.to_string());
+        res.args = args.to_vec();
+        res
+    }
 }
 
 #[derive(Debug, Default)]

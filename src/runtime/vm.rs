@@ -22,13 +22,13 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UpIndex {
     Local(usize),   // index of local variables in upper functions
     Upvalue(usize), // index of upvalues in upper functions
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct FuncProto {
     pub nparam: usize,
     pub nret: usize,
@@ -49,8 +49,15 @@ impl FuncProto {
             feedmap: vec![],
         }
     }
+    pub fn add_new_constant(&mut self, cval: RawVal) -> usize {
+        self.constants.binary_search(&cval).unwrap_or_else(|_err| {
+            self.constants.push(cval);
+            self.constants.len() - 1
+        })
+    }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum UpValue {
     Open(Reg),
     Closed(RawVal),
@@ -60,7 +67,7 @@ pub(crate) struct Closure {
     upvalues: Vec<Rc<RefCell<UpValue>>>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
     pub global_fn_table: Vec<FuncProto>,
     pub ext_fun_table: Vec<(String, Type)>,
@@ -93,7 +100,7 @@ fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FeedState {
     pub feed: Option<RawVal>,
     pub delays: Vec<Vec<RawVal>>, //vector of ring buffer

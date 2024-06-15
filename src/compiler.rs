@@ -1,6 +1,11 @@
 pub mod parser;
 pub mod recursecheck;
 pub mod selfconvert;
+pub mod typing;
+// pub mod hirgen;
+pub mod mirgen;
+pub mod bytecodegen;
+
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
@@ -95,7 +100,3 @@ pub fn eval_top(
     })
 }
 
-pub mod typing;
-
-// pub mod hirgen;
-pub mod mirgen;

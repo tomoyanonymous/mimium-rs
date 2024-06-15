@@ -36,7 +36,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Global(_) => todo!(),
-            Value::Argument(v) => write!(f, "{}", v.0),
+            Value::Argument(_,v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
             Value::Float(n) => write!(f, "float {n}"),
             Value::Integer(i) => write!(f, "int {i}"),
