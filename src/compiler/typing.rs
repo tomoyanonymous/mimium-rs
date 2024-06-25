@@ -284,7 +284,12 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let callee_t = infer_vec(callee, ctx)?;
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, Box::new(res_t), None);
-            ctx.unify_types(fnl, fntype)
+            let restype = ctx.unify_types(fnl, fntype)?;
+            if let Type::Function(_, r, _) = restype{
+                Ok(*r)
+            }else{
+                unreachable!();
+            }
         }
         Expr::If(cond, then, opt_else) => {
             let condt = infer_type(&cond.0, ctx)?;

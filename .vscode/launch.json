@@ -57,7 +57,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--emit-bytecode", "test/mmm/mirtest.mmm"],
+            "args": ["--emit-bytecode", "test/mmm/mir_counter.mmm"],
             "cwd": "${workspaceFolder}"
         },
         {

@@ -1,3 +1,4 @@
+use super::selfconvert;
 use super::typing::{self, infer_type, InferContext};
 
 use std::default;
@@ -140,7 +141,14 @@ impl ReportableError for CompileError {
 
 pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
     let mut ctx = Context::new();
-    let _res = eval_expr(&src, &mut ctx).map_err(|e| Box::new(e) as Box<dyn ReportableError>)?;
+    let expr2 = selfconvert::convert_self_top(src).map_err(|e| {
+        let eb: Box<dyn ReportableError> = Box::new(e);
+        eb
+    })?;
+    let _res = eval_expr(&expr2, &mut ctx).map_err(|e| {
+        let eb: Box<dyn ReportableError> = Box::new(e);
+        eb
+    })?;
     Ok(ctx.program)
 }
 // fn load_new_rawv(rawv: RawVal, func: &mut FuncProto) -> Result<u8, CompileError> {
@@ -284,7 +292,9 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             };
             Ok(Arc::new(Value::Function(fnid)))
         }
-        Expr::Feed(_, _) => todo!(),
+        Expr::Feed(id,expr) => {
+            
+        },
         Expr::Let(id, body, then) => {
             ctx.valenv.extend();
             ctx.typeenv.env.extend();
@@ -303,10 +313,10 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             ctx.typeenv.env.extend();
             let bind = (id.id.clone(), Arc::new(Value::FixPoint));
             let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
-            
+
             ctx.fn_label = Some(id.id.clone());
             ctx.valenv.add_bind(&mut vec![bind]);
-            
+
             ctx.typeenv.env.add_bind(&mut vec![(id.id.clone(), bodyt)]);
             let _ = eval_expr(body, ctx)?;
             if let Some(then_e) = then {
