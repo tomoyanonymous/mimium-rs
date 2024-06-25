@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::mir::{self, Mir, VReg};
 use crate::runtime::vm;
 use crate::runtime::vm::bytecode::Reg;
+use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
@@ -12,7 +13,7 @@ struct VStack(Reg);
 impl VStack {
     pub fn push(&mut self) -> Reg {
         self.0 += 1;
-        self.0
+        self.0 - 1
     }
     pub fn pop(&mut self) -> Reg {
         self.0 -= 1;
@@ -23,7 +24,7 @@ impl VStack {
         self.0
     }
     pub fn get_top(&self) -> Reg {
-        self.0
+        self.0 - 1 
     }
 }
 
@@ -53,13 +54,10 @@ impl ByteCodeGenerator {
     fn get_value(&mut self, v: &Arc<mir::Value>) -> Reg {
         match v.as_ref() {
             mir::Value::Global(_) => todo!(),
-            mir::Value::Argument(idx,_arg) => {
-                *idx as Reg
-            },
+            mir::Value::Argument(idx, _arg) => *idx as Reg,
             mir::Value::Register(vreg) => {
-                let reg = self.vstack.pop() as Reg;
-                self.vreg_map.insert(*vreg, reg);
-                reg
+                //todo: consolidate infinite register
+                *vreg as Reg
             }
             mir::Value::Float(_) => todo!(),
             mir::Value::Integer(_) => todo!(),
@@ -105,7 +103,7 @@ impl ByteCodeGenerator {
             mir::Instruction::GetState(_) => todo!(),
             mir::Instruction::SetState(_) => todo!(),
             mir::Instruction::JmpIf(_, _, _) => todo!(),
-            mir::Instruction::Return(_) => todo!(),
+            mir::Instruction::Return(v) => VmInstruction::Return(self.get_value(v), 1),
             mir::Instruction::AddF(v1, v2) => {
                 let (dst, r1, r2) = self.get_binop(v1, v2);
                 VmInstruction::AddF(dst, r1, r2)
@@ -129,7 +127,7 @@ impl ByteCodeGenerator {
         let nargs = mirfunc.args.len();
         let nret = 1;
         let mut func = vm::FuncProto::new(nargs, nret);
-
+        self.vstack.0 += nargs as Reg;
         mirfunc.body.iter().for_each(|block| {
             block.0.iter().for_each(|inst| {
                 let newinst = self.emit_instruction(&mut func, inst);
@@ -150,21 +148,32 @@ impl ByteCodeGenerator {
     }
 }
 
+pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+    let mut generator = ByteCodeGenerator::default();
+    Ok(generator.generate(mir))
+}
+
 mod test {
 
-    use mir::{Label};
     use crate::types::Type;
+    use mir::Label;
 
     use super::*;
     #[test]
     fn build() {
         let mut src = mir::Mir::default();
-        let arg = Arc::new(mir::Argument(Label("hoge".to_string()),Type::Unknown));
+        let arg = Arc::new(mir::Argument(Label("hoge".to_string()), Type::Unknown));
         let mut func = mir::Function::new("test", &[arg.clone()]);
         let mut block = mir::Block::default();
         block.0.push(mir::Instruction::Integer(1));
-        let resint = Arc::new(mir::Value::Register(0));
-        block.0.push(mir::Instruction::AddF(Arc::new(mir::Value::Argument(0,arg)),resint));
+        let resint = Arc::new(mir::Value::Register(1));
+        block.0.push(mir::Instruction::AddF(
+            Arc::new(mir::Value::Argument(0, arg)),
+            resint,
+        ));
+        block
+            .0
+            .push(mir::Instruction::Return(Arc::new(mir::Value::Register(2))));
         func.body = vec![block];
         src.functions.push(func);
         let mut generator = ByteCodeGenerator::default();
@@ -172,16 +181,14 @@ mod test {
 
         let mut answer = vm::Program::default();
         let mut main = vm::FuncProto::new(1, 1);
-        
+
         main.constants.push(1);
         main.bytecodes = vec![
             VmInstruction::MoveConst(1, 0),
             VmInstruction::AddF(2, 0, 1),
-            VmInstruction::Return(2, 1)
+            VmInstruction::Return(2, 1),
         ];
         answer.global_fn_table.push(main);
-        assert_eq!(res,answer);
-
-
+        assert_eq!(res, answer);
     }
 }

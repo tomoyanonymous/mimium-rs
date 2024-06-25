@@ -2,6 +2,7 @@
 use clap::Parser;
 
 use mimium_rs::ast_interpreter;
+use mimium_rs::compiler::emit_bytecode;
 use mimium_rs::utils::{error::report, fileloader};
 use mimium_rs::{
     compiler::{emit_mir, eval_top},
@@ -16,6 +17,8 @@ pub struct Args {
     pub file: Option<String>,
     #[arg(long, default_value_t = false)]
     pub emit_mir: bool,
+    #[arg(long, default_value_t = false)]
+    pub emit_bytecode: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +35,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         report(&content, fullpath, &e);
                     }
                 }
-            } else {
+            } else if args.emit_bytecode{
+                println!("Filename: {}", fullpath.display());
+                match emit_bytecode(&content.clone()) {
+                    Ok(prog) => println!("{prog}"),
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
+                }
+            } else{
                 match eval_top(content.clone(), &mut global_ctx) {
                     Ok(v) => {
                         println!("Filename: {}", fullpath.display());

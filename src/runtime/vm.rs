@@ -1,6 +1,4 @@
-use std::{
-    cell::RefCell, cmp::Ordering, collections::HashMap, hash::Hash, rc::Rc, sync::Arc, sync::Mutex,
-};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
 
 pub mod bytecode;
 use bytecode::*;
@@ -72,6 +70,14 @@ pub struct Program {
     pub global_fn_table: Vec<FuncProto>,
     pub ext_fun_table: Vec<(String, Type)>,
     pub ext_cls_table: Vec<(String, Type)>,
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}\n", self.global_fn_table)
+            .and(write!(f, "ext_fun:\n{:?}\n", self.ext_fun_table))
+            .and(write!(f, "ext_cls:\n{:?}", self.ext_cls_table))
+    }
 }
 
 macro_rules! binop {

@@ -287,8 +287,11 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Feed(_, _) => todo!(),
         Expr::Let(id, body, then) => {
             ctx.valenv.extend();
+            ctx.typeenv.env.extend();
             let bodyv = eval_expr(body, ctx)?;
+            let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
             ctx.valenv.add_bind(&mut vec![(id.id.clone(), bodyv)]);
+            ctx.typeenv.env.add_bind(&mut vec![(id.id.clone(), bodyt)]);
             if let Some(then_e) = then {
                 eval_expr(then_e, ctx)
             } else {
@@ -297,10 +300,15 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         }
         Expr::LetRec(id, body, then) => {
             ctx.valenv.extend();
+            ctx.typeenv.env.extend();
             let bind = (id.id.clone(), Arc::new(Value::FixPoint));
+            let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
+            
             ctx.fn_label = Some(id.id.clone());
             ctx.valenv.add_bind(&mut vec![bind]);
-            let _ = eval_expr(body, ctx);
+            
+            ctx.typeenv.env.add_bind(&mut vec![(id.id.clone(), bodyt)]);
+            let _ = eval_expr(body, ctx)?;
             if let Some(then_e) = then {
                 eval_expr(then_e, ctx)
             } else {

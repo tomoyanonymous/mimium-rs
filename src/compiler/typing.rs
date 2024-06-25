@@ -5,12 +5,13 @@ use crate::utils::{
     error::ReportableError,
     metadata::{Span, WithMeta},
 };
+use crate::{function, number, numeric};
 use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrorKind {
-    TypeMismatch,
+    TypeMismatch(Type, Type),
     CircularType,
     IndexOutOfRange(u16, u16),
     IndexForNonTuple,
@@ -23,7 +24,7 @@ pub struct Error(pub ErrorKind, pub Span);
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            ErrorKind::TypeMismatch => write!(f, "Type Mismatch"),
+            ErrorKind::TypeMismatch(e, a) => write!(f, "Type Mismatch, between {e} and {a}"),
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::IndexOutOfRange(len, idx) => write!(
                 f,
@@ -61,11 +62,18 @@ pub struct InferContext {
 
 impl InferContext {
     pub fn new() -> Self {
-        Self {
+        let mut res = Self {
             interm_idx: 0,
             subst_map: HashMap::<i64, Type>::new(),
             env: Environment::<Type>::new(),
-        }
+        };
+        res.env.extend();
+        Self::register_intrinsics(&mut res.env);
+        res
+    }
+    fn register_intrinsics(env: &mut Environment<Type>) {
+        let fnty = function!(vec![numeric!(), numeric!()], numeric!());
+        env.add_bind(&mut vec![("add".to_string(), fnty)]);
     }
     pub fn gen_intermediate_type(&mut self) -> Type {
         let res = Type::Intermediate(self.interm_idx);
@@ -136,11 +144,7 @@ impl InferContext {
                     }
                 }
             }
-            (Type::Intermediate(i), t) => {
-                self.subst_map.insert(i, t.clone());
-                Ok(t)
-            }
-            (t, Type::Intermediate(i)) => {
+            (Type::Intermediate(i), t) | (t, Type::Intermediate(i)) => {
                 self.subst_map.insert(i, t.clone());
                 Ok(t)
             }
@@ -166,7 +170,7 @@ impl InferContext {
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
-            (_p1, _p2) => Err(Error(ErrorKind::TypeMismatch, 0..0)), //todo:span
+            (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
         }
     }
 }
@@ -222,20 +226,21 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             }
         }
         Expr::Lambda(p, rtype, body) => {
-            let mut c = ctx.clone();
-            let mut infer_params = |e: &Vec<WithMeta<TypedId>>| {
-                e.iter()
-                    .map(|WithMeta(id, _s)| id.ty.clone().unwrap_or(c.gen_intermediate_type()))
-                    .collect()
-            };
-
-            let bty = if let Some(r) = rtype {
+            ctx.env.extend();
+            let ptypes: Vec<Type> = p
+                .iter()
+                .map(|WithMeta(id, _s)| {
+                    let pt = id.ty.clone().unwrap_or(ctx.gen_intermediate_type());
+                    ctx.env.add_bind(&mut vec![(id.id.clone(), pt.clone())]);
+                    pt
+                })
+                .collect();            let bty = if let Some(r) = rtype {
                 let bty = infer_type(&body.0, ctx)?;
                 ctx.unify_types(r.clone(), bty)?
             } else {
                 infer_type(&body.0, ctx)?
             };
-            Ok(Type::Function(infer_params(p), Box::new(bty), None))
+            Ok(Type::Function(ptypes, Box::new(bty), None))
         }
         Expr::Let(id, body, then) => {
             let c = ctx;
@@ -285,13 +290,14 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let condt = infer_type(&cond.0, ctx)?;
             let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
             let thent = infer_type(&then.0, ctx)?;
-            let elset =
-                opt_else.clone().map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))?;
+            let elset = opt_else
+                .clone()
+                .map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))?;
             ctx.unify_types(thent, elset)
         }
-        Expr::Block(expr) => {
-            expr.clone().map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx))
-        }
+        Expr::Block(expr) => expr
+            .clone()
+            .map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(&e.0, ctx)),
         _ => {
             // todo!();
             Ok(Type::Primitive(PType::Unit))

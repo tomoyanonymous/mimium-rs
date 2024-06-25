@@ -36,7 +36,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Global(_) => todo!(),
-            Value::Argument(_,v) => write!(f, "{}", v.0),
+            Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
             Value::Float(n) => write!(f, "float {n}"),
             Value::Integer(i) => write!(f, "int {i}"),
@@ -73,7 +73,7 @@ impl std::fmt::Display for Instruction {
             Instruction::GetState(_) => todo!(),
             Instruction::SetState(_) => todo!(),
             Instruction::JmpIf(_, _, _) => todo!(),
-            Instruction::Return(_) => todo!(),
+            Instruction::Return(a) => write!(f, "ret {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),
             Instruction::SubF(a, b) => write!(f, "subf {} {}", *a, *b),
             Instruction::MulF(a, b) => write!(f, "mulf {} {}", *a, *b),

@@ -67,7 +67,7 @@ impl ReportableError for Error {
 }
 
 use crate::{
-    ast, ast_interpreter, mir::Mir, types::Type, utils::{
+    ast, ast_interpreter, mir::Mir, runtime::vm, types::Type, utils::{
         error::ReportableError,
         metadata::{Span, WithMeta},
     }
@@ -87,6 +87,10 @@ pub fn emit_mir(src: &String)->Result<Mir,Vec<Box<dyn ReportableError>>>{
         let bres = e as Box<dyn ReportableError>;
         vec![bres]
     })
+}
+pub fn emit_bytecode(src:&String)->Result<vm::Program,Vec<Box<dyn ReportableError>>>{
+    let mir  = emit_mir(src)?;  
+    bytecodegen::gen_bytecode(mir)
 }
 
 pub fn eval_top(

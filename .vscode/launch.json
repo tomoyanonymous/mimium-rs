@@ -45,7 +45,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug mir emitter 'mimium-rs'",
+            "name": "Debug bc emitter 'mimium-rs'",
             "cargo": {
                 "args": [
                     "build",
@@ -57,7 +57,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--emit-mir", "test/mmm/mirtest.mmm"],
+            "args": ["--emit-bytecode", "test/mmm/mirtest.mmm"],
             "cwd": "${workspaceFolder}"
         },
         {
