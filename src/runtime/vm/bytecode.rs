@@ -24,6 +24,10 @@ pub enum Instruction {
     //destination,source
     GetUpValue(Reg, Reg),
     SetUpValue(Reg, Reg),
+    //call internal state over time, destination,source
+    GetState(Reg),
+    SetState(Reg),
+    ShiftStatePos(i16),
 
     //destination, number of feed(because feed may want to return tuple)
     Feed(Reg, u8),
@@ -140,6 +144,9 @@ impl std::fmt::Display for Instruction {
             Instruction::CastFtoI(dst, src) => write!(f, "f2i     {} {}", dst, src),
             Instruction::CastItoF(dst, src) => write!(f, "i2f     {} {}", dst, src),
             Instruction::CastItoB(dst, src) => write!(f, "i2b     {} {}", dst, src),
+            Instruction::GetState(dst) => write!(f, "getstate {dst}"),
+            Instruction::SetState(src) => write!(f, "setstate {src}"),
+            Instruction::ShiftStatePos(_) => todo!(),
         }
     }
 }

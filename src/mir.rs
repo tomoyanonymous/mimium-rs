@@ -28,6 +28,8 @@ pub enum Value {
     ExtFunction(Label),
     Closure(Arc<Function>),
     FixPoint,
+    //internal state
+    State,
     None, //??
 }
 

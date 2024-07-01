@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mir::{self, Mir, VReg};
-use crate::runtime::vm;
 use crate::runtime::vm::bytecode::Reg;
+use crate::runtime::vm::{self, bytecode};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
@@ -24,7 +24,7 @@ impl VStack {
         self.0
     }
     pub fn get_top(&self) -> Reg {
-        self.0 - 1 
+        self.0 - 1
     }
 }
 
@@ -51,7 +51,7 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 }
 
 impl ByteCodeGenerator {
-    fn get_value(&mut self, v: &Arc<mir::Value>) -> Reg {
+    fn get_value(&mut self, func: &mut vm::FuncProto, v: &Arc<mir::Value>) -> Reg {
         match v.as_ref() {
             mir::Value::Global(_) => todo!(),
             mir::Value::Argument(idx, _arg) => *idx as Reg,
@@ -66,12 +66,22 @@ impl ByteCodeGenerator {
             mir::Value::ExtFunction(_) => todo!(),
             mir::Value::Closure(_) => todo!(),
             mir::Value::FixPoint => todo!(),
+            mir::Value::State => {
+                let dst = self.vstack.push();
+                func.bytecodes.push(bytecode::Instruction::GetState(dst));
+                dst
+            }
             mir::Value::None => todo!(),
         }
     }
-    fn get_binop(&mut self, v1: &Arc<mir::Value>, v2: &Arc<mir::Value>) -> (Reg, Reg, Reg) {
-        let r1 = self.get_value(v1);
-        let r2 = self.get_value(v2);
+    fn get_binop(
+        &mut self,
+        funcproto: &mut vm::FuncProto,
+        v1: &Arc<mir::Value>,
+        v2: &Arc<mir::Value>,
+    ) -> (Reg, Reg, Reg) {
+        let r1 = self.get_value(funcproto, v1);
+        let r2 = self.get_value(funcproto, v2);
         let dst = self.vstack.push();
         (dst, r1, r2)
     }
@@ -103,27 +113,27 @@ impl ByteCodeGenerator {
             mir::Instruction::GetState(_) => todo!(),
             mir::Instruction::SetState(_) => todo!(),
             mir::Instruction::JmpIf(_, _, _) => todo!(),
-            mir::Instruction::Return(v) => VmInstruction::Return(self.get_value(v), 1),
+            mir::Instruction::Return(v) => VmInstruction::Return(self.get_value(funcproto, v), 1),
             mir::Instruction::AddF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(v1, v2);
+                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::AddF(dst, r1, r2)
             }
             mir::Instruction::SubF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(v1, v2);
+                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::SubF(dst, r1, r2)
             }
             mir::Instruction::MulF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(v1, v2);
+                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::MulF(dst, r1, r2)
             }
             mir::Instruction::DivF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(v1, v2);
+                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::DivF(dst, r1, r2)
             }
             _ => todo!(),
         }
     }
-    fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> vm::FuncProto {
+    fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
         let nargs = mirfunc.args.len();
         let nret = 1;
         let mut func = vm::FuncProto::new(nargs, nret);
@@ -134,7 +144,7 @@ impl ByteCodeGenerator {
                 func.bytecodes.push(newinst);
             });
         });
-        func
+        (mirfunc.label.0.clone(), func)
     }
     pub fn generate(&mut self, mir: Mir) -> vm::Program {
         let mut program = vm::Program::default();
@@ -188,7 +198,7 @@ mod test {
             VmInstruction::AddF(2, 0, 1),
             VmInstruction::Return(2, 1),
         ];
-        answer.global_fn_table.push(main);
+        answer.global_fn_table.push(("main".to_string(), main));
         assert_eq!(res, answer);
     }
 }

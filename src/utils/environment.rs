@@ -16,6 +16,7 @@ pub struct Error(String);
 pub enum LookupRes<T: Clone> {
     Local(T),
     UpValue(T),
+    Global(T),
     None,
 }
 impl<T: Clone> Environment<T> {
@@ -46,15 +47,12 @@ impl<T: Clone> Environment<T> {
             .iter()
             .enumerate()
             .find(|(level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
-            .map(|(level, vec)| {
-                vec.iter()
-                    .find(|(n, _)| n == name)
-                    .map(|(_, v)| (level,v))
-            })
+            .map(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
             .flatten()
         {
             None => LookupRes::None,
             Some((0, e)) => LookupRes::Local(e),
+            Some((level, e)) if level == self.0.len() - 1 => LookupRes::Global(e),
             Some((_, e)) => LookupRes::UpValue(e),
         }
     }

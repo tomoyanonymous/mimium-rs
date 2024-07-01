@@ -48,6 +48,7 @@ fn closuretest() {
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         feedmap: vec![],
+        state_size: 0,
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -65,6 +66,7 @@ fn closuretest() {
         bytecodes: inner_insts2,
         constants: vec![1u64, 2], // 1, position of inner in global table
         feedmap: vec![],
+        state_size: 0,
     };
     let inner_inst3 = vec![
         // no stack in the entry
@@ -93,8 +95,13 @@ fn closuretest() {
         bytecodes: inner_inst3,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
         feedmap: vec![],
+        state_size: 0,
     };
-    let global_fn_table = vec![main_f, makecounter_f, inner_f];
+    let global_fn_table = vec![
+        ("main".to_string(), main_f),
+        ("makecounter".to_string(), makecounter_f),
+        ("inner".to_string(), inner_f),
+    ];
     let mut machine = Machine::new();
 
     machine.install_extern_fn("lib_printi".to_string(), lib_printi);
@@ -126,8 +133,11 @@ fn rust_closure_test() {
         bytecodes: inner_insts,
         constants: vec![0u64, 4u64], //cls, int 4
         feedmap: vec![],
+        state_size: 0,
     };
-    let global_fn_table = vec![main_f];
+    let fns = vec![main_f];
+    let fnames = vec!["main".to_string()];
+    let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
     // let mut count = 0;
     let cls = Arc::new(Mutex::new(|m: &mut Machine| {
         let v = m.get_top();

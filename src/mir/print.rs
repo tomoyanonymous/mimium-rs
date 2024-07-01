@@ -45,6 +45,7 @@ impl std::fmt::Display for Value {
             Value::ExtFunction(_) => todo!(),
             Value::Closure(_) => todo!(),
             Value::FixPoint => write!(f, "fixpoint"),
+            Value::State => write!(f, "internal state"),
             Value::None => write!(f, "none"),
         }
     }

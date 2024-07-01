@@ -18,6 +18,7 @@ pub struct Machine {
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(String, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
+    intenral_states: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,6 +36,7 @@ pub struct FuncProto {
     pub constants: Vec<RawVal>,
     // feedvalues are mapped in this vector
     pub feedmap: Vec<usize>,
+    pub state_size: u64,
 }
 impl FuncProto {
     pub fn new(nparam: usize, nret: usize) -> Self {
@@ -45,6 +47,7 @@ impl FuncProto {
             bytecodes: vec![],
             constants: vec![],
             feedmap: vec![],
+            state_size: 0,
         }
     }
     pub fn add_new_constant(&mut self, cval: RawVal) -> usize {
@@ -67,9 +70,17 @@ pub(crate) struct Closure {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
-    pub global_fn_table: Vec<FuncProto>,
+    pub global_fn_table: Vec<(String, FuncProto)>,
     pub ext_fun_table: Vec<(String, Type)>,
     pub ext_cls_table: Vec<(String, Type)>,
+}
+impl Program {
+    pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
+        self.global_fn_table
+            .iter()
+            .find(|(label, _f)| label.as_str() == "dsp")
+            .map(|(_, f)| f)
+    }
 }
 
 impl std::fmt::Display for Program {
@@ -123,6 +134,7 @@ impl Machine {
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
+            intenral_states: vec![],
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -196,7 +208,7 @@ impl Machine {
         cls_i: Option<usize>,
         feed_state: &mut Option<&mut FeedState>,
     ) -> ReturnCode {
-        let func = &prog.global_fn_table[func_i];
+        let (fname, func) = &prog.global_fn_table[func_i];
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
         if let Some(state) = feed_state {
@@ -283,7 +295,7 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    let f_proto = &prog.global_fn_table[fn_proto_pos];
+                    let (name, f_proto) = &prog.global_fn_table[fn_proto_pos];
 
                     let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
                         .upindexes
@@ -483,6 +495,9 @@ impl Machine {
                     dst as i64,
                     self.to_value::<bool>(self.get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
+                Instruction::GetState(_) => todo!(),
+                Instruction::SetState(_) => todo!(),
+                Instruction::ShiftStatePos(_) => todo!(),
             }
             pcounter += 1;
         }

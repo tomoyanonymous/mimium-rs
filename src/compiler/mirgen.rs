@@ -17,15 +17,7 @@ use crate::runtime::{vm, vm::bytecode::*, vm::Program};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
-#[derive(Clone, Debug)]
-enum Val {
-    Register(Reg),
-    Closure(Reg, Type),
-    Function(u8),
-    ExternalFun(u8),
-    ExternalClosure(u8),
-    None,
-}
+
 #[derive(Debug)]
 pub struct Context {
     pub typeenv: typing::InferContext,
@@ -196,9 +188,10 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Var(v, _time) => {
             match ctx.valenv.lookup_cls(v) {
                 LookupRes::Local(v) => Ok(v.clone()),
-                LookupRes::UpValue(v) => {
+                LookupRes::UpValue(v) | LookupRes::Global(v) => {
                     todo!();
                 }
+
                 LookupRes::None => {
                     // let t = infer_type(e, &mut ctx.typeenv).expect("type infer error");
                     // program.ext_cls_table.push((v.clone(),t));
@@ -292,9 +285,14 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             };
             Ok(Arc::new(Value::Function(fnid)))
         }
-        Expr::Feed(id,expr) => {
-            
-        },
+        Expr::Feed(id, expr) => {
+            let res = Arc::new(Value::State);
+            ctx.valenv.extend();
+            ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
+            let _retv = eval_expr(expr, ctx)?;
+            // ctx.push_inst(Instruction::SetState(retv));
+            Ok(res)
+        }
         Expr::Let(id, body, then) => {
             ctx.valenv.extend();
             ctx.typeenv.env.extend();
