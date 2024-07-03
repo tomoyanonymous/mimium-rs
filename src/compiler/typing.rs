@@ -73,7 +73,13 @@ impl InferContext {
     }
     fn register_intrinsics(env: &mut Environment<Type>) {
         let fnty = function!(vec![numeric!(), numeric!()], numeric!());
-        env.add_bind(&mut vec![("add".to_string(), fnty)]);
+        let mut binds = vec![
+            ("add".to_string(), fnty.clone()),
+            ("sub".to_string(), fnty.clone()),
+            ("mul".to_string(), fnty.clone()),
+            ("div".to_string(), fnty.clone()),
+        ];
+        env.add_bind(&mut binds);
     }
     pub fn gen_intermediate_type(&mut self) -> Type {
         let res = Type::Intermediate(self.interm_idx);
@@ -234,7 +240,8 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
                     ctx.env.add_bind(&mut vec![(id.id.clone(), pt.clone())]);
                     pt
                 })
-                .collect();            let bty = if let Some(r) = rtype {
+                .collect();
+            let bty = if let Some(r) = rtype {
                 let bty = infer_type(&body.0, ctx)?;
                 ctx.unify_types(r.clone(), bty)?
             } else {
@@ -285,9 +292,9 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, Box::new(res_t), None);
             let restype = ctx.unify_types(fnl, fntype)?;
-            if let Type::Function(_, r, _) = restype{
+            if let Type::Function(_, r, _) = restype {
                 Ok(*r)
-            }else{
+            } else {
                 unreachable!();
             }
         }
