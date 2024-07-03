@@ -201,7 +201,7 @@ mod test {
             VmInstruction::AddF(2, 0, 1),
             VmInstruction::Return(2, 1),
         ];
-        answer.global_fn_table.push(("main".to_string(), main));
+        answer.global_fn_table.push(("test".to_string(), main));
         assert_eq!(res, answer);
     }
 }
