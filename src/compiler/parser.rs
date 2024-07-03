@@ -263,67 +263,73 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
     let lvar = lvar_parser();
-    let fnparams = lvar
-        .clone()
-        .map_with_span(|e, s| WithMeta(e, s))
-        .separated_by(just(Token::Comma))
-        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-        .labelled("fnparams");
     let blockstart = just(Token::BlockBegin)
         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated());
     let blockend = just(Token::LineBreak)
         .or(just(Token::SemiColon))
         .repeated()
         .ignore_then(just(Token::BlockEnd));
-    let function_s = just(Token::Function)
-        .ignore_then(lvar.clone())
-        .then(fnparams.clone())
-        .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
-        .then(
-            expr.clone()
-                .delimited_by(blockstart.clone(), blockend.clone()),
-        )
-        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-        .then(expr.clone().map(|e| Box::new(e)).or_not())
-        .map_with_span(|((((fname, ids), r_type), block), then), s| {
-            WithMeta(
-                Expr::LetRec(
-                    fname,
-                    Box::new(WithMeta(
-                        Expr::Lambda(ids, r_type, Box::new(block)),
-                        s.clone(),
-                    )),
-                    then,
-                ),
-                s,
-            )
-        })
-        .labelled("function decl");
-    let macro_s = just(Token::Macro)
-        .ignore_then(lvar)
-        .then(fnparams.clone())
-        .then(
-            expr.clone()
-                .delimited_by(blockstart.clone(), blockend.clone())
-                .map(|WithMeta(e, s)| WithMeta(Expr::Bracket(Box::new(WithMeta(e, s.clone()))), s)),
-        )
-        .then(expr.clone().map(|e| Box::new(e)).or_not())
-        .map_with_span(|(((fname, ids), block), then), s| {
-            WithMeta(
-                Expr::LetRec(
-                    fname,
-                    Box::new(WithMeta(
-                        Expr::Lambda(ids, None, Box::new(block)),
-                        s.clone(),
-                    )),
-                    then,
-                ),
-                s,
-            )
-        })
-        .labelled("macro definition");
+    let fnparams = lvar
+        .clone()
+        .map_with_span(|e, s| WithMeta(e, s))
+        .separated_by(just(Token::Comma))
+        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+        .labelled("fnparams");
 
-    function_s.or(macro_s).or(expr_parser()).then_ignore(end())
+    let stmt = recursive(|stmt| {
+        let function_s = just(Token::Function)
+            .ignore_then(lvar.clone())
+            .then(fnparams.clone())
+            .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
+            .then(
+                expr.clone()
+                    .delimited_by(blockstart.clone(), blockend.clone()),
+            )
+            .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+            .then(stmt.clone().map(|e| Box::new(e)).or_not())
+            .map_with_span(|((((fname, ids), r_type), block), then), s| {
+                WithMeta(
+                    Expr::LetRec(
+                        fname,
+                        Box::new(WithMeta(
+                            Expr::Lambda(ids, r_type, Box::new(block)),
+                            s.clone(),
+                        )),
+                        then,
+                    ),
+                    s,
+                )
+            })
+            .labelled("function decl");
+        let macro_s = just(Token::Macro)
+            .ignore_then(lvar)
+            .then(fnparams.clone())
+            .then(
+                expr.clone()
+                    .delimited_by(blockstart.clone(), blockend.clone())
+                    .map(|WithMeta(e, s)| {
+                        WithMeta(Expr::Bracket(Box::new(WithMeta(e, s.clone()))), s)
+                    }),
+            )
+            .then(expr.clone().map(|e| Box::new(e)).or_not())
+            .map_with_span(|(((fname, ids), block), then), s| {
+                WithMeta(
+                    Expr::LetRec(
+                        fname,
+                        Box::new(WithMeta(
+                            Expr::Lambda(ids, None, Box::new(block)),
+                            s.clone(),
+                        )),
+                        then,
+                    ),
+                    s,
+                )
+            })
+            .labelled("macro definition");
+
+        function_s.or(macro_s).or(expr_parser()).then_ignore(end())
+    });
+    stmt
     // expr_parser().then_ignore(end())
 }
 
