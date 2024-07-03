@@ -16,7 +16,7 @@ pub type VReg = u64;
 #[derive(Debug)]
 pub enum Value {
     Global(Global),
-    Argument(usize,Arc<Argument>),//index,
+    Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
     // immidiate mode floating point value
@@ -129,6 +129,7 @@ pub struct Function {
     pub upindexes: Vec<UpIndex>,
     // pub upperfn: Option<Arc<Self>>,
     pub body: Vec<Block>,
+    pub state_size: u64,
 }
 impl Function {
     pub fn new(name: &str, args: &[Arc<Argument>]) -> Self {

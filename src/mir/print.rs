@@ -45,7 +45,7 @@ impl std::fmt::Display for Value {
             Value::ExtFunction(_) => todo!(),
             Value::Closure(_) => todo!(),
             Value::FixPoint => write!(f, "fixpoint"),
-            Value::State => write!(f, "internal state"),
+            Value::State => write!(f, "state"),
             Value::None => write!(f, "none"),
         }
     }
@@ -71,8 +71,8 @@ impl std::fmt::Display for Instruction {
             Instruction::SetUpValue(_, _) => todo!(),
             Instruction::PushStateOffset(_) => todo!(),
             Instruction::PopStateOffset(_) => todo!(),
-            Instruction::GetState(_) => todo!(),
-            Instruction::SetState(_) => todo!(),
+            Instruction::GetState(v) => write!(f, "getstate {}", *v),
+            Instruction::SetState(v) => write!(f, "setstate {}", *v),
             Instruction::JmpIf(_, _, _) => todo!(),
             Instruction::Return(a) => write!(f, "ret {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

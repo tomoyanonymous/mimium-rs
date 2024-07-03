@@ -286,12 +286,15 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             Ok(Arc::new(Value::Function(fnid)))
         }
         Expr::Feed(id, expr) => {
-            let res = Arc::new(Value::State);
+            ctx.reg_count += 1;
+            let res = Arc::new(Value::Register(ctx.reg_count));
             ctx.valenv.extend();
+            let _reg = ctx.push_inst(Instruction::GetState(res.clone()));
             ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
-            let _retv = eval_expr(expr, ctx)?;
-            // ctx.push_inst(Instruction::SetState(retv));
-            Ok(res)
+            let retv = eval_expr(expr, ctx)?;
+            ctx.push_inst(Instruction::SetState(retv.clone()));
+            ctx.get_current_fn().unwrap().state_size += 1;
+            Ok(retv)
         }
         Expr::Let(id, body, then) => {
             ctx.valenv.extend();

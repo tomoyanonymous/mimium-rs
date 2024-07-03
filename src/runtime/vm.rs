@@ -1,5 +1,5 @@
+use crate::mir;
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
-
 pub mod bytecode;
 use bytecode::*;
 
@@ -55,6 +55,20 @@ impl FuncProto {
             self.constants.push(cval);
             self.constants.len() - 1
         })
+    }
+}
+
+impl From<&mir::Function> for FuncProto {
+    fn from(value: &mir::Function) -> Self {
+        Self {
+            nparam: value.args.len().into(),
+            nret: 1,
+            upindexes: vec![],
+            bytecodes: vec![],
+            constants: vec![],
+            feedmap: vec![],
+            state_size: value.state_size,
+        }
     }
 }
 
