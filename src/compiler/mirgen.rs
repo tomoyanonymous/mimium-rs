@@ -1,7 +1,6 @@
-use super::selfconvert;
+use super::{recursecheck, selfconvert};
 use super::typing::{self, infer_type, InferContext};
 
-use std::default;
 use std::sync::Arc;
 // use crate::runtime::vm::bytecode::Instruction;
 // use crate::runtime::vm::{FuncProto, RawVal, UpIndex};
@@ -13,7 +12,6 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
-use crate::runtime::{vm, vm::bytecode::*, vm::Program};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -133,7 +131,8 @@ impl ReportableError for CompileError {
 
 pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
     let mut ctx = Context::new();
-    let expr2 = selfconvert::convert_self_top(src).map_err(|e| {
+    let ast2 = recursecheck::convert_recurse(&src);
+    let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
@@ -274,6 +273,7 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 }
             });
             ctx.reg_count += binds.len() as u64;
+            ctx.typeenv.env.extend();
             ctx.valenv.extend();
             ctx.valenv.add_bind(&mut binds);
             let res_type =
@@ -290,7 +290,6 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Feed(id, expr) => {
             let res = Arc::new(Value::Register(ctx.reg_count));
             // ctx.reg_count += 1;
-            ctx.valenv.extend();
             let _reg = ctx.push_inst(Instruction::GetState(res.clone()));
             ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
             let retv = eval_expr(expr, ctx)?;
@@ -299,8 +298,7 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             Ok(retv)
         }
         Expr::Let(id, body, then) => {
-            ctx.valenv.extend();
-            ctx.typeenv.env.extend();
+            ctx.fn_label = Some(id.id.clone());
             let bodyv = eval_expr(body, ctx)?;
             let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
             ctx.valenv.add_bind(&mut vec![(id.id.clone(), bodyv)]);
@@ -312,8 +310,6 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             }
         }
         Expr::LetRec(id, body, then) => {
-            ctx.valenv.extend();
-            ctx.typeenv.env.extend();
             let bind = (id.id.clone(), Arc::new(Value::FixPoint));
             let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
 

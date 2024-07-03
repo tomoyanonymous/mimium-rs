@@ -1,3 +1,4 @@
 fn dsp(){
-    self + 2.0 + 2.0 - 3.0
+    let res = self + 2.0 + 2.0 - 3.0
+    res
 }

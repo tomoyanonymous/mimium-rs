@@ -2,12 +2,10 @@
 use clap::Parser;
 
 use mimium_rs::ast_interpreter;
-use mimium_rs::compiler::emit_bytecode;
+use mimium_rs::compiler::{emit_ast, emit_bytecode};
+use mimium_rs::utils::miniprint::MiniPrint;
 use mimium_rs::utils::{error::report, fileloader};
-use mimium_rs::{
-    compiler::{emit_mir, interpret_top},
-    repl, runtime,
-};
+use mimium_rs::{compiler::emit_mir, repl, runtime};
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -15,6 +13,8 @@ pub struct Args {
     /// File name
     #[clap(value_parser)]
     pub file: Option<String>,
+    #[arg(long, default_value_t = false)]
+    pub emit_ast: bool,
     #[arg(long, default_value_t = false)]
     pub emit_mir: bool,
     #[arg(long, default_value_t = false)]
@@ -27,7 +27,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.file {
         Some(file) => {
             let (content, fullpath) = fileloader::load(file.clone())?;
-            if args.emit_mir {
+            if args.emit_ast {
+                println!("Filename: {}", fullpath.display());
+                match emit_ast(&content.clone()) {
+                    Ok(ast) => println!("{}", ast.0.simple_print()),
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
+                }
+            } else if args.emit_mir {
                 println!("Filename: {}", fullpath.display());
                 match emit_mir(&content.clone()) {
                     Ok(mir) => println!("{mir}"),

@@ -54,7 +54,7 @@ pub fn run_bytecode_test_multiple(
 ) -> Result<f64, Vec<Box<dyn ReportableError>>> {
     let mut machine = vm::Machine::new();
     let mut ret = 0.0;
-
+    machine.link_functions(bytecodes);
     for i in 0..times {
         ret = run_bytecode_test(&mut machine, bytecodes)?;
         println!("time:{}, res: {}", i, ret)

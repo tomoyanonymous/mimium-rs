@@ -219,12 +219,10 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             }
         }
         Expr::Feed(id, body) => {
-            ctx.env.extend();
             let feedv = ctx.gen_intermediate_type();
             ctx.env.add_bind(&mut vec![(id.clone(), feedv.clone())]);
             let b = infer_type(&body.0, ctx);
             let res = ctx.unify_types(b?, feedv)?;
-            ctx.env.to_outer();
             if res.is_primitive() {
                 Ok(res)
             } else {
@@ -247,6 +245,7 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             } else {
                 infer_type(&body.0, ctx)?
             };
+            ctx.env.to_outer();
             Ok(Type::Function(ptypes, Box::new(bty), None))
         }
         Expr::Let(id, body, then) => {
@@ -254,13 +253,11 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
             let bodyt = infer_type(&body.0, c)?;
             let idt = id.ty.clone().unwrap_or(c.gen_intermediate_type());
             let bodyt_u = c.unify_types(idt, bodyt)?;
-            c.env.extend();
             c.env.add_bind(&mut vec![(id.clone().id, bodyt_u)]);
             let res = match then {
                 Some(e) => infer_type(&e.0, c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
-            c.env.to_outer();
             res
         }
         Expr::LetTuple(_ids, _body, _then) => {
@@ -269,7 +266,6 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
         Expr::LetRec(id, body, then) => {
             let c = ctx;
             let idt = id.clone().ty.unwrap_or(c.gen_intermediate_type());
-            c.env.extend();
             let body_i = c.gen_intermediate_type();
             c.env.add_bind(&mut vec![(id.clone().id, body_i)]);
             let bodyt = infer_type(&body.0, c)?;
@@ -279,7 +275,6 @@ pub fn infer_type(e: &Expr, ctx: &mut InferContext) -> Result<Type, Error> {
                 Some(e) => infer_type(&e.0, c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
-            c.env.to_outer();
             res
         }
         Expr::Var(name, _time) => ctx.env.lookup(&name).map_or(

@@ -455,7 +455,7 @@ impl Machine {
     pub fn install_extern_cls(&mut self, name: String, f: ExtClsType) {
         self.ext_cls_table.push((name, f));
     }
-    fn link_functions(&mut self, prog: &Program) {
+    pub fn link_functions(&mut self, prog: &Program) {
         //link external functions
         prog.ext_fun_table
             .iter()
@@ -489,7 +489,6 @@ impl Machine {
             });
     }
     pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
-        self.link_functions(prog);
         if let Some((_name, func)) = prog.global_fn_table.iter().find(|(name, _)| name == entry) {
             self.internal_states.resize(func.state_size as usize, 0.0);
             // 0 is always base pointer to the main function
@@ -500,7 +499,6 @@ impl Machine {
         }
     }
     pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
-        self.link_functions(prog);
         //internal function table 0 is always mimium_main
         self.internal_states
             .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
