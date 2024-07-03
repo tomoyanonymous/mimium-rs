@@ -83,8 +83,8 @@ impl ByteCodeGenerator {
     ) -> (Reg, Reg, Reg) {
         let r1 = self.get_value(funcproto, v1);
         let r2 = self.get_value(funcproto, v2);
-        let dst = self.vstack.push();
-        (dst, r1, r2)
+        self.vstack.0 += 1;
+        (self.vstack.get_top(), r1, r2)
     }
     fn emit_instruction(
         &mut self,
@@ -111,7 +111,11 @@ impl ByteCodeGenerator {
             mir::Instruction::SetUpValue(_, _) => todo!(),
             mir::Instruction::PushStateOffset(_) => todo!(),
             mir::Instruction::PopStateOffset(_) => todo!(),
-            mir::Instruction::GetState(v) => VmInstruction::GetState(self.get_value(funcproto, v)),
+            mir::Instruction::GetState(v) => {
+                let res = VmInstruction::GetState(self.get_value(funcproto, v));
+                self.vstack.push();
+                res
+            },
             mir::Instruction::SetState(v) => VmInstruction::SetState(self.get_value(funcproto, v)),
             mir::Instruction::JmpIf(_, _, _) => todo!(),
             mir::Instruction::Return(v) => VmInstruction::Return(self.get_value(funcproto, v), 1),
@@ -135,7 +139,6 @@ impl ByteCodeGenerator {
         }
     }
     fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
-
         let mut func = vm::FuncProto::from(mirfunc);
         self.vstack.0 += func.nparam as Reg;
         mirfunc.body.iter().for_each(|block| {

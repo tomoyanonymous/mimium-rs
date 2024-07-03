@@ -238,9 +238,11 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
 
             // let inst =
             match f.as_ref() {
-                Value::Register(p) => Ok(Arc::new(Value::Register(
-                    ctx.push_inst(Instruction::Call(f.clone(), a_regs)),
-                ))),
+                Value::Register(p) => {
+                    let inst = Instruction::Call(f.clone(), a_regs.clone());
+                    ctx.get_current_basicblock().0.push(inst);
+                    Ok(a_regs[0].clone())
+                },
                 Value::Function(i) => Ok(Arc::new(Value::Register(
                     ctx.push_inst(Instruction::Call(f.clone(), a_regs)),
                 ))),
@@ -286,8 +288,8 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             Ok(Arc::new(Value::Function(fnid)))
         }
         Expr::Feed(id, expr) => {
-            ctx.reg_count += 1;
             let res = Arc::new(Value::Register(ctx.reg_count));
+            // ctx.reg_count += 1;
             ctx.valenv.extend();
             let _reg = ctx.push_inst(Instruction::GetState(res.clone()));
             ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);

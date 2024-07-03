@@ -18,7 +18,8 @@ pub struct Machine {
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(String, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
-    intenral_states: Vec<f64>,
+    internal_states: Vec<f64>,
+    state_idx: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -107,16 +108,16 @@ impl std::fmt::Display for Program {
 
 macro_rules! binop {
     ($op:tt,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
-        $self.set_stack($dst as i64, $self.to_value::<$t>(
-            $self.get_as::<$t>($self.get_stack($src1 as i64))
-        $op $self.get_as::<$t>($self.get_stack($src2 as i64))))
+        $self.set_stack($dst as i64, Self::to_value::<$t>(
+            Self::get_as::<$t>($self.get_stack($src1 as i64))
+        $op Self::get_as::<$t>($self.get_stack($src2 as i64))))
     };
 }
 macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
         $self.set_stack($dst as i64,
-            $self.to_value::<$t>(
-            $op $self.get_as::<$t>($self.get_stack($src as i64))))
+            Self::to_value::<$t>(
+            $op Self::get_as::<$t>($self.get_stack($src as i64))))
     };
 }
 
@@ -148,7 +149,8 @@ impl Machine {
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
-            intenral_states: vec![],
+            internal_states: vec![],
+            state_idx: 0,
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -183,10 +185,10 @@ impl Machine {
         res_slice
     }
 
-    fn get_as<T>(&self, v: RawVal) -> T {
+    pub(crate) fn get_as<T>(v: RawVal) -> T {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
-    fn to_value<T>(&self, v: T) -> RawVal {
+    pub(crate) fn to_value<T>(v: T) -> RawVal {
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
     fn call_function<F>(&mut self, func_pos: u8, nargs: u8, nret_req: u8, mut action: F)
@@ -261,7 +263,7 @@ impl Machine {
                 }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
-                    let cls_i = self.get_as::<usize>(addr);
+                    let cls_i = Self::get_as::<usize>(addr);
                     let cls = &self.closures[cls_i];
                     let pos_of_f = cls.fn_proto_pos;
                     let mut feed = feed_state
@@ -276,7 +278,7 @@ impl Machine {
                 Instruction::Call(func, nargs, nret_req) => {
                     // let f = prog.global_fn_table[pos_of_f];
 
-                    let pos_of_f = self.get_as::<usize>(self.get_stack(func as i64));
+                    let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
                     let mut feed = feed_state
                         .as_mut()
                         .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
@@ -338,7 +340,7 @@ impl Machine {
                     });
 
                     let vaddr = self.closures.len() - 1;
-                    self.set_stack(dst as i64, self.to_value(vaddr));
+                    self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Return0 => {
                     return 0;
@@ -402,7 +404,7 @@ impl Machine {
                 }
                 Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
-                    if self.get_as::<bool>(cond_v) {
+                    if Self::get_as::<bool>(cond_v) {
                         pcounter = (pcounter as isize + offset as isize) as usize;
                     }
                 }
@@ -427,19 +429,25 @@ impl Machine {
                 Instruction::AbsF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).abs()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).abs(),
+                        ),
                     );
                 }
                 Instruction::SinF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).sin()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).sin(),
+                        ),
                     );
                 }
                 Instruction::CosF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).cos()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).cos(),
+                        ),
                     );
                 }
                 Instruction::PowF(_, _, _) => todo!(),
@@ -465,7 +473,9 @@ impl Machine {
                 Instruction::AbsI(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<i64>(self.get_as::<i64>(self.get_stack(src as i64)).abs()),
+                        Self::to_value::<i64>(
+                            Self::get_as::<i64>(self.get_stack(src as i64)).abs(),
+                        ),
                     );
                 }
                 Instruction::PowI(_, _) => todo!(),
@@ -499,18 +509,24 @@ impl Machine {
                 }
                 Instruction::CastFtoI(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<i64>(self.get_as::<f64>(self.get_stack(src as i64)) as i64),
+                    Self::to_value::<i64>(Self::get_as::<f64>(self.get_stack(src as i64)) as i64),
                 ),
                 Instruction::CastItoF(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<f64>(self.get_as::<i64>(self.get_stack(src as i64)) as f64),
+                    Self::to_value::<f64>(Self::get_as::<i64>(self.get_stack(src as i64)) as f64),
                 ),
                 Instruction::CastItoB(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<bool>(self.get_as::<i64>(self.get_stack(src as i64)) != 0),
+                    Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
-                Instruction::GetState(_) => todo!(),
-                Instruction::SetState(_) => todo!(),
+                Instruction::GetState(dst) => {
+                    let v = self.internal_states[self.state_idx];
+                    self.set_stack(dst as i64, Self::to_value(v));
+                }
+                Instruction::SetState(src) => {
+                    let v = self.get_stack(src as i64);
+                    self.internal_states[self.state_idx] = Self::get_as::<f64>(v)
+                }
                 Instruction::ShiftStatePos(_) => todo!(),
             }
             pcounter += 1;
@@ -556,6 +572,10 @@ impl Machine {
             });
 
         //internal function table 0 is always mimium_main
+        self.internal_states
+            .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
+        // 0 is always base pointer to the main function
+        self.base_pointer+=1;
         self.execute(0, &prog, None, &mut None)
     }
 }

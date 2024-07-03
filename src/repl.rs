@@ -1,6 +1,6 @@
 use crate::{
     ast_interpreter::{self, PValue, Value},
-    compiler::{self, eval_top},
+    compiler::{self, interpret_top},
     utils::error,
     utils::miniprint::MiniPrint,
 };
@@ -63,7 +63,7 @@ fn repl(data: &mut ReplAppData) -> ! {
             let _ = src.pop(); //remove last linebreak
             if !src.as_str().ends_with('\\') {
                 match data.mode {
-                    ReplMode::Eval => match eval_top(src.clone(), &mut data.global_ctx) {
+                    ReplMode::Eval => match interpret_top(src.clone(), &mut data.global_ctx) {
                         Ok(v) => {
                             println!("{:?}", v);
                         }
@@ -72,7 +72,7 @@ fn repl(data: &mut ReplAppData) -> ! {
                     ReplMode::EvalMulti(n) => {
                         let mut res = Ok(Value::Primitive(PValue::Numeric(0.0)));
                         for _i in 0..n {
-                            res = eval_top(src.clone(), &mut data.global_ctx);
+                            res = interpret_top(src.clone(), &mut data.global_ctx);
                             data.global_ctx.history.0 = 0;
                         }
                         match res {

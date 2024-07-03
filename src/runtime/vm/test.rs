@@ -14,7 +14,7 @@ fn size_of_extern_func() {
 //single print function
 fn lib_printi(state: &mut Machine) -> i64 {
     let v = state.get_top();
-    let i = state.get_as::<i64>(*v);
+    let i = Machine::get_as::<i64>(*v);
     println!("{}", i);
     return 0;
 }
@@ -141,10 +141,10 @@ fn rust_closure_test() {
     // let mut count = 0;
     let cls = Arc::new(Mutex::new(|m: &mut Machine| {
         let v = m.get_top();
-        let i = m.get_as::<u64>(*v) + 3;
+        let i = Machine::get_as::<u64>(*v) + 3;
         println!("Call from closure: {}", i);
         //?????
-        m.set_stack(-1, m.to_value(i));
+        m.set_stack(-1, Machine::to_value(i));
         return 1;
     }));
     let mut machine = Machine::new();

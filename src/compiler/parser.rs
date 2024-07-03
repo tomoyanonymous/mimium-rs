@@ -331,11 +331,11 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
     func_parser()
 }
 
-pub fn parse(src: &String) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
+pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
-    let (tokens, lex_errs) = lexer::lexer().parse_recovery(src.clone());
+    let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
     lex_errs
         .iter()
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
