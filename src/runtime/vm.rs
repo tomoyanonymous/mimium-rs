@@ -1,4 +1,3 @@
-
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
 pub mod bytecode;
 pub mod program;
@@ -456,7 +455,7 @@ impl Machine {
     pub fn install_extern_cls(&mut self, name: String, f: ExtClsType) {
         self.ext_cls_table.push((name, f));
     }
-    pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
+    fn link_functions(&mut self, prog: &Program) {
         //link external functions
         prog.ext_fun_table
             .iter()
@@ -488,7 +487,20 @@ impl Machine {
                     panic!("external closure {} cannot be found", name);
                 };
             });
-
+    }
+    pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
+        self.link_functions(prog);
+        if let Some((_name, func)) = prog.global_fn_table.iter().find(|(name, _)| name == entry) {
+            self.internal_states.resize(func.state_size as usize, 0.0);
+            // 0 is always base pointer to the main function
+            self.base_pointer += 1;
+            self.execute(0, &prog, None, &mut None)
+        } else {
+            -1
+        }
+    }
+    pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
+        self.link_functions(prog);
         //internal function table 0 is always mimium_main
         self.internal_states
             .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);

@@ -87,9 +87,10 @@ impl std::fmt::Display for Program {
             let _ = write!(f, "nparams:{} nret: {}\n", fns.1.nparam, fns.1.nret);
             let _ = write!(f, "upindexes: {:?}  ", fns.1.upindexes);
             let _ = write!(f, "state_size: {}  \n", fns.1.state_size);
+            let _ = write!(f, "constants:  {:?}\n", fns.1.constants);
             let _ = write!(f, "instructions:\n");
-            for inst in fns.1.bytecodes.iter(){
-                let _ = write!(f, "  {}\n",inst);
+            for inst in fns.1.bytecodes.iter() {
+                let _ = write!(f, "  {}\n", inst);
             }
         }
         let _ = write!(f, "ext_fun:\n{:?}\n", self.ext_fun_table);
