@@ -122,7 +122,7 @@ impl Machine {
         }
         // shrink stack so as to match with number of return values
         self.stack
-            .truncate((self.base_pointer as i64 + nret_req as i64 - 1) as usize);
+            .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
     }
     fn close_upvalues(&self, broker: &mut Vec<Rc<RefCell<UpValue>>>) {
@@ -134,26 +134,24 @@ impl Machine {
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(
-        &mut self,
-        func_i: usize,
-        prog: &Program,
-        cls_i: Option<usize>,
-    ) -> ReturnCode {
-        let (fname, func) = &prog.global_fn_table[func_i];
+    pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
+        let (_fname, func) = &prog.global_fn_table[func_i];
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
         if cfg!(test) {
             println!("{:?}", func);
         }
         loop {
-            if cfg!(debug_assertions) {
-                print!("{} : [", func.bytecodes[pcounter]);
+            if cfg!(debug_assertions) || cfg!(test) {
+                print!("{: <20} {}", func.bytecodes[pcounter], ": [");
                 for i in 0..self.stack.len() {
                     if i == self.base_pointer as usize {
                         print!("!");
                     }
-                    print!("{:?}, ", self.stack[i]);
+                    print!("{:?}", self.stack[i]);
+                    if i < self.stack.len() - 1 {
+                        print!(", ");
+                    }
                 }
                 println!("]");
             }
@@ -182,19 +180,17 @@ impl Machine {
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
-                    let ext_fn_idx = self
-                        .fn_map
-                        .get(&(self.get_stack(func as i64) as usize))
-                        .expect("ext_fn map not resolved.");
-                    let f = self.ext_fun_table[*ext_fn_idx].1;
+                    let ext_fn_idx = self.get_stack(func as i64) as usize;
+                    let f = self.ext_fun_table[ext_fn_idx].1;
                     self.call_function(func, nargs, nret_req, move |machine| f(machine));
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
-                    let cls_idx = self
-                        .cls_map
-                        .get(&(self.get_stack(func as i64) as usize))
-                        .expect("closure map not resolved.");
-                    let (_name, cls_mutex) = self.ext_cls_table[*cls_idx].clone();
+                    // todo: load closure index via constant for the case of more than 255 closures in program
+                    // let cls_idx = self
+                    //     .cls_map
+                    //     .get(&(self.get_stack(func as i64) as usize))
+                    //     .expect("closure map not resolved.");
+                    let (_name, cls_mutex) = self.ext_cls_table[func as usize].clone();
                     self.call_function(func, nargs, nret_req, move |machine| {
                         if let Ok(mut cls) = cls_mutex.lock() {
                             cls(machine)
@@ -448,11 +444,19 @@ impl Machine {
             });
     }
     pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
-        if let Some((_name, func)) = prog.global_fn_table.iter().find(|(name, _)| name == entry) {
+        if let Some((i, (_name, func))) = prog
+            .global_fn_table
+            .iter()
+            .enumerate()
+            .find(|(i, (name, _))| name == entry)
+        {
             self.internal_states.resize(func.state_size as usize, 0.0);
             // 0 is always base pointer to the main function
-            self.base_pointer += 1;
-            self.execute(0, &prog, None)
+            if self.stack.len() > 0 {
+                self.stack[0] = 0;
+            }
+            self.base_pointer = 1;
+            self.execute(i, &prog, None)
         } else {
             -1
         }

@@ -23,8 +23,8 @@ pub enum Value {
     Float(f64),
     Integer(i64),
     Bool(bool),
-    // idx of the function in the program
-    Function(usize),
+    // idx of the function in the program, size of internal state
+    Function(usize, u64),
     ExtFunction(Label),
     Closure(Arc<Function>),
     FixPoint,
@@ -37,6 +37,7 @@ pub type VPtr = Arc<Value>;
 
 #[derive(Debug)]
 pub enum Instruction {
+    Uinteger(u64),
     Integer(i64),
     //constant float
     Float(f64),

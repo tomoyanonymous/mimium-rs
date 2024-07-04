@@ -41,7 +41,7 @@ impl std::fmt::Display for Value {
             Value::Float(n) => write!(f, "float {n}"),
             Value::Integer(i) => write!(f, "int {i}"),
             Value::Bool(_) => todo!(),
-            Value::Function(id) => write!(f, "function {id}"),
+            Value::Function(id, _statesize) => write!(f, "function {id}"),
             Value::ExtFunction(_) => todo!(),
             Value::Closure(_) => todo!(),
             Value::FixPoint => write!(f, "fixpoint"),
@@ -54,6 +54,7 @@ impl std::fmt::Display for Value {
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Instruction::Uinteger(u) => write!(f, "uint {u}"),
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
             Instruction::Alloc(_) => todo!(),

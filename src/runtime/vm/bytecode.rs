@@ -110,17 +110,17 @@ impl std::fmt::Display for Instruction {
             Instruction::CastItoF(dst, src) => write!(f, "{:<10} {} {}", "i2f", dst, src),
             Instruction::CastItoB(dst, src) => write!(f, "{:<10} {} {}", "i2b", dst, src),
             //3 arguments
-            Instruction::Call(dst, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "call", dst, nargs, nret_req)
+            Instruction::Call(func, nargs, nret_req) => {
+                write!(f, "{:<10} {} {} {}", "call", func, nargs, nret_req)
             }
-            Instruction::CallCls(dst, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "callcls", dst, nargs, nret_req)
+            Instruction::CallCls(func, nargs, nret_req) => {
+                write!(f, "{:<10} {} {} {}", "callcls", func, nargs, nret_req)
             }
-            Instruction::CallExtFun(dst, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "callext", dst, nargs, nret_req)
+            Instruction::CallExtFun(func, nargs, nret_req) => {
+                write!(f, "{:<10} {} {} {}", "callext", func, nargs, nret_req)
             }
-            Instruction::CallExtCls(dst, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "callextcls", dst, nargs, nret_req)
+            Instruction::CallExtCls(func, nargs, nret_req) => {
+                write!(f, "{:<10} {} {} {}", "callextcls", func, nargs, nret_req)
             }
 
             Instruction::LogI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "logi", dst, lhs, rhs),

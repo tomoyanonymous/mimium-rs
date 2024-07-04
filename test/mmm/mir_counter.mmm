@@ -1,4 +1,7 @@
+fn counter(inc:float){
+  inc+self
+}
+
 fn dsp(){
-    let res = self + 2.0 + 2.0 - 3.0
-    res
+  counter(1.0)
 }

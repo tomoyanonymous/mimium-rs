@@ -1,5 +1,5 @@
-use super::{recursecheck, selfconvert};
 use super::typing::{self, infer_type, InferContext};
+use super::{recursecheck, selfconvert};
 
 use std::sync::Arc;
 // use crate::runtime::vm::bytecode::Instruction;
@@ -187,10 +187,10 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Var(v, _time) => {
             match ctx.valenv.lookup_cls(v) {
                 LookupRes::Local(v) => Ok(v.clone()),
-                LookupRes::UpValue(v) | LookupRes::Global(v) => {
+                LookupRes::UpValue(v) => {
                     todo!();
                 }
-
+                LookupRes::Global(v) => Ok(v.clone()),
                 LookupRes::None => {
                     // let t = infer_type(e, &mut ctx.typeenv).expect("type infer error");
                     // program.ext_cls_table.push((v.clone(),t));
@@ -209,7 +209,6 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Tuple(_) => todo!(),
         Expr::Proj(_, _) => todo!(),
         Expr::Apply(f, args) => {
-            let box WithMeta(func, span) = f;
             // skip type inference for now.
             // let ftype = infer_type(func, &mut ctx.typeenv).map_err(|typing::Error(e, span)| {
             //     CompileError(CompileErrorKind::TypingFailure(e), span)
@@ -219,41 +218,42 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             // } else {
             //     1
             // };
-            let nargs = args.len();
-            let stack_base = ctx.stack_pos + 1;
             let f = eval_expr(f, ctx)?;
-            let a_regs = args
-                .iter()
-                .map(|a_meta| eval_expr(a_meta, ctx))
-                .try_collect::<Vec<_>>()?;
-            match f.as_ref() {
-                Value::ExtFunction(label) => {
-                    if let Some(res) = ctx.make_intrinsics(&label.0, a_regs.clone()) {
-                        return Ok(res);
-                    }
-                }
-                _ => {}
-            };
 
-            // let inst =
+            let makeargs = |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
+                args.iter()
+                    .map(|a_meta| eval_expr(a_meta, ctx))
+                    .try_collect::<Vec<_>>()
+            };
             match f.as_ref() {
                 Value::Register(p) => {
-                    let inst = Instruction::Call(f.clone(), a_regs.clone());
-                    ctx.get_current_basicblock().0.push(inst);
-                    Ok(a_regs[0].clone())
-                },
-                Value::Function(i) => Ok(Arc::new(Value::Register(
-                    ctx.push_inst(Instruction::Call(f.clone(), a_regs)),
-                ))),
-                // Value::ExternalFun(i) => todo!(),
+                    todo!();
+                }
+                Value::Function(idx, statesize) => {
+                    ctx.get_current_fn().unwrap().state_size += statesize;
+                    let faddress = ctx.push_inst(Instruction::Uinteger(*idx as u64));
+                    let res = Arc::new(Value::Register(faddress));
+                    let a_regs = makeargs(args, ctx)?;
+                    ctx.push_inst(Instruction::Call(res.clone(), a_regs.clone()));
+                    Ok(res.clone())
+                }
+                Value::ExtFunction(label) => {
+                    let a_regs = makeargs(args, ctx)?;
+                    if let Some(res) = ctx.make_intrinsics(&label.0, a_regs.clone()) {
+                        Ok(res)
+                    } else {
+                        todo!()
+                    }
+                }
                 // Value::ExternalClosure(i) => todo!(),
                 Value::None => unreachable!(),
                 _ => todo!(),
             }
         }
         Expr::Lambda(ids, types, body) => {
+            let tmp_reg = ctx.reg_count;
+            ctx.reg_count = 0;
             let (mut newf, fnid) = ctx.make_new_fn();
-
             let mut binds = ids
                 .iter()
                 .enumerate()
@@ -272,20 +272,36 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                     newf.args.push(a.clone());
                 }
             });
-            ctx.reg_count += binds.len() as u64;
+            let mut tbinds = ids
+                .iter()
+                .map(|name| {
+                    (
+                        name.0.id.clone(),
+                        name.0
+                            .ty
+                            .clone()
+                            .unwrap_or_else(|| ctx.typeenv.gen_intermediate_type()),
+                    )
+                })
+                .collect::<Vec<_>>();
             ctx.typeenv.env.extend();
             ctx.valenv.extend();
+            ctx.reg_count += binds.len() as u64;
+
             ctx.valenv.add_bind(&mut binds);
+            ctx.typeenv.env.add_bind(&mut tbinds);
             let res_type =
                 infer_type(&body.0, &mut ctx.typeenv).map_err(|e| CompileError::from(e))?;
             let res = eval_expr(&body, ctx)?;
+            let state_size = ctx.get_current_fn().unwrap().state_size;
             match res_type {
                 Type::Primitive(PType::Unit) | Type::Unknown => {}
                 _ => {
                     let _ = ctx.push_inst(Instruction::Return(res.clone()));
                 }
             };
-            Ok(Arc::new(Value::Function(fnid)))
+            ctx.reg_count = tmp_reg;
+            Ok(Arc::new(Value::Function(fnid, state_size)))
         }
         Expr::Feed(id, expr) => {
             let res = Arc::new(Value::Register(ctx.reg_count));
