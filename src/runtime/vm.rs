@@ -139,28 +139,15 @@ impl Machine {
         func_i: usize,
         prog: &Program,
         cls_i: Option<usize>,
-        feed_state: &mut Option<&mut FeedState>,
     ) -> ReturnCode {
         let (fname, func) = &prog.global_fn_table[func_i];
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
-        if let Some(state) = feed_state {
-            if state.calltree.len() < func.feedmap.len() {
-                state
-                    .calltree
-                    .resize(func.feedmap.len(), FeedState::default());
-            }
-        }
-        let get_feed_count = |pcount| {
-            func.feedmap
-                .binary_search(&pcount)
-                .expect("failed to get feed count")
-        };
         if cfg!(test) {
             println!("{:?}", func);
         }
         loop {
-            if cfg!(test) {
+            if cfg!(debug_assertions) {
                 print!("{} : [", func.bytecodes[pcounter]);
                 for i in 0..self.stack.len() {
                     if i == self.base_pointer as usize {
@@ -183,25 +170,15 @@ impl Machine {
                     let cls_i = Self::get_as::<usize>(addr);
                     let cls = &self.closures[cls_i];
                     let pos_of_f = cls.fn_proto_pos;
-                    let mut feed = feed_state
-                        .as_mut()
-                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
-                        .flatten();
 
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, Some(cls_i), &mut feed)
+                        machine.execute(pos_of_f, prog, Some(cls_i))
                     });
                 }
                 Instruction::Call(func, nargs, nret_req) => {
-                    // let f = prog.global_fn_table[pos_of_f];
-
                     let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
-                    let mut feed = feed_state
-                        .as_mut()
-                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
-                        .flatten();
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, None, &mut feed)
+                        machine.execute(pos_of_f, prog, None)
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
@@ -266,16 +243,6 @@ impl Machine {
                     let _ = self.return_general(iret, nret, &mut local_upvalues);
                     return nret.into();
                 }
-                Instruction::ReturnFeed(iret, nret) => {
-                    let res = self.return_general(iret, nret, &mut local_upvalues);
-
-                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
-                        *v = res[0]; // todo: multiple return value
-                    } else {
-                        panic!("failed to return feed value");
-                    }
-                    return nret.into();
-                }
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
                         let up_i = cls_i.unwrap();
@@ -308,14 +275,6 @@ impl Machine {
                     }
                 }
                 // Instruction::Close() => todo!(),
-                Instruction::Feed(dst, _num) => {
-                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
-                        let feedv = *v;
-                        self.set_stack(dst as i64, feedv);
-                    } else {
-                        panic!("feed resolution failed when getting value");
-                    }
-                }
                 Instruction::Jmp(offset) => {
                     pcounter = (pcounter as isize + offset as isize) as usize;
                 }
@@ -493,7 +452,7 @@ impl Machine {
             self.internal_states.resize(func.state_size as usize, 0.0);
             // 0 is always base pointer to the main function
             self.base_pointer += 1;
-            self.execute(0, &prog, None, &mut None)
+            self.execute(0, &prog, None)
         } else {
             -1
         }
@@ -504,7 +463,7 @@ impl Machine {
             .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
-        self.execute(0, &prog, None, &mut None)
+        self.execute(0, &prog, None)
     }
 }
 

@@ -29,15 +29,10 @@ pub enum Instruction {
     SetState(Reg),
     ShiftStatePos(i16),
 
-    //destination, number of feed(because feed may want to return tuple)
-    Feed(Reg, u8),
-
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
     // value start position, Nrets
     Return(Reg, Reg),
-    // Return and set feed value for current context
-    ReturnFeed(Reg, Reg),
 
     //jump label
     Jmp(Offset),
@@ -100,10 +95,8 @@ impl std::fmt::Display for Instruction {
             }
 
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
-            Instruction::ReturnFeed(iret, nret) => write!(f, "{:<10} {} {}", "retfeed", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
-            Instruction::Feed(dst, num) => write!(f, "{:<10} {} {}", "feed", dst, num),
             Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpif", dst, cond),
             Instruction::AbsF(dst, src) => write!(f, "{:<10} {} {}", "absf", dst, src),
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),
