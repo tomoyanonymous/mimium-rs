@@ -12,7 +12,17 @@ impl<T> Environment<T> {
 
 pub struct Error(String);
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum LookupRes<T: Clone> {
+    Local(T),
+    UpValue(T),
+    Global(T),
+    None,
+}
 impl<T: Clone> Environment<T> {
+    pub fn is_global(&self) -> bool {
+        self.0.len() <= 1
+    }
     pub fn extend(&mut self) {
         self.0.push_front(Vec::new());
     }
@@ -30,5 +40,20 @@ impl<T: Clone> Environment<T> {
             .find(|vec| vec.iter().find(|(n, _)| n == name).is_some())
             .map(|vec| vec.iter().find(|(n, _)| n == name).map(|(_, v)| v))
             .flatten()
+    }
+    pub fn lookup_cls(&self, name: &String) -> LookupRes<&T> {
+        match self
+            .0
+            .iter()
+            .enumerate()
+            .find(|(level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
+            .map(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
+            .flatten()
+        {
+            None => LookupRes::None,
+            Some((0, e)) => LookupRes::Local(e),
+            Some((level, e)) if level == self.0.len() - 1 => LookupRes::Global(e),
+            Some((_level, e)) => LookupRes::UpValue(e),
+        }
     }
 }

@@ -92,16 +92,10 @@ mod test {
         let sample = letrec!(
             "testfn",
             lambda!(
-                vec![WithMeta(
-                    TypedId {
-                        id: "count".to_string(),
-                        ty: None
-                    },
-                    0..0
-                )],
+                vec!["count"],
                 ifexpr!(
                     var!("test"),
-                    app!(var!("testfn"), number!("10.0")),
+                    app!(var!("testfn"), vec![number!("10.0")]),
                     //this letrec should be converted to plain let
                     letrec!("lettest", number!("12.0"), Some(number!("2.0").into()))
                 )
@@ -113,18 +107,12 @@ mod test {
         let ans = letrec!(
             "testfn",
             lambda!(
-                vec![WithMeta(
-                    TypedId {
-                        id: "count".to_string(),
-                        ty: None
-                    },
-                    0..0
-                )],
+                vec!["count"],
                 ifexpr!(
                     var!("test"),
-                    app!(var!("testfn"), number!("10.0")),
+                    app!(var!("testfn"), vec![number!("10.0")]),
                     // this
-                    let_!("lettest", number!("12.0"), Some(number!("2.0").into()))
+                    let_!("lettest", number!("12.0"), number!("2.0").into())
                 )
             )
             .into(),

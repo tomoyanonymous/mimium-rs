@@ -1,60 +1,40 @@
-use std::{cell::RefCell, cmp::Ordering, rc::Rc};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
+pub mod bytecode;
+pub mod program;
+use bytecode::*;
+use program::Closure;
+pub use program::{FuncProto, Program, UpIndex, UpValue};
 
-use super::bytecode::{Instruction, Reg};
+pub type RawVal = u64;
+pub type ReturnCode = i64;
 
-type RawVal = u64;
-type ReturnCode = i64;
-
-type ExtFunType = fn(&mut Machine) -> ReturnCode;
+pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
+pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
 
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
     closures: Vec<Closure>,
-}
-
-#[derive(Debug)]
-pub enum UpIndex {
-    Local(usize),   // index of local variables in upper functions
-    Upvalue(usize), // index of upvalues in upper functions
-}
-
-#[derive(Debug, Default)]
-pub struct FuncProto {
-    pub nparam: usize,
-    pub upindexes: Vec<UpIndex>,
-    pub bytecodes: Vec<Instruction>,
-    pub constants: Vec<RawVal>,
-    // feedvalues are mapped in this vector
-    pub feedmap: Vec<usize>,
-}
-
-pub enum UpValue {
-    Open(Reg),
-    Closed(RawVal),
-}
-pub(crate) struct Closure {
-    fn_proto_pos: usize, //position of function prototype in global_ftable
-    upvalues: Vec<Rc<RefCell<UpValue>>>,
-}
-
-pub struct Program {
-    pub global_fn_table: Vec<FuncProto>,
-    pub ext_fun_table: Vec<ExtFunType>,
+    pub ext_fun_table: Vec<(String, ExtFunType)>,
+    fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
+    pub ext_cls_table: Vec<(String, ExtClsType)>,
+    cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
+    internal_states: Vec<f64>,
+    state_idx: usize,
 }
 
 macro_rules! binop {
     ($op:tt,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
-        $self.set_stack($dst as i64, $self.to_value::<$t>(
-            $self.get_as::<$t>($self.get_stack($src1 as i64))
-        $op $self.get_as::<$t>($self.get_stack($src2 as i64))))
+        $self.set_stack($dst as i64, Self::to_value::<$t>(
+            Self::get_as::<$t>($self.get_stack($src1 as i64))
+        $op Self::get_as::<$t>($self.get_stack($src2 as i64))))
     };
 }
 macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
         $self.set_stack($dst as i64,
-            $self.to_value::<$t>(
-            $op $self.get_as::<$t>($self.get_stack($src as i64))))
+            Self::to_value::<$t>(
+            $op Self::get_as::<$t>($self.get_stack($src as i64))))
     };
 }
 
@@ -69,7 +49,7 @@ fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FeedState {
     pub feed: Option<RawVal>,
     pub delays: Vec<Vec<RawVal>>, //vector of ring buffer
@@ -82,6 +62,12 @@ impl Machine {
             stack: vec![],
             base_pointer: 0,
             closures: vec![],
+            ext_fun_table: vec![],
+            ext_cls_table: vec![],
+            fn_map: HashMap::new(),
+            cls_map: HashMap::new(),
+            internal_states: vec![],
+            state_idx: 0,
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -116,13 +102,13 @@ impl Machine {
         res_slice
     }
 
-    fn get_as<T>(&self, v: RawVal) -> T {
+    pub(crate) fn get_as<T>(v: RawVal) -> T {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
-    fn to_value<T>(&self, v: T) -> RawVal {
+    pub(crate) fn to_value<T>(v: T) -> RawVal {
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(&mut self, func_pos: u8, nargs: u8, nret_req: u8, mut action: F)
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
@@ -136,7 +122,7 @@ impl Machine {
         }
         // shrink stack so as to match with number of return values
         self.stack
-            .truncate((self.base_pointer as i64 + nret_req as i64 - 1) as usize);
+            .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
     }
     fn close_upvalues(&self, broker: &mut Vec<Rc<RefCell<UpValue>>>) {
@@ -148,39 +134,24 @@ impl Machine {
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(
-        &mut self,
-        func_i: usize,
-        prog: &Program,
-        cls_i: Option<usize>,
-        feed_state: &mut Option<&mut FeedState>,
-    ) -> ReturnCode {
-        let func = &prog.global_fn_table[func_i];
+    pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
+        let (_fname, func) = &prog.global_fn_table[func_i];
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
-        if let Some(state) = feed_state {
-            if state.calltree.len() < func.feedmap.len() {
-                state
-                    .calltree
-                    .resize(func.feedmap.len(), FeedState::default());
-            }
-        }
-        let get_feed_count = |pcount| {
-            func.feedmap
-                .binary_search(&pcount)
-                .expect("failed to get feed count")
-        };
         if cfg!(test) {
             println!("{:?}", func);
         }
         loop {
-            if cfg!(test) {
-                print!("{} : [", func.bytecodes[pcounter]);
+            if cfg!(debug_assertions) || cfg!(test) {
+                print!("{: <20} {}", func.bytecodes[pcounter], ": [");
                 for i in 0..self.stack.len() {
                     if i == self.base_pointer as usize {
                         print!("!");
                     }
-                    print!("{:?}, ", self.stack[i]);
+                    print!("{:?}", self.stack[i]);
+                    if i < self.stack.len() - 1 {
+                        print!(", ");
+                    }
                 }
                 println!("]");
             }
@@ -194,37 +165,43 @@ impl Machine {
                 }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
-                    let cls_i = self.get_as::<usize>(addr);
+                    let cls_i = Self::get_as::<usize>(addr);
                     let cls = &self.closures[cls_i];
                     let pos_of_f = cls.fn_proto_pos;
-                    let mut feed = feed_state
-                        .as_mut()
-                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
-                        .flatten();
 
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, Some(cls_i), &mut feed)
+                        machine.execute(pos_of_f, prog, Some(cls_i))
                     });
                 }
                 Instruction::Call(func, nargs, nret_req) => {
-                    // let f = prog.global_fn_table[pos_of_f];
-
-                    let pos_of_f = self.get_as::<usize>(self.get_stack(func as i64));
-                    let mut feed = feed_state
-                        .as_mut()
-                        .map(|state| state.calltree.get_mut(get_feed_count(pcounter)))
-                        .flatten();
+                    let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, None, &mut feed)
+                        machine.execute(pos_of_f, prog, None)
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
-                    let f = prog.ext_fun_table[self.get_stack(func as i64) as usize];
+                    let ext_fn_idx = self.get_stack(func as i64) as usize;
+                    let f = self.ext_fun_table[ext_fn_idx].1;
                     self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                }
+                Instruction::CallExtCls(func, nargs, nret_req) => {
+                    // todo: load closure index via constant for the case of more than 255 closures in program
+                    // let cls_idx = self
+                    //     .cls_map
+                    //     .get(&(self.get_stack(func as i64) as usize))
+                    //     .expect("closure map not resolved.");
+                    let (_name, cls_mutex) = self.ext_cls_table[func as usize].clone();
+                    self.call_function(func, nargs, nret_req, move |machine| {
+                        if let Ok(mut cls) = cls_mutex.lock() {
+                            cls(machine)
+                        } else {
+                            0
+                        }
+                    });
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    let f_proto = &prog.global_fn_table[fn_proto_pos];
+                    let (name, f_proto) = &prog.global_fn_table[fn_proto_pos];
 
                     let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
                         .upindexes
@@ -253,23 +230,13 @@ impl Machine {
                     });
 
                     let vaddr = self.closures.len() - 1;
-                    self.set_stack(dst as i64, self.to_value(vaddr));
+                    self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Return0 => {
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
                     let _ = self.return_general(iret, nret, &mut local_upvalues);
-                    return nret.into();
-                }
-                Instruction::ReturnFeed(iret, nret) => {
-                    let res = self.return_general(iret, nret, &mut local_upvalues);
-
-                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
-                        *v = res[0]; // todo: multiple return value
-                    } else {
-                        panic!("failed to return feed value");
-                    }
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index) => {
@@ -304,20 +271,12 @@ impl Machine {
                     }
                 }
                 // Instruction::Close() => todo!(),
-                Instruction::Feed(dst, _num) => {
-                    if let Some(FeedState { feed: Some(v), .. }) = feed_state {
-                        let feedv = *v;
-                        self.set_stack(dst as i64, feedv);
-                    } else {
-                        panic!("feed resolution failed when getting value");
-                    }
-                }
                 Instruction::Jmp(offset) => {
                     pcounter = (pcounter as isize + offset as isize) as usize;
                 }
                 Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
-                    if self.get_as::<bool>(cond_v) {
+                    if Self::get_as::<bool>(cond_v) {
                         pcounter = (pcounter as isize + offset as isize) as usize;
                     }
                 }
@@ -342,19 +301,25 @@ impl Machine {
                 Instruction::AbsF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).abs()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).abs(),
+                        ),
                     );
                 }
                 Instruction::SinF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).sin()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).sin(),
+                        ),
                     );
                 }
                 Instruction::CosF(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<f64>(self.get_as::<f64>(self.get_stack(src as i64)).cos()),
+                        Self::to_value::<f64>(
+                            Self::get_as::<f64>(self.get_stack(src as i64)).cos(),
+                        ),
                     );
                 }
                 Instruction::PowF(_, _, _) => todo!(),
@@ -380,7 +345,9 @@ impl Machine {
                 Instruction::AbsI(dst, src) => {
                     self.set_stack(
                         dst as i64,
-                        self.to_value::<i64>(self.get_as::<i64>(self.get_stack(src as i64)).abs()),
+                        Self::to_value::<i64>(
+                            Self::get_as::<i64>(self.get_stack(src as i64)).abs(),
+                        ),
                     );
                 }
                 Instruction::PowI(_, _) => todo!(),
@@ -414,19 +381,93 @@ impl Machine {
                 }
                 Instruction::CastFtoI(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<i64>(self.get_as::<f64>(self.get_stack(src as i64)) as i64),
+                    Self::to_value::<i64>(Self::get_as::<f64>(self.get_stack(src as i64)) as i64),
                 ),
                 Instruction::CastItoF(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<f64>(self.get_as::<i64>(self.get_stack(src as i64)) as f64),
+                    Self::to_value::<f64>(Self::get_as::<i64>(self.get_stack(src as i64)) as f64),
                 ),
                 Instruction::CastItoB(dst, src) => self.set_stack(
                     dst as i64,
-                    self.to_value::<bool>(self.get_as::<i64>(self.get_stack(src as i64)) != 0),
+                    Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
+                Instruction::GetState(dst) => {
+                    let v = self.internal_states[self.state_idx];
+                    self.set_stack(dst as i64, Self::to_value(v));
+                }
+                Instruction::SetState(src) => {
+                    let v = self.get_stack(src as i64);
+                    self.internal_states[self.state_idx] = Self::get_as::<f64>(v)
+                }
+                Instruction::ShiftStatePos(_) => todo!(),
             }
             pcounter += 1;
         }
+    }
+    pub fn install_extern_fn(&mut self, name: String, f: ExtFunType) {
+        self.ext_fun_table.push((name, f));
+    }
+    pub fn install_extern_cls(&mut self, name: String, f: ExtClsType) {
+        self.ext_cls_table.push((name, f));
+    }
+    pub fn link_functions(&mut self, prog: &Program) {
+        //link external functions
+        prog.ext_fun_table
+            .iter()
+            .enumerate()
+            .for_each(|(i, (name, _ty))| {
+                if let Some((j, _)) = self
+                    .ext_fun_table
+                    .iter()
+                    .enumerate()
+                    .find(|(j, (fname, _fn))| name == fname)
+                {
+                    self.fn_map.insert(i, j);
+                } else {
+                    panic!("external function {} cannot be found", name);
+                };
+            });
+        prog.ext_cls_table
+            .iter()
+            .enumerate()
+            .for_each(|(i, (name, _ty))| {
+                if let Some((j, _)) = self
+                    .ext_cls_table
+                    .iter()
+                    .enumerate()
+                    .find(|(j, (fname, _fn))| name == fname)
+                {
+                    self.cls_map.insert(i, j);
+                } else {
+                    panic!("external closure {} cannot be found", name);
+                };
+            });
+    }
+    pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
+        if let Some((i, (_name, func))) = prog
+            .global_fn_table
+            .iter()
+            .enumerate()
+            .find(|(i, (name, _))| name == entry)
+        {
+            self.internal_states.resize(func.state_size as usize, 0.0);
+            // 0 is always base pointer to the main function
+            if self.stack.len() > 0 {
+                self.stack[0] = 0;
+            }
+            self.base_pointer = 1;
+            self.execute(i, &prog, None)
+        } else {
+            -1
+        }
+    }
+    pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
+        //internal function table 0 is always mimium_main
+        self.internal_states
+            .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
+        // 0 is always base pointer to the main function
+        self.base_pointer += 1;
+        self.execute(0, &prog, None)
     }
 }
 

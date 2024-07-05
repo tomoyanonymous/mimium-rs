@@ -25,6 +25,8 @@ pub enum Expr {
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
+    Assign(Id, Box<WithMeta<Self>>),
+    Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
@@ -117,6 +119,8 @@ impl MiniPrint for Expr {
                 then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
             Expr::LetTuple(_, _, _) => todo!(),
+            Expr::Assign(lid, rhs) => format!("(assign {lid} {})",rhs.0.simple_print()),
+            Expr::Then(first, second) =>  format!("(then {} {})",first.0.simple_print(),second.0.simple_print()),
             Expr::If(cond, then, optelse) => format!(
                 "(if {} {} {})",
                 cond.0.simple_print(),
@@ -126,6 +130,7 @@ impl MiniPrint for Expr {
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
             Expr::Error => todo!(),
+
         }
     }
 }

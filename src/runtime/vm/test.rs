@@ -1,6 +1,5 @@
 use super::*;
-use crate::runtime::bytecode::*;
-
+use crate::types::Type;
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -15,7 +14,7 @@ fn size_of_extern_func() {
 //single print function
 fn lib_printi(state: &mut Machine) -> i64 {
     let v = state.get_top();
-    let i = state.get_as::<i64>(*v);
+    let i = Machine::get_as::<i64>(*v);
     println!("{}", i);
     return 0;
 }
@@ -44,10 +43,12 @@ fn closuretest() {
     ];
     let inner_f = FuncProto {
         nparam: 0,
+        nret: 1,
         upindexes: vec![UpIndex::Local(3), UpIndex::Local(1)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         feedmap: vec![],
+        state_size: 0,
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -60,10 +61,12 @@ fn closuretest() {
     ];
     let makecounter_f = FuncProto {
         nparam: 2,
+        nret: 1,
         upindexes: vec![],
         bytecodes: inner_insts2,
-        constants: vec![1u64, 0], // 1, position of inner in global table
+        constants: vec![1u64, 2], // 1, position of inner in global table
         feedmap: vec![],
+        state_size: 0,
     };
     let inner_inst3 = vec![
         // no stack in the entry
@@ -87,19 +90,72 @@ fn closuretest() {
     ];
     let main_f = FuncProto {
         nparam: 0,
+        nret: 1,
         upindexes: vec![],
         bytecodes: inner_inst3,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
         feedmap: vec![],
+        state_size: 0,
     };
-    let global_fn_table = vec![inner_f, makecounter_f, main_f];
-    let ext_fun_table: Vec<ExtFunType> = vec![lib_printi];
+    let global_fn_table = vec![
+        ("main".to_string(), main_f),
+        ("makecounter".to_string(), makecounter_f),
+        ("inner".to_string(), inner_f),
+    ];
     let mut machine = Machine::new();
-    let code = Program {
+
+    machine.install_extern_fn("lib_printi".to_string(), lib_printi);
+    let prog = Program {
         global_fn_table,
-        ext_fun_table,
+        ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
+        ext_cls_table: vec![],
     };
     // let mut feedstate = FeedState::default();
-    let res = machine.execute(2, &code, None, &mut None);
+    let res = machine.execute_main(&prog);
+    assert_eq!(res, 0);
+}
+
+#[test]
+fn rust_closure_test() {
+    //fn main()->int{
+    // return rust_closure(4)
+    //}
+    let inner_insts = vec![
+        Instruction::MoveConst(0, 0),     //load closure
+        Instruction::MoveConst(1, 1),     //load const int 4
+        Instruction::CallExtCls(0, 1, 1), //call closure, 7 should be set at reg 0
+        Instruction::Return0,             // return single value at 1
+    ];
+    let main_f = FuncProto {
+        nparam: 0,
+        nret: 1,
+        upindexes: vec![],
+        bytecodes: inner_insts,
+        constants: vec![0u64, 4u64], //cls, int 4
+        feedmap: vec![],
+        state_size: 0,
+    };
+    let fns = vec![main_f];
+    let fnames = vec!["main".to_string()];
+    let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
+    // let mut count = 0;
+    let cls = Arc::new(Mutex::new(|m: &mut Machine| {
+        let v = m.get_top();
+        let i = Machine::get_as::<u64>(*v) + 3;
+        println!("Call from closure: {}", i);
+        //?????
+        m.set_stack(-1, Machine::to_value(i));
+        return 1;
+    }));
+    let mut machine = Machine::new();
+    machine.install_extern_fn("lib_printi".to_string(), lib_printi);
+    machine.install_extern_cls("rustclosure".to_string(), cls.clone());
+    let prog = Program {
+        global_fn_table,
+        ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
+        ext_cls_table: vec![("rustclosure".to_string(), Type::Unknown)],
+    };
+    // let mut feedstate = FeedState::default();
+    let res = machine.execute_main(&prog);
     assert_eq!(res, 0);
 }

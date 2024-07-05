@@ -1,16 +1,24 @@
 // pub mod wcalculus;
-use clap::Parser as _;
+use clap::Parser;
 
 use mimium_rs::ast_interpreter;
+use mimium_rs::compiler::{emit_ast, emit_bytecode};
+use mimium_rs::utils::miniprint::MiniPrint;
 use mimium_rs::utils::{error::report, fileloader};
-use mimium_rs::{compiler::eval_top, repl};
+use mimium_rs::{compiler::emit_mir, repl, runtime};
 
 #[derive(clap::Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)]
 pub struct Args {
     /// File name
     #[clap(value_parser)]
     pub file: Option<String>,
+    #[arg(long, default_value_t = false)]
+    pub emit_ast: bool,
+    #[arg(long, default_value_t = false)]
+    pub emit_mir: bool,
+    #[arg(long, default_value_t = false)]
+    pub emit_bytecode: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,13 +27,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.file {
         Some(file) => {
             let (content, fullpath) = fileloader::load(file.clone())?;
-            match eval_top(content.clone(), &mut global_ctx) {
-                Ok(v) => {
-                    println!("Filename: {}", fullpath.display());
-                    println!("Value:\n{:?}", v);
+            if args.emit_ast {
+                println!("Filename: {}", fullpath.display());
+                match emit_ast(&content.clone()) {
+                    Ok(ast) => println!("{}", ast.0.simple_print()),
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
                 }
-                Err(e) => {
-                    report(&content, fullpath, &e);
+            } else if args.emit_mir {
+                println!("Filename: {}", fullpath.display());
+                match emit_mir(&content.clone()) {
+                    Ok(mir) => println!("{mir}"),
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
+                }
+            } else if args.emit_bytecode {
+                println!("Filename: {}", fullpath.display());
+                match emit_bytecode(&content.clone()) {
+                    Ok(prog) => println!("{prog}"),
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
+                }
+            } else {
+                println!("Filename: {}", fullpath.display());
+                match runtime::run_source_test(&content.clone()) {
+                    Ok(v) => {
+                        println!("Filename: {}", fullpath.display());
+                        println!("Value:\n{:?}", v);
+                    }
+                    Err(e) => {
+                        report(&content, fullpath, &e);
+                    }
                 }
             }
         }

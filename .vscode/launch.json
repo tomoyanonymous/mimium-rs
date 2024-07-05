@@ -45,6 +45,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug bc emitter 'mimium-rs'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=mimium-rs",
+                    "--package=mimium-rs",
+                ],
+                "filter": {
+                    "name": "mimium-rs",
+                    "kind": "bin"
+                }
+            },
+            "args": ["tests/mmm/mir_counter.mmm"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug test in 'mimium-hir-interpreter'",
             "cargo": {
                 "args": [
