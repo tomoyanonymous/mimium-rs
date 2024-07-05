@@ -61,17 +61,17 @@ impl std::fmt::Display for Instruction {
             Instruction::Load(_) => todo!(),
             Instruction::Store(_, _) => todo!(),
             Instruction::Call(fptr, args) => {
-                let _ = write!(f, "call {}  ", *fptr,);
+                let r = write!(f, "call {}  ", *fptr,);
                 for a in args.iter() {
                     let _ = write!(f, "{} ", *a);
                 }
-                write!(f, "\n")
+                r
             }
             Instruction::Closure(_) => todo!(),
             Instruction::GetUpValue(_, _) => todo!(),
             Instruction::SetUpValue(_, _) => todo!(),
-            Instruction::PushStateOffset(_) => todo!(),
-            Instruction::PopStateOffset(_) => todo!(),
+            Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
+            Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
             Instruction::GetState(v) => write!(f, "getstate {}", *v),
             Instruction::SetState(v) => write!(f, "setstate {}", *v),
             Instruction::JmpIf(_, _, _) => todo!(),

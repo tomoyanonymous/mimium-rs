@@ -24,10 +24,10 @@ pub struct Context {
     current_fn_idx: usize,
     current_bb: usize,
     upvalue_counts: Vec<usize>,
-    pub stack_pos: usize,
     reg_count: VReg,
     fn_label: Option<String>,
     anonymous_fncount: u64,
+    state_offset: u64,
 }
 
 impl Context {
@@ -39,10 +39,10 @@ impl Context {
             current_fn_idx: 0,
             current_bb: 0,
             upvalue_counts: vec![],
-            stack_pos: 0,
             reg_count: 0,
             fn_label: None,
             anonymous_fncount: 0,
+            state_offset: 0,
         }
     }
     pub fn get_current_fn(&mut self) -> Option<&mut mir::Function> {
@@ -166,8 +166,6 @@ pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
 // }
 
 fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<VReg, CompileError> {
-    ctx.stack_pos += 1;
-    let stack_pos = ctx.stack_pos;
     let v = match lit {
         Literal::String(_) => todo!(),
         Literal::Int(i) => ctx.push_inst(Instruction::Integer(*i)),
@@ -225,16 +223,32 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                     .map(|a_meta| eval_expr(a_meta, ctx))
                     .try_collect::<Vec<_>>()
             };
-            match f.as_ref() {
+            let res = match f.as_ref() {
                 Value::Register(p) => {
                     todo!();
                 }
                 Value::Function(idx, statesize) => {
                     ctx.get_current_fn().unwrap().state_size += statesize;
+                    //insert pushstateoffset
+                    
                     let faddress = ctx.push_inst(Instruction::Uinteger(*idx as u64));
                     let res = Arc::new(Value::Register(faddress));
                     let a_regs = makeargs(args, ctx)?;
+                    if ctx.state_offset > 0 {
+                        ctx.get_current_basicblock()
+                            .0
+                            .push(Instruction::PushStateOffset(1));
+                    }
                     ctx.push_inst(Instruction::Call(res.clone(), a_regs.clone()));
+
+                    if ctx.state_offset > 0 {
+                        ctx.get_current_basicblock()
+                            .0
+                            .push(Instruction::PopStateOffset(1));
+                    }
+                    if *statesize > 0 {
+                        ctx.state_offset += 1;
+                    }
                     Ok(res.clone())
                 }
                 Value::ExtFunction(label) => {
@@ -248,7 +262,9 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 // Value::ExternalClosure(i) => todo!(),
                 Value::None => unreachable!(),
                 _ => todo!(),
-            }
+            };
+            ctx.reg_count -= args.len() as u64 + 1;
+            res
         }
         Expr::Lambda(ids, types, body) => {
             let tmp_reg = ctx.reg_count;

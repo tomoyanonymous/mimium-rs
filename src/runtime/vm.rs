@@ -399,7 +399,9 @@ impl Machine {
                     let v = self.get_stack(src as i64);
                     self.internal_states[self.state_idx] = Self::get_as::<f64>(v)
                 }
-                Instruction::ShiftStatePos(_) => todo!(),
+                Instruction::ShiftStatePos(v) => {
+                    self.state_idx = (self.state_idx as i64 + v as i64) as usize;
+                }
             }
             pcounter += 1;
         }

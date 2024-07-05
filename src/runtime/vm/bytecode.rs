@@ -86,7 +86,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Jmp(dst) => write!(f, "{:<10} {}", "jmp", dst),
             Instruction::GetState(dst) => write!(f, "{:<10} {}", "getstate", dst),
             Instruction::SetState(src) => write!(f, "{:<10} {}", "setstate", src),
-            Instruction::ShiftStatePos(_) => todo!(),
+            Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
 

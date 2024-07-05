@@ -112,10 +112,8 @@ impl ByteCodeGenerator {
             mir::Instruction::Store(_, _) => todo!(),
             mir::Instruction::Call(v, args) => {
                 let nargs = args.len() as u8;
-                match v.as_ref() {
-                    mir::Value::Register(address)=>{
-                        VmInstruction::Call(*address as Reg, nargs, 1)
-                    }
+                let res = match v.as_ref() {
+                    mir::Value::Register(address) => VmInstruction::Call(*address as Reg, nargs, 1),
                     mir::Value::Function(idx, state_size) => {
                         unreachable!();
                     }
@@ -129,13 +127,15 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::FixPoint => todo!(),
                     _ => unreachable!(),
-                }
+                };
+                self.vstack.0 -= nargs;
+                res
             }
             mir::Instruction::Closure(_) => todo!(),
             mir::Instruction::GetUpValue(_, _) => todo!(),
             mir::Instruction::SetUpValue(_, _) => todo!(),
-            mir::Instruction::PushStateOffset(_) => todo!(),
-            mir::Instruction::PopStateOffset(_) => todo!(),
+            mir::Instruction::PushStateOffset(v) => VmInstruction::ShiftStatePos(*v as i16),
+            mir::Instruction::PopStateOffset(v) => VmInstruction::ShiftStatePos(- (*v as i16)),
             mir::Instruction::GetState(v) => {
                 let res = VmInstruction::GetState(self.get_value(funcproto, v));
                 self.vstack.push();
