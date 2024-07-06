@@ -7,7 +7,7 @@ use crate::runtime::vm::{self};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 #[derive(Debug)]
-pub struct VRegister(Vec<Option<Arc<mir::Value>>>);
+struct VRegister(Vec<Option<Arc<mir::Value>>>);
 
 impl Default for VRegister {
     fn default() -> Self {
@@ -184,7 +184,33 @@ impl ByteCodeGenerator {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::DivF(self.get_destination(dst), r1, r2)
             }
-            _ => todo!(),
+            mir::Instruction::ModF(v1,v2)=> {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::ModF(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::AddI(v1, v2) => {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::AddI(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::SubI(v1, v2) => {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::SubI(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::MulI(v1, v2) => {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::MulI(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::DivI(v1, v2) => {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::DivI(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::ModI(v1,v2)=> {
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::ModI(self.get_destination(dst), r1, r2)
+            }
+            _=>{
+                unimplemented!()
+            }
         }
     }
     fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {

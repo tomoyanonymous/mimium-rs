@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::compiler::intrinsics;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Comment {
     SingleLine(String),
@@ -89,20 +90,20 @@ pub enum Token {
 impl Op {
     pub fn get_associated_fn_name(&self) -> &str {
         match self {
-            Op::Sum => "add",
-            Op::Minus => "sub",
-            Op::Product => "mult",
-            Op::Divide => "div",
-            Op::Equal => "eq",
-            Op::NotEqual => "ne",
-            Op::LessThan => "lt",
-            Op::LessEqual => "le",
-            Op::GreaterThan => "gt",
-            Op::GreaterEqual => "ge",
-            Op::Modulo => "modulo",
-            Op::Exponent => "exp",
-            Op::And => "and",
-            Op::Or => "or",
+            Op::Sum => intrinsics::ADD,
+            Op::Minus => intrinsics::SUB,
+            Op::Product => intrinsics::MULT,
+            Op::Divide => intrinsics::DIV,
+            Op::Equal => intrinsics::EQ,
+            Op::NotEqual => intrinsics::NE,
+            Op::LessThan => intrinsics::LT,
+            Op::LessEqual => intrinsics::LE,
+            Op::GreaterThan => intrinsics::GT,
+            Op::GreaterEqual => intrinsics::GE,
+            Op::Modulo => intrinsics::MODULO,
+            Op::Exponent => intrinsics::EXP,
+            Op::And => intrinsics::AND,
+            Op::Or => intrinsics::OR,
             Op::Pipe => "pipe",
             Op::Unknown(x) => x.as_str(),
         }

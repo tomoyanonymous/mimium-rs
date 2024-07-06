@@ -260,8 +260,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     expr_group
 }
 fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
-    select! {Token::Comment(Comment::SingleLine(s))=>(),
-    Token::Comment(Comment::MultiLine(m))=>()}
+    select! {Token::Comment(Comment::SingleLine(_))=>(),
+    Token::Comment(Comment::MultiLine(_))=>()}
 }
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let expr = expr_parser();

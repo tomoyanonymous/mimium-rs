@@ -1,11 +1,9 @@
+use super::intrinsics;
 use super::typing::{self, infer_type, InferContext};
-use super::{recursecheck, selfconvert};
-
-use std::env::args;
+mod recursecheck;
+mod selfconvert;
+use crate::mir::{self, Argument, Function, Instruction, Label, Mir, VPtr, VReg, Value};
 use std::sync::Arc;
-// use crate::runtime::vm::bytecode::Instruction;
-// use crate::runtime::vm::{FuncProto, RawVal, UpIndex};
-use crate::mir::{self, Argument, Function, Instruction, Label, Local, Mir, VPtr, VReg, Value};
 
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
@@ -72,10 +70,12 @@ impl Context {
     }
     pub fn make_intrinsics(&mut self, label: &String, args: Vec<VPtr>) -> Option<VPtr> {
         let inst = match (label.as_str(), args.len()) {
-            ("add", 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
-            ("sub", 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
-            ("mul", 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
-            ("div", 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
+            (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
+            (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
+            (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
+            (intrinsics::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
+            (intrinsics::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
+            (intrinsics::MODULO,2)=>Instruction::ModF(args[0].clone(), args[1].clone()),
             _ => return None,
         };
         Some(self.push_inst(inst))

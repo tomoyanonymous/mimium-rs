@@ -61,6 +61,13 @@ fn statefn2_same() {
 #[test]
 fn statefn2() {
     let res = run_multiple_file("statefn2.mmm", 3).unwrap();
-    let ans = vec![6.0f64, 12.0, 18.0];
+    let ans = vec![8.0f64, 16.0, 24.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn loopcounter() {
+    let res = run_multiple_file("loopcounter.mmm", 10).unwrap();
+    let ans = vec![1.0f64, 2.0, 3.0, 4.0, 0.0f64, 1.0, 2.0, 3.0, 4.0, 0.0];
     assert_eq!(res, ans);
 }

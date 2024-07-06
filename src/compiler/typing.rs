@@ -1,4 +1,5 @@
 use crate::ast::{Expr, Literal};
+use crate::compiler::intrinsics;
 use crate::types::{PType, Type};
 use crate::utils::{
     environment::Environment,
@@ -73,12 +74,18 @@ impl InferContext {
     }
     fn register_intrinsics(env: &mut Environment<Type>) {
         let fnty = function!(vec![numeric!(), numeric!()], numeric!());
-        let mut binds = vec![
-            ("add".to_string(), fnty.clone()),
-            ("sub".to_string(), fnty.clone()),
-            ("mul".to_string(), fnty.clone()),
-            ("div".to_string(), fnty.clone()),
+        let names = vec![
+            intrinsics::ADD,
+            intrinsics::SUB,
+            intrinsics::MULT,
+            intrinsics::DIV,
+            intrinsics::MODULO,
+            intrinsics::EXP,
         ];
+        let mut binds = names
+            .iter()
+            .map(|n| (n.to_string(), fnty.clone()))
+            .collect();
         env.add_bind(&mut binds);
     }
     pub fn gen_intermediate_type(&mut self) -> Type {

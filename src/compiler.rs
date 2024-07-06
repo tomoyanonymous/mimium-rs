@@ -1,10 +1,9 @@
 pub mod parser;
-pub mod recursecheck;
-pub mod selfconvert;
 pub mod typing;
 // pub mod hirgen;
 pub mod bytecodegen;
 pub mod mirgen;
+mod intrinsics;
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
@@ -78,12 +77,7 @@ use crate::{
     },
 };
 pub fn emit_ast(src: &str) -> Result<WithMeta<ast::Expr>, Vec<Box<dyn ReportableError>>> {
-    let rawast = parser::parse(src)?;
-    let res1 = recursecheck::convert_recurse(&rawast);
-    selfconvert::convert_self_top(res1).map_err(|e| {
-        let bres = Box::new(e) as Box<dyn ReportableError>;
-        vec![bres]
-    })
+    parser::parse(src)
 }
 
 pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
@@ -108,4 +102,3 @@ pub fn interpret_top(
         vec![eb]
     })
 }
-
