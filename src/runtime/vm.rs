@@ -30,12 +30,31 @@ macro_rules! binop {
         $op Self::get_as::<$t>($self.get_stack($src2 as i64))))
     };
 }
+macro_rules! binopmethod {
+    ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        $self.set_stack(
+            $dst as i64,
+            Self::to_value::<$t>(
+                Self::get_as::<$t>($self.get_stack($src1 as i64))
+                    .$op(Self::get_as::<$t>($self.get_stack($src2 as i64))),
+            ),
+        )
+    };
+}
 macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
         $self.set_stack($dst as i64,
             Self::to_value::<$t>(
             $op Self::get_as::<$t>($self.get_stack($src as i64))))
     };
+}
+macro_rules! uniopmethod {
+    ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {{
+        $self.set_stack(
+            $dst as i64,
+            Self::to_value::<$t>(Self::get_as::<$t>($self.get_stack($src as i64)).$op()),
+        )
+    }};
 }
 
 fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
@@ -108,7 +127,7 @@ impl Machine {
     pub(crate) fn to_value<T>(v: T) -> RawVal {
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
@@ -201,7 +220,7 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    let (name, f_proto) = &prog.global_fn_table[fn_proto_pos];
+                    let (_name, f_proto) = &prog.global_fn_table[fn_proto_pos];
 
                     let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
                         .upindexes
@@ -296,34 +315,27 @@ impl Machine {
                     binop!(%,f64,dst,src1,src2,self)
                 }
                 Instruction::NegF(dst, src) => {
-                    uniop!(-,i64,dst,src,self)
+                    uniop!(-,f64,dst,src,self)
                 }
                 Instruction::AbsF(dst, src) => {
-                    self.set_stack(
-                        dst as i64,
-                        Self::to_value::<f64>(
-                            Self::get_as::<f64>(self.get_stack(src as i64)).abs(),
-                        ),
-                    );
+                    uniopmethod!(abs, f64, dst, src, self)
+                }
+                Instruction::SqrtF(dst, src) => {
+                    uniopmethod!(sqrt, f64, dst, src, self)
                 }
                 Instruction::SinF(dst, src) => {
-                    self.set_stack(
-                        dst as i64,
-                        Self::to_value::<f64>(
-                            Self::get_as::<f64>(self.get_stack(src as i64)).sin(),
-                        ),
-                    );
+                    uniopmethod!(sin, f64, dst, src, self)
                 }
                 Instruction::CosF(dst, src) => {
-                    self.set_stack(
-                        dst as i64,
-                        Self::to_value::<f64>(
-                            Self::get_as::<f64>(self.get_stack(src as i64)).cos(),
-                        ),
-                    );
+                    uniopmethod!(cos, f64, dst, src, self)
                 }
-                Instruction::PowF(_, _, _) => todo!(),
-                Instruction::LogF(_, _, _) => todo!(),
+
+                Instruction::PowF(dst, src1, src2) => {
+                    binopmethod!(powf, f64, dst, src1, src2, self)
+                }
+                Instruction::LogF(dst, src1, src2) => {
+                    binopmethod!(log, f64, dst, src1, src2, self)
+                }
                 Instruction::AddI(dst, src1, src2) => {
                     binop!(+,i64,dst,src1,src2,self)
                 }
@@ -343,15 +355,15 @@ impl Machine {
                     uniop!(-,i64,dst,src,self)
                 }
                 Instruction::AbsI(dst, src) => {
-                    self.set_stack(
-                        dst as i64,
-                        Self::to_value::<i64>(
-                            Self::get_as::<i64>(self.get_stack(src as i64)).abs(),
-                        ),
-                    );
+                    uniopmethod!(abs, i64, dst, src, self)
                 }
-                Instruction::PowI(_, _) => todo!(),
-                Instruction::LogI(_, _, _) => todo!(),
+                Instruction::PowI(dst, lhs, rhs) => {
+                    binop!(^,i64,dst,lhs,rhs,self)
+                }
+                Instruction::LogI(_,_,_) => {
+                    //?
+                    todo!();
+                }
                 Instruction::Not(dst, src) => {
                     uniop!(!, bool, dst, src, self)
                 }
@@ -422,7 +434,7 @@ impl Machine {
                     .ext_fun_table
                     .iter()
                     .enumerate()
-                    .find(|(j, (fname, _fn))| name == fname)
+                    .find(|(_j, (fname, _fn))| name == fname)
                 {
                     self.fn_map.insert(i, j);
                 } else {
@@ -437,7 +449,7 @@ impl Machine {
                     .ext_cls_table
                     .iter()
                     .enumerate()
-                    .find(|(j, (fname, _fn))| name == fname)
+                    .find(|(_j, (fname, _fn))| name == fname)
                 {
                     self.cls_map.insert(i, j);
                 } else {
@@ -450,7 +462,7 @@ impl Machine {
             .global_fn_table
             .iter()
             .enumerate()
-            .find(|(i, (name, _))| name == entry)
+            .find(|(_i, (name, _))| name == entry)
         {
             self.internal_states.resize(func.state_size as usize, 0.0);
             // 0 is always base pointer to the main function

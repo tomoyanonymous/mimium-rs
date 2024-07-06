@@ -76,6 +76,11 @@ impl Context {
             (intrinsics::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
             (intrinsics::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
             (intrinsics::MODULO, 2) => Instruction::ModF(args[0].clone(), args[1].clone()),
+            (intrinsics::ABS, 1) => Instruction::AbsF(args[0].clone()),
+            (intrinsics::SIN, 1) => Instruction::SinF(args[0].clone()),
+            (intrinsics::COS, 1) => Instruction::CosF(args[0].clone()),
+            (intrinsics::LOG, 2) => Instruction::LogF(args[0].clone(), args[1].clone()),
+
             _ => return None,
         };
         Some(self.push_inst(inst))

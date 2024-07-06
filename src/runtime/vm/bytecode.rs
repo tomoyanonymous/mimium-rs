@@ -47,6 +47,7 @@ pub enum Instruction {
     ModF(Reg, Reg, Reg),
     NegF(Reg, Reg),
     AbsF(Reg, Reg),
+    SqrtF(Reg, Reg),
     SinF(Reg, Reg),
     CosF(Reg, Reg),
     PowF(Reg, Reg, Reg),
@@ -61,7 +62,7 @@ pub enum Instruction {
     NegI(Reg, Reg),
     AbsI(Reg, Reg),
 
-    PowI(Reg, Reg),
+    PowI(Reg, Reg, Reg),
     LogI(Reg, Reg, Reg),
     // primitive Operations for bool
     Not(Reg, Reg),
@@ -102,7 +103,7 @@ impl std::fmt::Display for Instruction {
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),
             Instruction::SinF(dst, src) => write!(f, "{:<10} {} {}", "sin", dst, src),
             Instruction::CosF(dst, src) => write!(f, "{:<10} {} {}", "cos", dst, src),
-            Instruction::PowI(dst, src) => write!(f, "{:<10} {} {}", "powi", dst, src),
+            Instruction::SqrtF(dst, src) => write!(f, "{:<10} {} {}", "sqrt", dst, src),
             Instruction::AbsI(dst, src) => write!(f, "{:<10} {} {}", "abs", dst, src),
             Instruction::NegI(dst, src) => write!(f, "{:<10} {} {}", "neg", dst, src),
             Instruction::Not(dst, src) => write!(f, "{:<10} {} {}", "not", dst, src),
@@ -124,6 +125,7 @@ impl std::fmt::Display for Instruction {
             }
 
             Instruction::LogI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "logi", dst, lhs, rhs),
+            Instruction::PowI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "powi", dst, lhs, rhs),
             Instruction::AddF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "addf", dst, lhs, rhs),
             Instruction::SubF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "subf", dst, lhs, rhs),
             Instruction::MulF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "mulf", dst, lhs, rhs),
