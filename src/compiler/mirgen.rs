@@ -2,73 +2,82 @@ use super::intrinsics;
 use super::typing::{self, infer_type, InferContext};
 mod recursecheck;
 mod selfconvert;
-use crate::mir::{self, Argument, Function, Instruction, Label, Mir, VPtr, VReg, Value};
+use crate::mir::{self, Argument, Instruction, Label, Mir, VPtr, VReg, Value};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
-use crate::utils::environment::{Environment, LookupRes};
+use crate::utils::environment::LookupRes;
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
+use std::cell::{OnceCell, RefCell};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
 
 #[derive(Debug)]
 pub struct Context {
-    pub typeenv: typing::InferContext,
-    pub program: Mir,
-    valenv: Environment<VPtr>,
-    current_fn_idx: usize,
+    parent: Option<Rc<RefCell<Self>>>,
+    pub typeenv: Rc<RefCell<InferContext>>,
+    valenv: Vec<(String, VPtr)>,
+    pub program: Rc<RefCell<Mir>>,
+    func: Option<mir::Function>,
     current_bb: usize,
     upvalue_counts: Vec<usize>,
     reg_count: VReg,
     fn_label: Option<String>,
-    anonymous_fncount: u64,
+    anonymous_fncount: OnceCell<u64>,
     state_offset: u64,
+}
+
+fn make_child_ctx(parentcell: Rc<RefCell<Context>>, arg_binds: &[(String, VPtr)]) -> Context {
+    let parent = parentcell.borrow_mut();
+    let afncount = *parent.anonymous_fncount.get().unwrap();
+    let name = parent
+        .fn_label
+        .clone()
+        .unwrap_or_else(|| format!("lambda_{}", afncount));
+    let args = arg_binds.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();
+    let newf = mir::Function::new(&name, &args);
+    let parent2 = Some(parentcell.clone());
+    Context {
+        parent: parent2,
+        typeenv: parent.typeenv.clone(),
+        valenv: arg_binds.to_vec(),
+        program: parent.program.clone(),
+        func: Some(newf),
+        current_bb: 0,
+        upvalue_counts: vec![],
+        reg_count: args.len() as u64,
+        fn_label: name.into(),
+        anonymous_fncount: afncount.into(),
+        state_offset: 0,
+    }
 }
 
 impl Context {
     pub fn new() -> Self {
         Self {
-            typeenv: InferContext::new(),
-            valenv: Environment::new(),
-            program: Mir::default(),
-            current_fn_idx: 0,
+            parent: None,
+            typeenv: Rc::new(RefCell::new(InferContext::new())),
+            valenv: vec![],
+            program: Rc::new(RefCell::new(Mir::default())),
+            func: None,
             current_bb: 0,
             upvalue_counts: vec![],
             reg_count: 0,
-            fn_label: None,
-            anonymous_fncount: 0,
+            fn_label: String::from("_mimium_global").into(),
+            anonymous_fncount: 0.into(),
             state_offset: 0,
         }
     }
-    pub fn get_current_fn(&mut self) -> Option<&mut mir::Function> {
-        self.program.functions.get_mut(self.current_fn_idx)
+
+    fn get_current_fn(&mut self) -> &mut mir::Function {
+        self.func.as_mut().unwrap()
     }
-    pub fn get_fn_from_id(&mut self, id: usize) -> Option<&mut mir::Function> {
-        self.program.functions.get_mut(id)
-    }
-    fn make_new_fname(&mut self) -> String {
-        let res = self.fn_label.clone().unwrap_or_else(|| {
-            let res = format!("lambda_{}", self.anonymous_fncount);
-            self.anonymous_fncount += 1;
-            res
-        });
-        self.fn_label = None;
-        res
-    }
-    pub fn make_new_fn(&mut self, args: &[VPtr]) -> (&mut Function, usize) {
-        let name = self.make_new_fname();
-        let newf = mir::Function::new(name.as_str(), args);
-        self.program.functions.push(newf);
-        let idx = self.program.functions.len() - 1;
-        self.current_bb = 0;
-        self.current_fn_idx = idx;
-        (self.program.functions.last_mut().unwrap(), idx)
-    }
-    pub fn make_intrinsics(&mut self, label: &String, args: Vec<VPtr>) -> Option<VPtr> {
+    fn make_intrinsics(&mut self, label: &String, args: Vec<VPtr>) -> Option<VPtr> {
         let inst = match (label.as_str(), args.len()) {
             (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
             (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
@@ -88,20 +97,242 @@ impl Context {
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
         let bbid = self.current_bb;
         self.get_current_fn()
-            .unwrap()
             .body
             .get_mut(bbid)
             .expect("no basic block found")
     }
-    pub fn push_inst(&mut self, inst: Instruction) -> VPtr {
+    fn push_inst(&mut self, inst: Instruction) -> VPtr {
         let res = Arc::new(Value::Register(self.reg_count));
         self.reg_count += 1;
         self.get_current_basicblock().0.push((res.clone(), inst));
         res
     }
-    pub fn push_upindex(&mut self, _v: mir::UpIndex) {
+    fn push_upindex(&mut self, _v: mir::UpIndex) {
         // let fnproto = self.get_current_fn().unwrap();
         // fnproto.upindexes.push(v)
+    }
+    fn add_bind(&mut self, bind: (String, VPtr)) {
+        self.valenv.push(bind);
+    }
+    fn lookup(&self, key: &str) -> LookupRes<VPtr> {
+        let local = self.valenv.iter().find(|(name, v)| name == key);
+        let parent = &self.parent;
+        match (local, parent) {
+            (Some((_localname, v)), None) => LookupRes::Global(v.clone()),
+            (Some((_localname, v)), _) => LookupRes::Local(v.clone()),
+            (None, None) => LookupRes::None,
+            (None, Some(p)) => p.borrow().lookup_upvalue(key),
+        }
+    }
+    fn lookup_upvalue(&self, key: &str) -> LookupRes<VPtr> {
+        let local = self.valenv.iter().find(|(name, v)| name == key);
+        let parent = &self.parent;
+        match (local, parent) {
+            (Some((_localname, v)), None) => LookupRes::Global(v.clone()),
+            (Some((_upname, v)), _) => LookupRes::UpValue(v.clone()),
+            (None, None) => LookupRes::None,
+            (None, Some(p)) => p.borrow().lookup_upvalue(key),
+        }
+    }
+    fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
+        let v = match lit {
+            Literal::String(_) => todo!(),
+            Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
+            Literal::Float(f) => self.push_inst(Instruction::Float(
+                f.parse::<f64>().expect("illegal float format"),
+            )),
+            Literal::SelfLit => unreachable!(),
+            Literal::Now => todo!(),
+        };
+        Ok(v)
+    }
+}
+
+fn eval_expr(
+    ctx_cell: &Rc<RefCell<Context>>,
+    e_meta: &WithMeta<Expr>,
+) -> Result<VPtr, CompileError> {
+    let WithMeta(e, span) = e_meta;
+    {
+        let ctx = ctx_cell.borrow_mut();
+        if ctx.parent.is_none() {
+            let mut tenv = ctx.typeenv.borrow_mut();
+            let _ = infer_type(e, &mut tenv);
+        }
+    }
+    match e {
+        Expr::Literal(lit) => Ok(ctx_cell.borrow_mut().eval_literal(lit, span)?),
+        Expr::Var(name, _time) => {
+            match ctx_cell.borrow().lookup(name) {
+                LookupRes::Local(v) => Ok(v.clone()),
+                LookupRes::UpValue(v) => todo!(),
+                LookupRes::Global(v) => Ok(v.clone()),
+                LookupRes::None => {
+                    // let t = infer_type(e, &mut self.typeenv).expect("type infer error");
+                    // program.ext_cls_table.push((v.clone(),t));
+                    Ok(Arc::new(Value::ExtFunction(Label(name.clone()))))
+                }
+            }
+        }
+        Expr::Block(b) => {
+            if let Some(block) = b {
+                eval_expr(ctx_cell, block)
+            } else {
+                //todo?
+                Ok(Arc::new(Value::None))
+            }
+        }
+        Expr::Tuple(_) => todo!(),
+        Expr::Proj(_, _) => todo!(),
+        Expr::Apply(f, args) => {
+            // skip type inference for now.
+            // let ftype = infer_type(func, &mut self.typeenv).map_err(|typing::Error(e, span)| {
+            //     CompileError(CompileErrorKind::TypingFailure(e), span)
+            // })?;
+            // let nret = if let Type::Primitive(PType::Unit) = ftype {
+            //     0
+            // } else {
+            //     1
+            // };
+            let f = eval_expr(ctx_cell, f)?;
+
+            let makeargs = |args: &Vec<WithMeta<Expr>>| {
+                args.iter()
+                    .map(|a_meta| eval_expr(ctx_cell, a_meta))
+                    .try_collect::<Vec<_>>()
+            };
+            let res = match f.as_ref() {
+                Value::Register(_p) => {
+                    todo!();
+                }
+                Value::Function(idx, statesize) => {
+                    let a_regs = makeargs(args)?;
+                    let mut ctx = ctx_cell.borrow_mut();
+                    ctx.get_current_fn().state_size += statesize;
+                    //insert pushstateoffset
+                    let f = ctx.push_inst(Instruction::Uinteger(*idx as u64));
+                    if ctx.state_offset > 0 {
+                        ctx.get_current_basicblock()
+                            .0
+                            .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
+                    }
+
+                    let res = ctx.push_inst(Instruction::Call(f.clone(), a_regs.clone()));
+                    if *statesize > 0 {
+                        ctx.state_offset += 1;
+                    }
+                    Ok(res)
+                }
+                Value::ExtFunction(label) => {
+                    let a_regs = makeargs(args)?;
+                    if let Some(res) = ctx_cell
+                        .borrow_mut()
+                        .make_intrinsics(&label.0, a_regs.clone())
+                    {
+                        Ok(res)
+                    } else {
+                        todo!()
+                    }
+                }
+                // Value::ExternalClosure(i) => todo!(),
+                Value::None => unreachable!(),
+                _ => todo!(),
+            };
+            res
+        }
+        Expr::Lambda(ids, _types, body) => {
+            let binds = ids
+                .iter()
+                .enumerate()
+                .map(|(idx, name)| {
+                    let label = name.0.id.clone();
+                    let a = Argument(
+                        Label(label.clone()),
+                        name.0.ty.clone().unwrap_or(Type::Unknown),
+                    );
+                    let res = (label.clone(), Arc::new(Value::Argument(idx, Arc::new(a))));
+                    res
+                })
+                .collect::<Vec<_>>();
+
+            ctx_cell.borrow_mut().reg_count = 0;
+            let child = make_child_ctx(ctx_cell.clone(), &binds);
+            let child_cell = Rc::new(RefCell::new(child));
+            let ty = {
+                let ctx = ctx_cell.borrow_mut();
+                let mut tenv = ctx.typeenv.borrow_mut();
+                infer_type(e, &mut tenv)
+                    .map_err(|e| CompileError(CompileErrorKind::TypingFailure(e.0), e.1))?
+            };
+            let res_type = match ty {
+                Type::Function(atys, box rty, _) => rty,
+                _ => {
+                    unreachable!("unexpected type detected")
+                }
+            };
+            let res = eval_expr(&child_cell, &body)?;
+            let mut c_ctx = child_cell.borrow_mut();
+            let state_size = c_ctx.get_current_fn().state_size;
+            if c_ctx.state_offset > 1 && state_size > 0 {
+                c_ctx.get_current_basicblock().0.push((
+                    Arc::new(mir::Value::None),
+                    Instruction::PopStateOffset(state_size - 1),
+                )); //todo:offset size
+            }
+            match (res.as_ref(), res_type) {
+                (_, Type::Primitive(PType::Unit) | Type::Unknown) => {}
+                (Value::State(v), _) => {
+                    let _ = c_ctx.push_inst(Instruction::ReturnFeed(v.clone()));
+                }
+                (_, _) => {
+                    let _ = c_ctx.push_inst(Instruction::Return(res.clone()));
+                }
+            };
+            let idx = {
+                let fns = &mut c_ctx.program.borrow_mut().functions;
+                fns.push(c_ctx.func.as_ref().unwrap().clone());
+                fns.len() - 1
+            };
+            Ok(Arc::new(Value::Function(idx, state_size)))
+        }
+        Expr::Feed(id, expr) => {
+            // self.reg_count += 1;
+            let res = ctx_cell.borrow_mut().push_inst(Instruction::GetState);
+            ctx_cell.borrow_mut().add_bind((id.clone(), res.clone()));
+
+            let retv = eval_expr(ctx_cell, expr)?;
+            ctx_cell.borrow_mut().get_current_fn().state_size += 1;
+            Ok(Arc::new(Value::State(retv)))
+        }
+        Expr::Let(id, body, then) => {
+            ctx_cell.borrow_mut().fn_label = Some(id.id.clone());
+            let bodyv = eval_expr(ctx_cell, body)?;
+            ctx_cell.borrow_mut().add_bind((id.id.clone(), bodyv));
+            if let Some(then_e) = then {
+                eval_expr(ctx_cell, then_e)
+            } else {
+                Ok(Arc::new(Value::None))
+            }
+        }
+        Expr::LetRec(id, body, then) => {
+            let bind = (id.id.clone(), Arc::new(Value::FixPoint));
+            ctx_cell.borrow_mut().fn_label = Some(id.id.clone());
+            ctx_cell.borrow_mut().add_bind(bind);
+
+            let _ = eval_expr(ctx_cell, body)?;
+            if let Some(then_e) = then {
+                eval_expr(ctx_cell, then_e)
+            } else {
+                Ok(Arc::new(Value::None))
+            }
+        }
+        Expr::LetTuple(_, _, _) => todo!(),
+        Expr::If(_, _, _) => todo!(),
+        Expr::Bracket(_) => todo!(),
+        Expr::Escape(_) => todo!(),
+        Expr::Error => todo!(),
+        Expr::Assign(_, _) => todo!(),
+        Expr::Then(_, _) => todo!(),
     }
 }
 
@@ -137,246 +368,26 @@ impl ReportableError for CompileError {
 }
 
 pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
-    let mut ctx = Context::new();
+    let ctxcell = Rc::new(RefCell::new(Context::new()));
     let ast2 = recursecheck::convert_recurse(&src);
     let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
-    let _res = eval_expr(&expr2, &mut ctx).map_err(|e| {
+    let _res = eval_expr(&ctxcell, &expr2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
-    Ok(ctx.program)
-}
-// fn load_new_rawv(rawv: RawVal, func: &mut FuncProto) -> Result<u8, CompileError> {
-//     let idx = func.constants.binary_search(&rawv).unwrap_or_else(|_| {
-//         func.constants.push(rawv);
-//         if func.constants.is_empty() {
-//             panic!("failed to push constant to funcproto")
-//         }
-//         func.constants.len() - 1
-//     });
-//     if idx > u8::MAX as usize {
-//         Err(Box::<dyn ReportableError>::new(CompileError(CompileErrorKind::TooManyConstants,0..=0)))
-//     } else {
-//         Ok(idx as u8)
-//     }
-// }
-// fn load_new_float(v: f64, func: &mut FuncProto) -> Result<u8, CompileError> {
-//     let rawv: RawVal = unsafe { std::mem::transmute(v) };
-//     load_new_rawv(rawv, func)
-// }
-// fn load_new_int(v: i64, func: &mut FuncProto) -> Result<u8, CompileError> {
-//     let rawv: RawVal = unsafe { std::mem::transmute(v) };
-//     load_new_rawv(rawv, func)
-// }
-
-fn eval_literal(lit: &Literal, _span: &Span, ctx: &mut Context) -> Result<VPtr, CompileError> {
-    let v = match lit {
-        Literal::String(_) => todo!(),
-        Literal::Int(i) => ctx.push_inst(Instruction::Integer(*i)),
-        Literal::Float(f) => ctx.push_inst(Instruction::Float(
-            f.parse::<f64>().expect("illegal float format"),
-        )),
-        Literal::SelfLit => unreachable!(),
-        Literal::Now => todo!(),
-    };
-    Ok(v)
+    let ctx = ctxcell.borrow();
+    let program = ctx.program.borrow();
+    Ok(program.clone())
 }
 
-fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, CompileError> {
-    let WithMeta(e, span) = e_meta;
-    match e {
-        Expr::Literal(lit) => Ok(eval_literal(lit, span, ctx)?),
-        Expr::Var(v, _time) => {
-            match ctx.valenv.lookup_cls(v) {
-                LookupRes::Local(v) => Ok(v.clone()),
-                LookupRes::UpValue(_v) => {
-                    todo!();
-                }
-                LookupRes::Global(v) => Ok(v.clone()),
-                LookupRes::None => {
-                    // let t = infer_type(e, &mut ctx.typeenv).expect("type infer error");
-                    // program.ext_cls_table.push((v.clone(),t));
-                    Ok(Arc::new(Value::ExtFunction(Label(v.clone()))))
-                }
-            }
-        }
-        Expr::Block(b) => {
-            if let Some(block) = b {
-                eval_expr(block, ctx)
-            } else {
-                //todo?
-                Ok(Arc::new(Value::None))
-            }
-        }
-        Expr::Tuple(_) => todo!(),
-        Expr::Proj(_, _) => todo!(),
-        Expr::Apply(f, args) => {
-            // skip type inference for now.
-            // let ftype = infer_type(func, &mut ctx.typeenv).map_err(|typing::Error(e, span)| {
-            //     CompileError(CompileErrorKind::TypingFailure(e), span)
-            // })?;
-            // let nret = if let Type::Primitive(PType::Unit) = ftype {
-            //     0
-            // } else {
-            //     1
-            // };
-            let f = eval_expr(f, ctx)?;
-
-            let makeargs = |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
-                args.iter()
-                    .map(|a_meta| eval_expr(a_meta, ctx))
-                    .try_collect::<Vec<_>>()
-            };
-            let res = match f.as_ref() {
-                Value::Register(_p) => {
-                    todo!();
-                }
-                Value::Function(idx, statesize) => {
-                    ctx.get_current_fn().unwrap().state_size += statesize;
-                    //insert pushstateoffset
-
-                    let f = ctx.push_inst(Instruction::Uinteger(*idx as u64));
-                    let a_regs = makeargs(args, ctx)?;
-                    if ctx.state_offset > 0 {
-                        ctx.get_current_basicblock()
-                            .0
-                            .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
-                    }
-
-                    let res = ctx.push_inst(Instruction::Call(f.clone(), a_regs.clone()));
-                    if *statesize > 0 {
-                        ctx.state_offset += 1;
-                    }
-                    Ok(res)
-                }
-                Value::ExtFunction(label) => {
-                    let a_regs = makeargs(args, ctx)?;
-                    if let Some(res) = ctx.make_intrinsics(&label.0, a_regs.clone()) {
-                        Ok(res)
-                    } else {
-                        todo!()
-                    }
-                }
-                // Value::ExternalClosure(i) => todo!(),
-                Value::None => unreachable!(),
-                _ => todo!(),
-            };
-            res
-        }
-        Expr::Lambda(ids, _types, body) => {
-            let tmp_reg = ctx.reg_count;
-
-            let mut binds = ids
-                .iter()
-                .enumerate()
-                .map(|(idx, name)| {
-                    let label = name.0.id.clone();
-                    let a = Argument(
-                        Label(label.clone()),
-                        name.0.ty.clone().unwrap_or(Type::Unknown),
-                    );
-                    let res = (label.clone(), Arc::new(Value::Argument(idx, Arc::new(a))));
-                    res
-                })
-                .collect::<Vec<_>>();
-
-            ctx.reg_count = 0;
-            let (_newf, fnid) = ctx.make_new_fn(
-                binds
-                    .iter()
-                    .map(|(_, v)| v.clone())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            );
-
-            let mut tbinds = ids
-                .iter()
-                .map(|name| {
-                    (
-                        name.0.id.clone(),
-                        name.0
-                            .ty
-                            .clone()
-                            .unwrap_or_else(|| ctx.typeenv.gen_intermediate_type()),
-                    )
-                })
-                .collect::<Vec<_>>();
-            ctx.typeenv.env.extend();
-            ctx.valenv.extend();
-            ctx.reg_count += binds.len() as u64;
-
-            ctx.valenv.add_bind(&mut binds);
-            ctx.typeenv.env.add_bind(&mut tbinds);
-            let res_type =
-                infer_type(&body.0, &mut ctx.typeenv).map_err(|e| CompileError::from(e))?;
-            let res = eval_expr(&body, ctx)?;
-            let state_size = ctx.get_current_fn().unwrap().state_size;
-            if ctx.state_offset > 1 && state_size > 0 {
-                ctx.get_current_basicblock().0.push((
-                    Arc::new(mir::Value::None),
-                    Instruction::PopStateOffset(state_size-1),
-                )); //todo:offset size
-            }
-            ctx.state_offset = 0;
-            match (res.as_ref(), res_type) {
-                (_, Type::Primitive(PType::Unit) | Type::Unknown) => {}
-                (Value::State(v), _) => {
-                    let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone()));
-                }
-                (_, _) => {
-                    let _ = ctx.push_inst(Instruction::Return(res.clone()));
-                }
-            };
-            ctx.reg_count = tmp_reg;
-            ctx.typeenv.env.to_outer();
-            ctx.valenv.to_outer();
-            Ok(Arc::new(Value::Function(fnid, state_size)))
-        }
-        Expr::Feed(id, expr) => {
-            // ctx.reg_count += 1;
-            let res = ctx.push_inst(Instruction::GetState);
-
-            ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
-            let retv = eval_expr(expr, ctx)?;
-            ctx.get_current_fn().unwrap().state_size += 1;
-            Ok(Arc::new(Value::State(retv)))
-        }
-        Expr::Let(id, body, then) => {
-            ctx.fn_label = Some(id.id.clone());
-            let bodyv = eval_expr(body, ctx)?;
-            let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
-            ctx.valenv.add_bind(&mut vec![(id.id.clone(), bodyv)]);
-            ctx.typeenv.env.add_bind(&mut vec![(id.id.clone(), bodyt)]);
-            if let Some(then_e) = then {
-                eval_expr(then_e, ctx)
-            } else {
-                Ok(Arc::new(Value::None))
-            }
-        }
-        Expr::LetRec(id, body, then) => {
-            let bind = (id.id.clone(), Arc::new(Value::FixPoint));
-            let bodyt = infer_type(&body.0, &mut ctx.typeenv)?;
-
-            ctx.fn_label = Some(id.id.clone());
-            ctx.valenv.add_bind(&mut vec![bind]);
-
-            ctx.typeenv.env.add_bind(&mut vec![(id.id.clone(), bodyt)]);
-            let _ = eval_expr(body, ctx)?;
-            if let Some(then_e) = then {
-                eval_expr(then_e, ctx)
-            } else {
-                Ok(Arc::new(Value::None))
-            }
-        }
-        Expr::LetTuple(_, _, _) => todo!(),
-        Expr::If(_, _, _) => todo!(),
-        Expr::Bracket(_) => todo!(),
-        Expr::Escape(_) => todo!(),
-        Expr::Error => todo!(),
-        Expr::Assign(_, _) => todo!(),
-        Expr::Then(_, _) => todo!(),
+fn resolve_upvalue(v: &Arc<Value>, ctx: &mut Context) {
+    match v.as_ref() {
+        Value::Argument(i, v) => {}
+        Value::Register(i) => todo!(),
+        Value::State(v) => todo!(),
+        _ => unreachable!(),
     }
 }

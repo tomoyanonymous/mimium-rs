@@ -6,7 +6,7 @@ pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Label(pub String);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Global(Label, Type);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,7 +35,7 @@ pub enum Value {
 
 pub type VPtr = Arc<Value>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     Uinteger(u64),
     Integer(i64),
@@ -109,10 +109,10 @@ pub enum Instruction {
     CastItoB(VPtr),
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Block(pub Vec<(VPtr, Instruction)>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UpIndex {
     Local(usize),   // index of local variables in upper functions
     Upvalue(usize), // index of upvalues in upper functions
@@ -125,7 +125,7 @@ pub struct Local {
     pub is_captured: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
@@ -147,7 +147,7 @@ impl Function {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
     pub globals: Vec<Global>,
