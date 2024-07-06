@@ -5,7 +5,7 @@ use crate::utils::metadata::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
 mod token;
-use token::{Op, Token};
+use token::{Comment, Op, Token};
 mod error;
 mod lexer;
 
@@ -259,7 +259,10 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     });
     expr_group
 }
-
+fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
+    select! {Token::Comment(Comment::SingleLine(s))=>(),
+    Token::Comment(Comment::MultiLine(m))=>()}
+}
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
     let lvar = lvar_parser();
@@ -327,7 +330,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             })
             .labelled("macro definition");
 
-        function_s.or(macro_s).or(expr_parser()).then_ignore(end())
+        function_s.or(macro_s).or(expr_parser())
     });
     stmt
     // expr_parser().then_ignore(end())
@@ -335,6 +338,8 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 
 fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     func_parser()
+        .padded_by(comment_parser().repeated().ignored())
+        .then_ignore(end())
 }
 
 pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
