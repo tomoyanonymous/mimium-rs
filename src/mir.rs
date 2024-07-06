@@ -80,6 +80,7 @@ pub enum Instruction {
     CosF(VPtr),
     PowF(VPtr, VPtr),
     LogF(VPtr, VPtr),
+    SqrtF(VPtr),
 
     // Primitive Operations for int
     AddI(VPtr, VPtr),

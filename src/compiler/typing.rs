@@ -73,8 +73,8 @@ impl InferContext {
         res
     }
     fn register_intrinsics(env: &mut Environment<Type>) {
-        let fnty = function!(vec![numeric!(), numeric!()], numeric!());
-        let names = vec![
+        let binop_ty = function!(vec![numeric!(), numeric!()], numeric!());
+        let binop_names = vec![
             intrinsics::ADD,
             intrinsics::SUB,
             intrinsics::MULT,
@@ -82,10 +82,21 @@ impl InferContext {
             intrinsics::MODULO,
             intrinsics::EXP,
         ];
-        let mut binds = names
+        let uniop_ty = function!(vec![numeric!()], numeric!());
+        let uniop_names = vec![
+            intrinsics::SIN,
+            intrinsics::COS,
+            intrinsics::ABS,
+            intrinsics::SQRT,
+        ];
+        let mut binds = binop_names
             .iter()
-            .map(|n| (n.to_string(), fnty.clone()))
-            .collect();
+            .map(|n| (n.to_string(), binop_ty.clone()))
+            .collect::<Vec<(String, Type)>>();
+        uniop_names
+            .iter()
+            .map(|n| (n.to_string(), uniop_ty.clone()))
+            .collect_into(&mut binds);
         env.add_bind(&mut binds);
     }
     pub fn gen_intermediate_type(&mut self) -> Type {
@@ -106,7 +117,7 @@ impl InferContext {
                 } else {
                     self.subst_map
                         .get(&id1)
-                        .map_or(false, |r| self.occur_check(id1, r.clone()))
+                        .map_or(false, |r| self.occur_check(id2, r.clone()))
                 }
             }
             Type::Array(a) => cls(*a),

@@ -314,12 +314,13 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 infer_type(&body.0, &mut ctx.typeenv).map_err(|e| CompileError::from(e))?;
             let res = eval_expr(&body, ctx)?;
             let state_size = ctx.get_current_fn().unwrap().state_size;
-            if ctx.state_offset > 0 {
+            if ctx.state_offset > 1 && state_size > 0 {
                 ctx.get_current_basicblock().0.push((
                     Arc::new(mir::Value::None),
-                    Instruction::PopStateOffset(state_size - 1),
+                    Instruction::PopStateOffset(state_size-1),
                 )); //todo:offset size
             }
+            ctx.state_offset = 0;
             match (res.as_ref(), res_type) {
                 (_, Type::Primitive(PType::Unit) | Type::Unknown) => {}
                 (Value::State(v), _) => {

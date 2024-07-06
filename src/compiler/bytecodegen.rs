@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use crate::mir::{self, Mir};
@@ -44,13 +43,15 @@ impl VRegister {
             Some(v1_c) => *v1_c == v,
             _ => false,
         });
-        match res {
-            Some(pos) => {
+        match (res, v.as_ref()) {
+            //argument is registered in absolute position
+            (Some(pos), mir::Value::Argument(_,_)) => Some(pos as Reg),
+            (Some(pos), _) => {
                 //mir is SSA form, so the value will be used only once.
                 self.0[pos] = None;
                 Some(pos as Reg)
             }
-            None => None,
+            _ => None,
         }
     }
 }
@@ -120,10 +121,10 @@ impl ByteCodeGenerator {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(v.clone()).unwrap();
                         let dst = self.get_destination(dst);
-                        if dst != faddress{
+                        if dst != faddress {
                             funcproto
-                            .bytecodes
-                            .push(VmInstruction::Move(dst as Reg, faddress));
+                                .bytecodes
+                                .push(VmInstruction::Move(dst as Reg, faddress));
                         }
                         for (i, a) in args.iter().enumerate() {
                             let src = self.vregister.find(a.clone()).unwrap();
@@ -166,7 +167,7 @@ impl ByteCodeGenerator {
             mir::Instruction::ReturnFeed(new) => {
                 let old = self.vregister.add_newvalue(dst);
                 funcproto.bytecodes.push(VmInstruction::GetState(old));
-                let new= self.vregister.find(new.clone()).unwrap();
+                let new = self.vregister.find(new.clone()).unwrap();
                 funcproto.bytecodes.push(VmInstruction::SetState(new));
                 VmInstruction::Return(old, 1)
             }
@@ -186,9 +187,25 @@ impl ByteCodeGenerator {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::DivF(self.get_destination(dst), r1, r2)
             }
-            mir::Instruction::ModF(v1,v2)=> {
+            mir::Instruction::ModF(v1, v2) => {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::ModF(self.get_destination(dst), r1, r2)
+            }
+            mir::Instruction::SinF(v1) => {
+                let src = self.vregister.find(v1.clone()).unwrap();
+                VmInstruction::SinF(self.get_destination(dst), src)
+            }
+            mir::Instruction::CosF(v1) => {
+                let src = self.vregister.find(v1.clone()).unwrap();
+                VmInstruction::CosF(self.get_destination(dst), src)
+            }
+            mir::Instruction::AbsF(v1) => {
+                let src = self.vregister.find(v1.clone()).unwrap();
+                VmInstruction::AbsF(self.get_destination(dst), src)
+            }
+            mir::Instruction::SqrtF(v1) => {
+                let src = self.vregister.find(v1.clone()).unwrap();
+                VmInstruction::SqrtF(self.get_destination(dst), src)
             }
             mir::Instruction::AddI(v1, v2) => {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
@@ -206,11 +223,11 @@ impl ByteCodeGenerator {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::DivI(self.get_destination(dst), r1, r2)
             }
-            mir::Instruction::ModI(v1,v2)=> {
+            mir::Instruction::ModI(v1, v2) => {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);
                 VmInstruction::ModI(self.get_destination(dst), r1, r2)
             }
-            _=>{
+            _ => {
                 unimplemented!()
             }
         }
@@ -255,7 +272,9 @@ mod test {
         use super::*;
         use crate::types::Type;
         use mir::Label;
-
+        // fn test(hoge){
+        //   hoge+1
+        //}
         let mut src = mir::Mir::default();
         let arg = Arc::new(mir::Value::Argument(
             0,
@@ -284,8 +303,8 @@ mod test {
         main.constants.push(1);
         main.bytecodes = vec![
             VmInstruction::MoveConst(1, 0),
-            VmInstruction::AddF(0, 0, 1),
-            VmInstruction::Return(0, 1),
+            VmInstruction::AddF(1, 0, 1),
+            VmInstruction::Return(1, 1),
         ];
         answer.global_fn_table.push(("test".to_string(), main));
         assert_eq!(res, answer);
