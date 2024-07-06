@@ -163,10 +163,12 @@ impl ByteCodeGenerator {
             mir::Instruction::Return(v) => {
                 VmInstruction::Return(self.vregister.find(v.clone()).unwrap(), 1)
             }
-            mir::Instruction::ReturnFeed(v) => {
-                let src = self.vregister.find(v.clone()).unwrap();
-                funcproto.bytecodes.push(VmInstruction::SetState(src));
-                VmInstruction::Return(src, 1)
+            mir::Instruction::ReturnFeed(new) => {
+                let old = self.vregister.add_newvalue(dst);
+                funcproto.bytecodes.push(VmInstruction::GetState(old));
+                let new= self.vregister.find(new.clone()).unwrap();
+                funcproto.bytecodes.push(VmInstruction::SetState(new));
+                VmInstruction::Return(old, 1)
             }
             mir::Instruction::AddF(v1, v2) => {
                 let (r1, r2) = self.get_binop(funcproto, v1, v2);

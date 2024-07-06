@@ -75,7 +75,7 @@ impl Context {
             (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
             (intrinsics::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
             (intrinsics::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
-            (intrinsics::MODULO,2)=>Instruction::ModF(args[0].clone(), args[1].clone()),
+            (intrinsics::MODULO, 2) => Instruction::ModF(args[0].clone(), args[1].clone()),
             _ => return None,
         };
         Some(self.push_inst(inst))
@@ -332,6 +332,7 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
         Expr::Feed(id, expr) => {
             // ctx.reg_count += 1;
             let res = ctx.push_inst(Instruction::GetState);
+
             ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
             let retv = eval_expr(expr, ctx)?;
             ctx.get_current_fn().unwrap().state_size += 1;

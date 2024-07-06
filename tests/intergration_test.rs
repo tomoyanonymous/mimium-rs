@@ -42,32 +42,32 @@ fn run_multiple_file(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 #[test]
 fn counter() {
     let res = run_multiple_file("counter.mmm", 10).unwrap();
-    let ans = vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn statefn() {
     let res = run_multiple_file("statefn.mmm", 10).unwrap();
-    let ans = vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn statefn2_same() {
     let res = run_multiple_file("statefn2_same.mmm", 3).unwrap();
-    let ans = vec![6.0f64, 12.0, 18.0];
+    let ans = vec![0.0, 6.0, 12.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn statefn2() {
     let res = run_multiple_file("statefn2.mmm", 3).unwrap();
-    let ans = vec![8.0f64, 16.0, 24.0];
+    let ans = vec![0.0, 8.0, 16.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn loopcounter() {
     let res = run_multiple_file("loopcounter.mmm", 10).unwrap();
-    let ans = vec![1.0f64, 2.0, 3.0, 4.0, 0.0f64, 1.0, 2.0, 3.0, 4.0, 0.0];
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 0.0, 1.0, 2.0, 3.0, 4.0];
     assert_eq!(res, ans);
 }

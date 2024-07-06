@@ -65,6 +65,7 @@ pub enum Instruction {
     //jump label
     JmpIf(VPtr, Label, Label),
     Return(VPtr),
+    //value to update state
     ReturnFeed(VPtr),
 
     // Primitive Operations
