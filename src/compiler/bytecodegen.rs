@@ -1,37 +1,63 @@
-use std::collections::HashMap;
+
 use std::sync::Arc;
 
-use crate::mir::{self, Mir, VReg};
+use crate::mir::{self, Mir};
 use crate::runtime::vm::bytecode::Reg;
-use crate::runtime::vm::{self, bytecode};
+use crate::runtime::vm::{self};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
+#[derive(Debug)]
+pub struct VRegister(Vec<Option<Arc<mir::Value>>>);
 
-#[derive(Debug, Default)]
-struct VStack(Reg);
+impl Default for VRegister {
+    fn default() -> Self {
+        Self(vec![None; 256])
+    }
+}
 
-impl VStack {
-    pub fn push(&mut self) -> Reg {
-        self.0 += 1;
-        self.0 - 1
+impl VRegister {
+    pub fn reset(&mut self) {
+        self.0.fill(None);
     }
-    pub fn pop(&mut self) -> Reg {
-        self.0 -= 1;
-        self.0
+    pub fn add_newvalue(&mut self, v: Arc<mir::Value>) -> Reg {
+        // println!("add  reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        let pos = self.0.iter().position(|v| v.is_none()).unwrap();
+        self.0[pos] = Some(v.clone());
+        pos as Reg
     }
-    pub fn pop_2(&mut self) -> Reg {
-        self.0 -= 2;
-        self.0
+    pub fn remove_value(&mut self, v: Arc<mir::Value>) {
+        // println!("rm   reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        match self.0.iter().position(|v1| match v1 {
+            Some(v1) => *v1 == v,
+            None => false,
+        }) {
+            Some(i) => self.0[i] = None,
+            None => {
+                panic!("value does not exist in virtual registers")
+            }
+        }
     }
-    pub fn get_top(&self) -> Reg {
-        self.0 - 1
+    pub fn find(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
+        // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        //todo: Error handling
+        let res = self.0.iter().position(|v1| match v1 {
+            Some(v1_c) => *v1_c == v,
+            _ => false,
+        });
+        match res {
+            Some(pos) => {
+                //mir is SSA form, so the value will be used only once.
+                self.0[pos] = None;
+                Some(pos as Reg)
+            }
+            None => None,
+        }
     }
 }
 
 #[derive(Debug, Default)]
 pub struct ByteCodeGenerator {
-    vstack: VStack,
-    vreg_map: HashMap<VReg, Reg>,
+    vregister: VRegister,
 }
 
 fn gen_raw_int(n: &i64) -> vm::RawVal {
@@ -51,124 +77,126 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 }
 
 impl ByteCodeGenerator {
-    fn get_value(&mut self, func: &mut vm::FuncProto, v: &Arc<mir::Value>) -> Reg {
-        match v.as_ref() {
-            mir::Value::Global(_) => todo!(),
-            mir::Value::Argument(idx, _arg) => *idx as Reg,
-            mir::Value::Register(vreg) => {
-                //todo: consolidate infinite register
-                *vreg as Reg
-            }
-            mir::Value::Float(_) => todo!(),
-            mir::Value::Integer(_) => todo!(),
-            mir::Value::Bool(_) => todo!(),
-            mir::Value::Function(_, _) => todo!(),
-            mir::Value::ExtFunction(_) => todo!(),
-            mir::Value::Closure(_) => todo!(),
-            mir::Value::FixPoint => todo!(),
-            mir::Value::State => {
-                let dst = self.vstack.push();
-                func.bytecodes.push(bytecode::Instruction::GetState(dst));
-                func.state_size += 1;
-                dst
-            }
-            mir::Value::None => todo!(),
-        }
-    }
     fn get_binop(
         &mut self,
-        funcproto: &mut vm::FuncProto,
+        _funcproto: &mut vm::FuncProto,
         v1: &Arc<mir::Value>,
         v2: &Arc<mir::Value>,
-    ) -> (Reg, Reg, Reg) {
-        let r1 = self.get_value(funcproto, v1);
-        let r2 = self.get_value(funcproto, v2);
-        self.vstack.0 += 1;
-        (self.vstack.get_top(), r1, r2)
+    ) -> (Reg, Reg) {
+        let r1 = self.vregister.find(v1.clone()).unwrap();
+        let r2 = self.vregister.find(v2.clone()).unwrap();
+        (r1, r2)
+    }
+    fn get_destination(&mut self, dst: Arc<mir::Value>) -> Reg {
+        self.vregister.add_newvalue(dst)
     }
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
+        dst: Arc<mir::Value>,
         mirinst: &mir::Instruction,
     ) -> VmInstruction {
         match mirinst {
             mir::Instruction::Uinteger(u) => {
                 let pos = funcproto.add_new_constant(*u);
-                let reg = self.vstack.push();
-                VmInstruction::MoveConst(reg, pos as u8)
+                VmInstruction::MoveConst(self.get_destination(dst), pos as u8)
             }
             mir::Instruction::Integer(i) => {
                 let pos = funcproto.add_new_constant(gen_raw_int(i));
-                let reg = self.vstack.push();
-                VmInstruction::MoveConst(reg, pos as u8)
+
+                VmInstruction::MoveConst(self.get_destination(dst), pos as u8)
             }
             mir::Instruction::Float(n) => {
                 let pos = funcproto.add_new_constant(gen_raw_float(n));
-                let reg = self.vstack.push();
-                VmInstruction::MoveConst(reg, pos as u8)
+
+                VmInstruction::MoveConst(self.get_destination(dst), pos as u8)
             }
             mir::Instruction::Alloc(_) => todo!(),
-            mir::Instruction::Load(rawv) => todo!(),
+            mir::Instruction::Load(_) => todo!(),
             mir::Instruction::Store(_, _) => todo!(),
             mir::Instruction::Call(v, args) => {
                 let nargs = args.len() as u8;
                 let res = match v.as_ref() {
-                    mir::Value::Register(address) => VmInstruction::Call(*address as Reg, nargs, 1),
-                    mir::Value::Function(idx, state_size) => {
+                    mir::Value::Register(_address) => {
+                        let faddress = self.vregister.find(v.clone()).unwrap();
+                        let dst = self.get_destination(dst);
+                        if dst != faddress{
+                            funcproto
+                            .bytecodes
+                            .push(VmInstruction::Move(dst as Reg, faddress));
+                        }
+                        for (i, a) in args.iter().enumerate() {
+                            let src = self.vregister.find(a.clone()).unwrap();
+                            let adst = dst as usize + i + 1;
+                            if src as usize != adst {
+                                funcproto
+                                    .bytecodes
+                                    .push(VmInstruction::Move(adst as Reg, src));
+                            }
+                        }
+                        VmInstruction::Call(dst, nargs, 1)
+                    }
+                    mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(idx) => {
+                    mir::Value::ExtFunction(_idx) => {
                         todo!()
                         // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
                     }
-                    mir::Value::Closure(reg) => {
+                    mir::Value::Closure(_reg) => {
                         todo!()
                         // VmInstruction::CallCls(reg as Reg, nargs, 1)
                     }
                     mir::Value::FixPoint => todo!(),
                     _ => unreachable!(),
                 };
-                self.vstack.0 -= nargs;
                 res
             }
             mir::Instruction::Closure(_) => todo!(),
             mir::Instruction::GetUpValue(_, _) => todo!(),
             mir::Instruction::SetUpValue(_, _) => todo!(),
             mir::Instruction::PushStateOffset(v) => VmInstruction::ShiftStatePos(*v as i16),
-            mir::Instruction::PopStateOffset(v) => VmInstruction::ShiftStatePos(- (*v as i16)),
-            mir::Instruction::GetState(v) => {
-                let res = VmInstruction::GetState(self.get_value(funcproto, v));
-                self.vstack.push();
-                res
-            }
-            mir::Instruction::SetState(v) => VmInstruction::SetState(self.get_value(funcproto, v)),
+            mir::Instruction::PopStateOffset(v) => VmInstruction::ShiftStatePos(-(*v as i16)),
+            mir::Instruction::GetState => VmInstruction::GetState(self.get_destination(dst)),
+
             mir::Instruction::JmpIf(_, _, _) => todo!(),
-            mir::Instruction::Return(v) => VmInstruction::Return(self.get_value(funcproto, v), 1),
+            mir::Instruction::Return(v) => {
+                VmInstruction::Return(self.vregister.find(v.clone()).unwrap(), 1)
+            }
+            mir::Instruction::ReturnFeed(v) => {
+                let src = self.vregister.find(v.clone()).unwrap();
+                funcproto.bytecodes.push(VmInstruction::SetState(src));
+                VmInstruction::Return(src, 1)
+            }
             mir::Instruction::AddF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
-                VmInstruction::AddF(dst, r1, r2)
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::AddF(self.get_destination(dst), r1, r2)
             }
             mir::Instruction::SubF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
-                VmInstruction::SubF(dst, r1, r2)
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::SubF(self.get_destination(dst), r1, r2)
             }
             mir::Instruction::MulF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
-                VmInstruction::MulF(dst, r1, r2)
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::MulF(self.get_destination(dst), r1, r2)
             }
             mir::Instruction::DivF(v1, v2) => {
-                let (dst, r1, r2) = self.get_binop(funcproto, v1, v2);
-                VmInstruction::DivF(dst, r1, r2)
+                let (r1, r2) = self.get_binop(funcproto, v1, v2);
+                VmInstruction::DivF(self.get_destination(dst), r1, r2)
             }
             _ => todo!(),
         }
     }
     fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
+        // println!("generating function {}", mirfunc.label.0);
         let mut func = vm::FuncProto::from(mirfunc);
-        self.vstack.0 = func.nparam as Reg;
+        self.vregister.reset();
+        for a in mirfunc.args.iter() {
+            self.vregister.add_newvalue(a.clone());
+        }
         mirfunc.body.iter().for_each(|block| {
-            block.0.iter().for_each(|inst| {
-                let newinst = self.emit_instruction(&mut func, inst);
+            block.0.iter().for_each(|(dst, inst)| {
+                let newinst = self.emit_instruction(&mut func, dst.clone(), inst);
                 func.bytecodes.push(newinst);
             });
         });
@@ -193,25 +221,30 @@ pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn Reportable
 
 mod test {
 
-    use crate::types::Type;
-    use mir::Label;
-
-    use super::*;
     #[test]
+
     fn build() {
+        use super::*;
+        use crate::types::Type;
+        use mir::Label;
+
         let mut src = mir::Mir::default();
-        let arg = Arc::new(mir::Argument(Label("hoge".to_string()), Type::Unknown));
+        let arg = Arc::new(mir::Value::Argument(
+            0,
+            Arc::new(mir::Argument(Label("hoge".to_string()), Type::Unknown)),
+        ));
         let mut func = mir::Function::new("test", &[arg.clone()]);
         let mut block = mir::Block::default();
-        block.0.push(mir::Instruction::Integer(1));
         let resint = Arc::new(mir::Value::Register(1));
-        block.0.push(mir::Instruction::AddF(
-            Arc::new(mir::Value::Argument(0, arg)),
-            resint,
-        ));
+        block.0.push((resint.clone(), mir::Instruction::Integer(1)));
+        let res = Arc::new(mir::Value::Register(2));
         block
             .0
-            .push(mir::Instruction::Return(Arc::new(mir::Value::Register(2))));
+            .push((res.clone(), mir::Instruction::AddF(arg, resint)));
+        block.0.push((
+            Arc::new(mir::Value::None),
+            mir::Instruction::Return(res.clone()),
+        ));
         func.body = vec![block];
         src.functions.push(func);
         let mut generator = ByteCodeGenerator::default();
@@ -223,8 +256,8 @@ mod test {
         main.constants.push(1);
         main.bytecodes = vec![
             VmInstruction::MoveConst(1, 0),
-            VmInstruction::AddF(2, 0, 1),
-            VmInstruction::Return(2, 1),
+            VmInstruction::AddF(0, 0, 1),
+            VmInstruction::Return(0, 1),
         ];
         answer.global_fn_table.push(("test".to_string(), main));
         assert_eq!(res, answer);

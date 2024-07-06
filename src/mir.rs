@@ -3,22 +3,23 @@ use crate::types::Type;
 use std::sync::Arc;
 
 pub mod print;
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Label(pub String);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Global(Label, Type);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Argument(pub Label, pub Type);
 
 pub type VReg = u64;
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Value {
     Global(Global),
     Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
+    State(VPtr),
     // immidiate mode floating point value
     Float(f64),
     Integer(i64),
@@ -29,13 +30,12 @@ pub enum Value {
     Closure(Arc<Function>),
     FixPoint,
     //internal state
-    State,
     None, //??
 }
 
 pub type VPtr = Arc<Value>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Instruction {
     Uinteger(u64),
     Integer(i64),
@@ -59,12 +59,13 @@ pub enum Instruction {
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
-    //load internal state to register
-    GetState(VPtr),
-    SetState(VPtr),
+    //load internal state to register(destination)
+    GetState,
+
     //jump label
     JmpIf(VPtr, Label, Label),
     Return(VPtr),
+    ReturnFeed(VPtr),
 
     // Primitive Operations
     AddF(VPtr, VPtr),
@@ -106,10 +107,10 @@ pub enum Instruction {
     CastItoB(VPtr),
 }
 
-#[derive(Debug, Default)]
-pub struct Block(pub Vec<Instruction>);
+#[derive(Debug, Default, PartialEq)]
+pub struct Block(pub Vec<(VPtr, Instruction)>);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum UpIndex {
     Local(usize),   // index of local variables in upper functions
     Upvalue(usize), // index of upvalues in upper functions
@@ -122,10 +123,10 @@ pub struct Local {
     pub is_captured: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, PartialEq)]
 pub struct Function {
     pub label: Label,
-    pub args: Vec<Arc<Argument>>,
+    pub args: Vec<Arc<Value>>,
     // pub locals: Vec<Local>,
     pub upindexes: Vec<UpIndex>,
     // pub upperfn: Option<Arc<Self>>,
@@ -133,11 +134,14 @@ pub struct Function {
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[Arc<Argument>]) -> Self {
-        let mut res = Self::default();
-        res.label = Label(name.to_string());
-        res.args = args.to_vec();
-        res
+    pub fn new(name: &str, args: &[VPtr]) -> Self {
+        Self {
+            label: Label(name.to_string()),
+            args: args.to_vec(),
+            upindexes: vec![],
+            body: vec![Block::default()],
+            state_size: 0,
+        }
     }
 }
 

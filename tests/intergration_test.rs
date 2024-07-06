@@ -13,8 +13,8 @@ use mimium_rs::{
 fn run_multiple(src: &str, times: u64) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
     let mut machine = vm::Machine::new();
-    let mut ret = 0.0;
     let mut res: Vec<f64> = vec![];
+    let mut ret;
     machine.link_functions(&bytecode);
     for _i in 0..times {
         ret = runtime::run_bytecode_test(&mut machine, &bytecode)?;
@@ -54,6 +54,6 @@ fn statefn() {
 #[test]
 fn statefn2_same() {
     let res = run_multiple_file("statefn2_same.mmm", 3).unwrap();
-    let ans = vec![3.0f64, 6.0, 9.0];
+    let ans = vec![6.0f64, 12.0, 18.0];
     assert_eq!(res, ans);
 }

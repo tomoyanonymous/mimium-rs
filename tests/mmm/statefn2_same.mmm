@@ -3,5 +3,5 @@ fn counter(inc:float){
 }
 
 fn dsp(){
-  counter(1.0)+counter(2.0)
+  counter(1.0)+counter(2.0)+counter(3.0)
 }

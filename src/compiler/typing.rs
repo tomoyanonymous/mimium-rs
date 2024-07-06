@@ -1,11 +1,11 @@
 use crate::ast::{Expr, Literal};
-use crate::types::{PType, Type, TypedId};
+use crate::types::{PType, Type};
 use crate::utils::{
     environment::Environment,
     error::ReportableError,
     metadata::{Span, WithMeta},
 };
-use crate::{function, number, numeric};
+use crate::{function, numeric};
 use std::collections::HashMap;
 use std::fmt;
 

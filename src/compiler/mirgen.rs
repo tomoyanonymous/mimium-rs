@@ -1,6 +1,7 @@
 use super::typing::{self, infer_type, InferContext};
 use super::{recursecheck, selfconvert};
 
+use std::env::args;
 use std::sync::Arc;
 // use crate::runtime::vm::bytecode::Instruction;
 // use crate::runtime::vm::{FuncProto, RawVal, UpIndex};
@@ -51,19 +52,20 @@ impl Context {
     pub fn get_fn_from_id(&mut self, id: usize) -> Option<&mut mir::Function> {
         self.program.functions.get_mut(id)
     }
-    pub fn make_new_fn(&mut self) -> (&mut Function, usize) {
-        let label = self.fn_label.clone().unwrap_or_else(|| {
+    fn make_new_fname(&mut self) -> String {
+        let res = self.fn_label.clone().unwrap_or_else(|| {
             let res = format!("lambda_{}", self.anonymous_fncount);
             self.anonymous_fncount += 1;
             res
         });
         self.fn_label = None;
-        let mut newf = Function::default();
-        newf.label = Label(label);
-        newf.body.push(mir::Block::default());
+        res
+    }
+    pub fn make_new_fn(&mut self, args: &[VPtr]) -> (&mut Function, usize) {
+        let name = self.make_new_fname();
+        let newf = mir::Function::new(name.as_str(), args);
         self.program.functions.push(newf);
         let idx = self.program.functions.len() - 1;
-
         self.current_bb = 0;
         self.current_fn_idx = idx;
         (self.program.functions.last_mut().unwrap(), idx)
@@ -76,7 +78,7 @@ impl Context {
             ("div", 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
             _ => return None,
         };
-        Some(Arc::new(Value::Register(self.push_inst(inst))))
+        Some(self.push_inst(inst))
     }
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
         let bbid = self.current_bb;
@@ -86,13 +88,13 @@ impl Context {
             .get_mut(bbid)
             .expect("no basic block found")
     }
-    pub fn push_inst(&mut self, inst: Instruction) -> VReg {
-        let res = self.reg_count;
+    pub fn push_inst(&mut self, inst: Instruction) -> VPtr {
+        let res = Arc::new(Value::Register(self.reg_count));
         self.reg_count += 1;
-        self.get_current_basicblock().0.push(inst);
+        self.get_current_basicblock().0.push((res.clone(), inst));
         res
     }
-    pub fn push_upindex(&mut self, v: mir::UpIndex) {
+    pub fn push_upindex(&mut self, _v: mir::UpIndex) {
         // let fnproto = self.get_current_fn().unwrap();
         // fnproto.upindexes.push(v)
     }
@@ -165,7 +167,7 @@ pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
 //     load_new_rawv(rawv, func)
 // }
 
-fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<VReg, CompileError> {
+fn eval_literal(lit: &Literal, _span: &Span, ctx: &mut Context) -> Result<VPtr, CompileError> {
     let v = match lit {
         Literal::String(_) => todo!(),
         Literal::Int(i) => ctx.push_inst(Instruction::Integer(*i)),
@@ -181,11 +183,11 @@ fn eval_literal(lit: &Literal, span: &Span, ctx: &mut Context) -> Result<VReg, C
 fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, CompileError> {
     let WithMeta(e, span) = e_meta;
     match e {
-        Expr::Literal(lit) => Ok(Arc::new(Value::Register(eval_literal(lit, span, ctx)?))),
+        Expr::Literal(lit) => Ok(eval_literal(lit, span, ctx)?),
         Expr::Var(v, _time) => {
             match ctx.valenv.lookup_cls(v) {
                 LookupRes::Local(v) => Ok(v.clone()),
-                LookupRes::UpValue(v) => {
+                LookupRes::UpValue(_v) => {
                     todo!();
                 }
                 LookupRes::Global(v) => Ok(v.clone()),
@@ -224,32 +226,26 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                     .try_collect::<Vec<_>>()
             };
             let res = match f.as_ref() {
-                Value::Register(p) => {
+                Value::Register(_p) => {
                     todo!();
                 }
                 Value::Function(idx, statesize) => {
                     ctx.get_current_fn().unwrap().state_size += statesize;
                     //insert pushstateoffset
-                    
-                    let faddress = ctx.push_inst(Instruction::Uinteger(*idx as u64));
-                    let res = Arc::new(Value::Register(faddress));
+
+                    let f = ctx.push_inst(Instruction::Uinteger(*idx as u64));
                     let a_regs = makeargs(args, ctx)?;
                     if ctx.state_offset > 0 {
                         ctx.get_current_basicblock()
                             .0
-                            .push(Instruction::PushStateOffset(1));
+                            .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
                     }
-                    ctx.push_inst(Instruction::Call(res.clone(), a_regs.clone()));
 
-                    if ctx.state_offset > 0 {
-                        ctx.get_current_basicblock()
-                            .0
-                            .push(Instruction::PopStateOffset(1));
-                    }
+                    let res = ctx.push_inst(Instruction::Call(f.clone(), a_regs.clone()));
                     if *statesize > 0 {
                         ctx.state_offset += 1;
                     }
-                    Ok(res.clone())
+                    Ok(res)
                 }
                 Value::ExtFunction(label) => {
                     let a_regs = makeargs(args, ctx)?;
@@ -263,13 +259,11 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 Value::None => unreachable!(),
                 _ => todo!(),
             };
-            ctx.reg_count -= args.len() as u64 + 1;
             res
         }
-        Expr::Lambda(ids, types, body) => {
+        Expr::Lambda(ids, _types, body) => {
             let tmp_reg = ctx.reg_count;
-            ctx.reg_count = 0;
-            let (mut newf, fnid) = ctx.make_new_fn();
+
             let mut binds = ids
                 .iter()
                 .enumerate()
@@ -283,11 +277,16 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                     res
                 })
                 .collect::<Vec<_>>();
-            binds.iter().for_each(|(_, a)| {
-                if let Value::Argument(_idx, a) = a.as_ref() {
-                    newf.args.push(a.clone());
-                }
-            });
+
+            ctx.reg_count = 0;
+            let (_newf, fnid) = ctx.make_new_fn(
+                binds
+                    .iter()
+                    .map(|(_, v)| v.clone())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+
             let mut tbinds = ids
                 .iter()
                 .map(|name| {
@@ -310,9 +309,18 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 infer_type(&body.0, &mut ctx.typeenv).map_err(|e| CompileError::from(e))?;
             let res = eval_expr(&body, ctx)?;
             let state_size = ctx.get_current_fn().unwrap().state_size;
-            match res_type {
-                Type::Primitive(PType::Unit) | Type::Unknown => {}
-                _ => {
+            if ctx.state_offset > 0 {
+                ctx.get_current_basicblock().0.push((
+                    Arc::new(mir::Value::None),
+                    Instruction::PopStateOffset(state_size - 1),
+                )); //todo:offset size
+            }
+            match (res.as_ref(), res_type) {
+                (_, Type::Primitive(PType::Unit) | Type::Unknown) => {}
+                (Value::State(v), _) => {
+                    let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone()));
+                }
+                (_, _) => {
                     let _ = ctx.push_inst(Instruction::Return(res.clone()));
                 }
             };
@@ -320,14 +328,12 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
             Ok(Arc::new(Value::Function(fnid, state_size)))
         }
         Expr::Feed(id, expr) => {
-            let res = Arc::new(Value::Register(ctx.reg_count));
             // ctx.reg_count += 1;
-            let _reg = ctx.push_inst(Instruction::GetState(res.clone()));
+            let res = ctx.push_inst(Instruction::GetState);
             ctx.valenv.add_bind(&mut vec![(id.clone(), res.clone())]);
             let retv = eval_expr(expr, ctx)?;
-            ctx.push_inst(Instruction::SetState(retv.clone()));
             ctx.get_current_fn().unwrap().state_size += 1;
-            Ok(retv)
+            Ok(Arc::new(Value::State(retv)))
         }
         Expr::Let(id, body, then) => {
             ctx.fn_label = Some(id.id.clone());

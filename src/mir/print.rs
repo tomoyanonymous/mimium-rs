@@ -5,13 +5,16 @@ impl std::fmt::Display for Mir {
         for fun in self.functions.iter() {
             let _ = write!(f, "fn {} [", fun.label.0);
             fun.args.iter().for_each(|a| {
-                let _ = write!(f, "{} ", a.0);
+                let _ = write!(f, "{} ", *a);
             });
             let _ = write!(f, "]\n");
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "  block {i}\n");
-                for insts in block.0.iter() {
-                    let _ = write!(f, "    {insts}\n");
+                for (v, insts) in block.0.iter() {
+                    let _ = match v.as_ref() {
+                        Value::None => write!(f, "  {: <10} {insts}\n", " "),
+                        _ => write!(f, "  {:<7} := {insts}\n", format!("{}", *v)),
+                    };
                 }
             }
         }
@@ -45,7 +48,7 @@ impl std::fmt::Display for Value {
             Value::ExtFunction(_) => todo!(),
             Value::Closure(_) => todo!(),
             Value::FixPoint => write!(f, "fixpoint"),
-            Value::State => write!(f, "state"),
+            Value::State(v) => write!(f, "state({})", *v),
             Value::None => write!(f, "none"),
         }
     }
@@ -61,21 +64,21 @@ impl std::fmt::Display for Instruction {
             Instruction::Load(_) => todo!(),
             Instruction::Store(_, _) => todo!(),
             Instruction::Call(fptr, args) => {
-                let r = write!(f, "call {}  ", *fptr,);
+                let _ = write!(f, "call {} [", *fptr);
                 for a in args.iter() {
                     let _ = write!(f, "{} ", *a);
                 }
-                r
+                write!(f,"]")
             }
             Instruction::Closure(_) => todo!(),
             Instruction::GetUpValue(_, _) => todo!(),
             Instruction::SetUpValue(_, _) => todo!(),
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
-            Instruction::GetState(v) => write!(f, "getstate {}", *v),
-            Instruction::SetState(v) => write!(f, "setstate {}", *v),
+            Instruction::GetState => write!(f, "getstate"),
             Instruction::JmpIf(_, _, _) => todo!(),
             Instruction::Return(a) => write!(f, "ret {}", *a),
+            Instruction::ReturnFeed(v) => write!(f, "retfeed {}", *v),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),
             Instruction::SubF(a, b) => write!(f, "subf {} {}", *a, *b),
             Instruction::MulF(a, b) => write!(f, "mulf {} {}", *a, *b),
