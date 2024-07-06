@@ -4,12 +4,6 @@ type EnvInner<T> = LinkedList<Vec<(String, T)>>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment<T>(pub EnvInner<T>);
 
-impl<T> Environment<T> {
-    pub fn new() -> Self {
-        Self(EnvInner::new())
-    }
-}
-
 pub struct Error(String);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,6 +14,11 @@ pub enum LookupRes<T: Clone> {
     None,
 }
 impl<T: Clone> Environment<T> {
+    pub fn new() -> Self {
+        let mut res = Self(EnvInner::new());
+        res.extend();
+        res
+    }
     pub fn is_global(&self) -> bool {
         self.0.len() <= 1
     }

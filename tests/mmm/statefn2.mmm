@@ -3,8 +3,8 @@ fn counter(inc:float){
   inc+self
 }
 
-fn counter2(inc:float){
-  inc * 2.0 + self
+fn counter2(inc2:float){
+  inc2 + 2.0 + self
 }
 
 fn dsp(){

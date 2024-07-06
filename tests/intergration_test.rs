@@ -57,3 +57,10 @@ fn statefn2_same() {
     let ans = vec![6.0f64, 12.0, 18.0];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn statefn2() {
+    let res = run_multiple_file("statefn2.mmm", 3).unwrap();
+    let ans = vec![6.0f64, 12.0, 18.0];
+    assert_eq!(res, ans);
+}

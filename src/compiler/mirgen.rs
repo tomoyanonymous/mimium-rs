@@ -325,6 +325,8 @@ fn eval_expr(e_meta: &WithMeta<Expr>, ctx: &mut Context) -> Result<VPtr, Compile
                 }
             };
             ctx.reg_count = tmp_reg;
+            ctx.typeenv.env.to_outer();
+            ctx.valenv.to_outer();
             Ok(Arc::new(Value::Function(fnid, state_size)))
         }
         Expr::Feed(id, expr) => {
