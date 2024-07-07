@@ -78,6 +78,7 @@ pub enum Instruction {
     CastFtoI(Reg, Reg),
     CastItoF(Reg, Reg),
     CastItoB(Reg, Reg),
+    Dummy,
 }
 
 impl std::fmt::Display for Instruction {
@@ -98,7 +99,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
-            Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpif", dst, cond),
+            Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpifneg", dst, cond),
             Instruction::AbsF(dst, src) => write!(f, "{:<10} {} {}", "absf", dst, src),
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),
             Instruction::SinF(dst, src) => write!(f, "{:<10} {} {}", "sin", dst, src),
@@ -146,6 +147,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Le(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "lt", dst, lhs, rhs),
             Instruction::And(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "and", dst, lhs, rhs),
             Instruction::Or(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "or", dst, lhs, rhs),
+            Instruction::Dummy => write!(f, "dummy"),
         }
     }
 }

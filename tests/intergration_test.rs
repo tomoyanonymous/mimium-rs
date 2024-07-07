@@ -96,3 +96,10 @@ fn sinewave() {
     ];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn ifblock() {
+    let res = run_multiple_file("if.mmm", 1).unwrap();
+    let ans = vec![4120.0];
+    assert_eq!(res, ans);
+}

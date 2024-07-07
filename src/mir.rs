@@ -62,8 +62,13 @@ pub enum Instruction {
     //load internal state to register(destination)
     GetState,
 
-    //jump label
-    JmpIf(VPtr, Label, Label),
+    //condition,  basic block index for then else statement
+    JmpIf(VPtr, u64, u64),
+    // basic block index (for return statement)
+    Jmp(i16),
+    //merge
+    Phi(VPtr, VPtr),
+
     Return(VPtr),
     //value to update state
     ReturnFeed(VPtr),
@@ -144,6 +149,10 @@ impl Function {
             body: vec![Block::default()],
             state_size: 0,
         }
+    }
+    pub fn add_new_basicblock(&mut self) -> usize {
+        self.body.push(Block(vec![]));
+        self.body.len() - 1
     }
 }
 

@@ -101,6 +101,10 @@ impl Context {
             .get_mut(bbid)
             .expect("no basic block found")
     }
+    fn add_new_basicblock(&mut self){
+        let idx = self.get_current_fn().add_new_basicblock();
+        self.current_bb = idx;
+    }
     fn push_inst(&mut self, inst: Instruction) -> VPtr {
         let res = Arc::new(Value::Register(self.reg_count));
         self.reg_count += 1;
@@ -327,7 +331,31 @@ fn eval_expr(
             }
         }
         Expr::LetTuple(_, _, _) => todo!(),
-        Expr::If(_, _, _) => todo!(),
+        Expr::If(cond, then, else_) => {
+            let c = eval_expr(ctx_cell, cond)?;
+            
+            let bbidx = ctx_cell.borrow().current_bb;
+            let _ = ctx_cell.borrow_mut().push_inst(Instruction::JmpIf(
+                c,
+                (bbidx + 1) as u64,
+                (bbidx + 2) as u64,
+            ));
+            //insert then block
+            ctx_cell.borrow_mut().add_new_basicblock();
+            let t = eval_expr(ctx_cell, then)?;
+            //jmp to ret is inserted in bytecodegen
+            
+            //insert else block
+            ctx_cell.borrow_mut().add_new_basicblock();
+
+            let e = match else_ {
+                Some(box e) => eval_expr(ctx_cell, &e),
+                None => Ok(Arc::new(Value::None)),
+            }?;
+            //insert return block
+            ctx_cell.borrow_mut().add_new_basicblock();
+            Ok(ctx_cell.borrow_mut().push_inst(Instruction::Phi(t, e)))
+        }
         Expr::Bracket(_) => todo!(),
         Expr::Escape(_) => todo!(),
         Expr::Error => todo!(),

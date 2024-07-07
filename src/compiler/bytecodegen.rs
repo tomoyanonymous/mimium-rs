@@ -45,7 +45,7 @@ impl VRegister {
         });
         match (res, v.as_ref()) {
             //argument is registered in absolute position
-            (Some(pos), mir::Value::Argument(_,_)) => Some(pos as Reg),
+            (Some(pos), mir::Value::Argument(_, _)) => Some(pos as Reg),
             (Some(pos), _) => {
                 //mir is SSA form, so the value will be used only once.
                 self.0[pos] = None;
@@ -59,6 +59,7 @@ impl VRegister {
 #[derive(Debug, Default)]
 pub struct ByteCodeGenerator {
     vregister: VRegister,
+    bb_index: usize,
 }
 
 fn gen_raw_int(n: &i64) -> vm::RawVal {
@@ -94,6 +95,7 @@ impl ByteCodeGenerator {
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
+        mirfunc: &mir::Function,
         dst: Arc<mir::Value>,
         mirinst: &mir::Instruction,
     ) -> VmInstruction {
@@ -160,7 +162,62 @@ impl ByteCodeGenerator {
             mir::Instruction::PopStateOffset(v) => VmInstruction::ShiftStatePos(-(*v as i16)),
             mir::Instruction::GetState => VmInstruction::GetState(self.get_destination(dst)),
 
-            mir::Instruction::JmpIf(_, _, _) => todo!(),
+            mir::Instruction::JmpIf(cond, tbb, ebb) => {
+                let c = self.vregister.find(cond.clone()).unwrap();
+                let mut then_bytecodes: Vec<VmInstruction> = vec![];
+                let mut else_bytecodes: Vec<VmInstruction> = vec![];
+
+                mirfunc.body[*tbb as usize]
+                    .0
+                    .iter()
+                    .for_each(|(dst, t_inst)| {
+                        then_bytecodes.push(self.emit_instruction(
+                            funcproto,
+                            mirfunc,
+                            dst.clone(),
+                            t_inst,
+                        ));
+                    });
+                let else_offset = then_bytecodes.len() + 3; //add offset to jmp inst and loading phi
+
+                mirfunc.body[*ebb as usize]
+                    .0
+                    .iter()
+                    .for_each(|(dst, t_inst)| {
+                        else_bytecodes.push(self.emit_instruction(
+                            funcproto,
+                            mirfunc,
+                            dst.clone(),
+                            t_inst,
+                        ));
+                    });
+                let (phidst, pinst) = mirfunc.body[(*ebb + 1) as usize].0.first().unwrap();
+                let phi = self.vregister.add_newvalue(phidst.clone());
+                if let mir::Instruction::Phi(t, e) = pinst {
+                    let t = self.vregister.find(t.clone()).unwrap();
+                    then_bytecodes.push(VmInstruction::Move(phi, t));
+                    let e = self.vregister.find(e.clone()).unwrap();
+                    else_bytecodes.push(VmInstruction::Move(phi, e));
+                } else {
+                    unreachable!();
+                }
+                funcproto
+                    .bytecodes
+                    .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
+
+                let ret_offset = else_bytecodes.len() + 1;
+
+                then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
+
+                funcproto.bytecodes.append(&mut then_bytecodes);
+                funcproto.bytecodes.append(&mut else_bytecodes);
+
+                VmInstruction::Return(phi, 1)
+            }
+            mir::Instruction::Jmp(offset) => VmInstruction::Jmp(*offset),
+            mir::Instruction::Phi(_, _) => {
+                unreachable!()
+            }
             mir::Instruction::Return(v) => {
                 VmInstruction::Return(self.vregister.find(v.clone()).unwrap(), 1)
             }
@@ -239,11 +296,11 @@ impl ByteCodeGenerator {
         for a in mirfunc.args.iter() {
             self.vregister.add_newvalue(a.clone());
         }
-        mirfunc.body.iter().for_each(|block| {
-            block.0.iter().for_each(|(dst, inst)| {
-                let newinst = self.emit_instruction(&mut func, dst.clone(), inst);
-                func.bytecodes.push(newinst);
-            });
+        // succeeding block will be compiled recursively
+        let block = &mirfunc.body[0];
+        block.0.iter().for_each(|(dst, inst)| {
+            let newinst = self.emit_instruction(&mut func, mirfunc, dst.clone(), inst);
+            func.bytecodes.push(newinst);
         });
         (mirfunc.label.0.clone(), func)
     }

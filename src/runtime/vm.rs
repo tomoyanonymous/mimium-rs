@@ -174,7 +174,7 @@ impl Machine {
                 }
                 println!("]");
             }
-
+            let mut increment = 1;
             match func.bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
                     self.set_stack(dst as i64, self.get_stack(src as i64));
@@ -291,12 +291,13 @@ impl Machine {
                 }
                 // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
-                    pcounter = (pcounter as isize + offset as isize) as usize;
+                    // -1 is for the offset in last increment
+                    increment = offset;
                 }
                 Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
-                    if Self::get_as::<bool>(cond_v) {
-                        pcounter = (pcounter as isize + offset as isize) as usize;
+                    if Self::get_as::<f64>(cond_v) < 0.0 {
+                        increment = offset;
                     }
                 }
                 Instruction::AddF(dst, src1, src2) => {
@@ -360,7 +361,7 @@ impl Machine {
                 Instruction::PowI(dst, lhs, rhs) => {
                     binop!(^,i64,dst,lhs,rhs,self)
                 }
-                Instruction::LogI(_,_,_) => {
+                Instruction::LogI(_, _, _) => {
                     //?
                     todo!();
                 }
@@ -414,8 +415,11 @@ impl Machine {
                 Instruction::ShiftStatePos(v) => {
                     self.state_idx = (self.state_idx as i64 + v as i64) as usize;
                 }
+                Instruction::Dummy => {
+                    unreachable!()
+                }
             }
-            pcounter += 1;
+            pcounter = (pcounter as i64 + increment as i64) as usize;
         }
     }
     pub fn install_extern_fn(&mut self, name: String, f: ExtFunType) {
