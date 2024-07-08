@@ -161,7 +161,7 @@ fn eval_expr(
         let ctx = ctx_cell.borrow_mut();
         if ctx.parent.is_none() {
             let mut tenv = ctx.typeenv.borrow_mut();
-            let _ = infer_type(e, &mut tenv);
+            let _ = infer_type(e_meta, &mut tenv);
         }
     }
     match e {
@@ -265,7 +265,7 @@ fn eval_expr(
             let ty = {
                 let ctx = ctx_cell.borrow_mut();
                 let mut tenv = ctx.typeenv.borrow_mut();
-                infer_type(e, &mut tenv)
+                infer_type(e_meta, &mut tenv)
                     .map_err(|e| CompileError(CompileErrorKind::TypingFailure(e.0), e.1))?
             };
             let res_type = match ty {
