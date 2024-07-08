@@ -55,15 +55,6 @@ impl From<&mir::Function> for FuncProto {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum UpValue {
-    Open(Reg),
-    Closed(RawVal),
-}
-pub(crate) struct Closure {
-    pub fn_proto_pos: usize, //position of function prototype in global_ftable
-    pub upvalues: Vec<Rc<RefCell<UpValue>>>,
-}
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {

@@ -1,15 +1,77 @@
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 pub mod bytecode;
 pub mod program;
 use bytecode::*;
-use program::Closure;
-pub use program::{FuncProto, Program, UpIndex, UpValue};
 
+pub use program::{FuncProto, Program, UpIndex};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
 pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
+
+#[derive(Debug, Default, PartialEq)]
+struct StateStorage {
+    data: Vec<f64>,
+}
+impl StateStorage {
+    fn resize(&mut self, size: usize) {
+        self.data.resize(size, 0.0)
+    }
+    fn get(&self, i: usize) -> f64 {
+        self.data[i]
+    }
+    fn get_mut(&mut self, i: usize) -> &mut f64 {
+        unsafe { self.data.get_unchecked_mut(i) }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ClosureIdx(pub u64);
+
+#[derive(Clone, Copy)]
+struct StateStoragePtr(u64);
+impl StateStoragePtr {
+    pub fn new() -> Self {
+        Self(0)
+    }
+
+    pub fn get(self, machine: &mut Machine) -> &mut StateStorage {
+        match self.0 {
+            0 => &mut machine.global_states,
+            i => &mut machine.closures[(i - 1) as usize].state_storage,
+        }
+    }
+}
+
+impl From<Option<ClosureIdx>> for StateStoragePtr {
+    fn from(value: Option<ClosureIdx>) -> Self {
+        match value {
+            None => Self(0),
+            Some(i) => Self(i.0 + 1),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum UpValue {
+    Open(Reg),
+    Closed(RawVal),
+}
+
+#[derive(Debug, Default, PartialEq)]
+//closure object dynamically allocated
+pub(crate) struct Closure {
+    pub fn_proto_pos: usize, //position of function prototype in global_ftable
+    pub upvalues: Vec<Rc<RefCell<UpValue>>>,
+    state_storage: StateStorage,
+}
 
 pub struct Machine {
     stack: Vec<RawVal>,
@@ -19,7 +81,8 @@ pub struct Machine {
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(String, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
-    internal_states: Vec<f64>,
+    global_states: StateStorage,
+    states_ptr: StateStoragePtr,
     state_idx: usize,
 }
 
@@ -68,13 +131,6 @@ fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FeedState {
-    pub feed: Option<RawVal>,
-    pub delays: Vec<Vec<RawVal>>, //vector of ring buffer
-    pub calltree: Vec<FeedState>,
-}
-
 impl Machine {
     pub fn new() -> Self {
         Self {
@@ -85,7 +141,8 @@ impl Machine {
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
-            internal_states: vec![],
+            global_states: Default::default(),
+            states_ptr: StateStoragePtr::new(),
             state_idx: 0,
         }
     }
@@ -103,6 +160,11 @@ impl Machine {
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
+    fn get_current_state(&mut self) -> &mut StateStorage {
+        let ptr = self.states_ptr; //implicit copy
+        ptr.get(self)
+    }
+
     fn return_general(
         &mut self,
         iret: Reg,
@@ -125,6 +187,7 @@ impl Machine {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
     pub(crate) fn to_value<T>(v: T) -> RawVal {
+        assert_eq!(std::mem::size_of::<T>(), 8);
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
     fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
@@ -153,7 +216,14 @@ impl Machine {
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
+    pub fn execute(
+        &mut self,
+        func_i: usize,
+        prog: &Program,
+        cls_i: Option<ClosureIdx>,
+    ) -> ReturnCode {
+        self.states_ptr = StateStoragePtr::from(cls_i);
+
         let (_fname, func) = &prog.global_fn_table[func_i];
         let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
         let mut pcounter = 0;
@@ -184,8 +254,8 @@ impl Machine {
                 }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
-                    let cls_i = Self::get_as::<usize>(addr);
-                    let cls = &self.closures[cls_i];
+                    let cls_i = Self::get_as::<ClosureIdx>(addr);
+                    let cls = &self.closures[cls_i.0 as usize];
                     let pos_of_f = cls.fn_proto_pos;
 
                     self.call_function(func, nargs, nret_req, move |machine| {
@@ -222,33 +292,32 @@ impl Machine {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let (_name, f_proto) = &prog.global_fn_table[fn_proto_pos];
 
-                    let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
+                    let inner_upvalues = f_proto
                         .upindexes
                         .iter()
-                        .map(|u_i| {
-                            match u_i {
-                                UpIndex::Local(i) => {
-                                    let res = Rc::new(RefCell::new(UpValue::Open(*i as u8)));
-                                    local_upvalues.push(res.clone());
-                                    res
-                                }
-                                UpIndex::Upvalue(u_i) => {
-                                    let up_i = cls_i.unwrap();
-                                    let upvalues = &self.closures[up_i].upvalues;
-                                    //clone
-                                    Rc::clone(&upvalues[*u_i])
-                                }
+                        .map(|u_i| match u_i {
+                            UpIndex::Local(i) => {
+                                let res = Rc::new(RefCell::new(UpValue::Open(*i as u8)));
+                                local_upvalues.push(res.clone());
+                                res
+                            }
+                            UpIndex::Upvalue(u_i) => {
+                                let up_i = cls_i.unwrap();
+                                let upvalues = &self.closures[up_i.0 as usize].upvalues;
+                                Rc::clone(&upvalues[*u_i])
                             }
                         })
-                        .collect();
-
+                        .collect::<Vec<_>>();
+                    let mut state_storage = StateStorage::default();
+                    state_storage.resize(f_proto.state_size as usize);
                     //todo! garbage collection
                     self.closures.push(Closure {
                         fn_proto_pos,
                         upvalues: inner_upvalues,
+                        state_storage, //todo
                     });
 
-                    let vaddr = self.closures.len() - 1;
+                    let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Return0 => {
@@ -261,7 +330,7 @@ impl Machine {
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
                         let up_i = cls_i.unwrap();
-                        let upvalues = &self.closures[up_i].upvalues;
+                        let upvalues = &self.closures[up_i.0 as usize].upvalues;
                         let rv: &UpValue = &upvalues[index as usize].borrow();
                         match rv {
                             UpValue::Open(i) => self.get_stack(*i as i64),
@@ -273,7 +342,7 @@ impl Machine {
                 Instruction::SetUpValue(index, src) => {
                     let v = self.get_stack(src as i64);
                     let up_i = cls_i.unwrap();
-                    let upvalues = &self.closures[up_i].upvalues;
+                    let upvalues = &self.closures[up_i.0 as usize].upvalues;
                     let res = {
                         let rv: &mut UpValue = &mut upvalues[index as usize].borrow_mut();
                         match rv {
@@ -405,12 +474,15 @@ impl Machine {
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
                 Instruction::GetState(dst) => {
-                    let v = self.internal_states[self.state_idx];
+                    let idx = self.state_idx;
+                    let v = self.get_current_state().get(idx);
                     self.set_stack(dst as i64, Self::to_value(v));
                 }
                 Instruction::SetState(src) => {
+                    let idx = self.state_idx;
                     let v = self.get_stack(src as i64);
-                    self.internal_states[self.state_idx] = Self::get_as::<f64>(v)
+                    let ptr = self.get_current_state().get_mut(idx);
+                    *ptr = Self::get_as::<f64>(v)
                 }
                 Instruction::ShiftStatePos(v) => {
                     self.state_idx = (self.state_idx as i64 + v as i64) as usize;
@@ -468,7 +540,7 @@ impl Machine {
             .enumerate()
             .find(|(_i, (name, _))| name == entry)
         {
-            self.internal_states.resize(func.state_size as usize, 0.0);
+            self.global_states.resize(func.state_size as usize);
             // 0 is always base pointer to the main function
             if self.stack.len() > 0 {
                 self.stack[0] = 0;
@@ -481,8 +553,8 @@ impl Machine {
     }
     pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
         //internal function table 0 is always mimium_main
-        self.internal_states
-            .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
+        self.global_states
+            .resize(prog.global_fn_table[0].1.state_size as usize);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
         self.execute(0, &prog, None)
