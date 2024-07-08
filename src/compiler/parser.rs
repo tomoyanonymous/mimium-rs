@@ -341,7 +341,18 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
         .padded_by(comment_parser().repeated().ignored())
         .then_ignore(end())
 }
-
+pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
+    let WithMeta(_, ref span) = ast;
+    let res = Expr::Let(
+        TypedId {
+            ty: None,
+            id: "_mimium_global".to_string(),
+        },
+        Box::new(ast.clone()),
+        None,
+    );
+    WithMeta(res, span.clone())
+}
 pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();

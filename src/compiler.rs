@@ -2,8 +2,8 @@ pub mod parser;
 pub mod typing;
 // pub mod hirgen;
 pub mod bytecodegen;
-pub mod mirgen;
 mod intrinsics;
+pub mod mirgen;
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
@@ -77,11 +77,11 @@ use crate::{
     },
 };
 pub fn emit_ast(src: &str) -> Result<WithMeta<ast::Expr>, Vec<Box<dyn ReportableError>>> {
-    parser::parse(src)
+    parser::parse(src).map(|ast| parser::add_global_context(ast))
 }
 
 pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
-    let ast = parser::parse(src)?;
+    let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
     mirgen::compile(ast).map_err(|e| {
         let bres = e as Box<dyn ReportableError>;
         vec![bres]
