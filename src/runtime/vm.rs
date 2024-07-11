@@ -19,17 +19,21 @@ pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
 
 #[derive(Debug, Default, PartialEq)]
 struct StateStorage {
+    pos: usize,
     data: Vec<f64>,
 }
 impl StateStorage {
     fn resize(&mut self, size: usize) {
         self.data.resize(size, 0.0)
     }
-    fn get(&self, i: usize) -> f64 {
-        self.data[i]
+    fn get(&self) -> f64 {
+        self.data[self.pos]
     }
-    fn get_mut(&mut self, i: usize) -> &mut f64 {
-        unsafe { self.data.get_unchecked_mut(i) }
+    fn get_mut(&mut self) -> &mut f64 {
+        unsafe { self.data.get_unchecked_mut(self.pos) }
+    }
+    fn shift_pos(&mut self, offset: i16) {
+        self.pos = (self.pos as i64 + offset as i64) as usize;
     }
 }
 
@@ -94,7 +98,6 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
-    state_idx: usize,
 }
 
 macro_rules! binop {
@@ -154,7 +157,6 @@ impl Machine {
             cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
-            state_idx: 0,
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -483,18 +485,16 @@ impl Machine {
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
                 Instruction::GetState(dst) => {
-                    let idx = self.state_idx;
-                    let v = self.get_current_state().get(idx);
+                    let v = self.get_current_state().get();
                     self.set_stack(dst as i64, Self::to_value(v));
                 }
                 Instruction::SetState(src) => {
-                    let idx = self.state_idx;
                     let v = self.get_stack(src as i64);
-                    let ptr = self.get_current_state().get_mut(idx);
+                    let ptr = self.get_current_state().get_mut();
                     *ptr = Self::get_as::<f64>(v)
                 }
                 Instruction::ShiftStatePos(v) => {
-                    self.state_idx = (self.state_idx as i64 + v as i64) as usize;
+                    self.get_current_state().shift_pos(v)
                 }
                 Instruction::Dummy => {
                     unreachable!()
