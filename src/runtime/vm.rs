@@ -36,27 +36,15 @@ impl StateStorage {
 #[derive(Clone, Copy)]
 pub struct ClosureIdx(pub u64);
 
-#[derive(Clone, Copy)]
-struct StateStoragePtr(u64);
-impl StateStoragePtr {
-    pub fn new() -> Self {
-        Self(0)
-    }
+#[derive(Clone, Default)]
+struct StateStorageStack(Vec<ClosureIdx>);
 
-    pub fn get(self, machine: &mut Machine) -> &mut StateStorage {
-        match self.0 {
-            0 => &mut machine.global_states,
-            i => &mut machine.closures[(i - 1) as usize].state_storage,
-        }
+impl StateStorageStack {
+    pub fn push(&mut self, i: ClosureIdx) {
+        self.0.push(i)
     }
-}
-
-impl From<Option<ClosureIdx>> for StateStoragePtr {
-    fn from(value: Option<ClosureIdx>) -> Self {
-        match value {
-            None => Self(0),
-            Some(i) => Self(i.0 + 1),
-        }
+    pub fn pop(&mut self) {
+        let _ = self.0.pop();
     }
 }
 
@@ -105,7 +93,7 @@ pub struct Machine {
     pub ext_cls_table: Vec<(String, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
-    states_ptr: StateStoragePtr,
+    states_stack: StateStorageStack,
     state_idx: usize,
 }
 
@@ -165,7 +153,7 @@ impl Machine {
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
             global_states: Default::default(),
-            states_ptr: StateStoragePtr::new(),
+            states_stack: Default::default(),
             state_idx: 0,
         }
     }
@@ -191,9 +179,14 @@ impl Machine {
         let abs_pos = self.base_pointer as usize - negative_offset.0 - 1;
         self.stack[abs_pos as usize]
     }
+
     fn get_current_state(&mut self) -> &mut StateStorage {
-        let ptr = self.states_ptr; //implicit copy
-        ptr.get(self)
+        if self.states_stack.0.is_empty() {
+            &mut self.global_states
+        } else {
+            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked().0 as usize };
+            &mut self.closures[idx].state_storage
+        }
     }
     fn get_local_closure(&self, clsidx: ClosureIdx) -> &Closure {
         &self.closures[clsidx.0 as usize]
@@ -237,7 +230,9 @@ impl Machine {
             .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
     }
-    fn close_upvalues(&mut self, local_closures: &[(usize, ClosureIdx)]) {
+    fn close_upvalues(&mut self, _iret: Reg, _nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
+        //todo! drop local closure which wont escape from local
+
         for (base_ptr_cls, clsidx) in local_closures.iter() {
             let cls = self.get_local_closure(*clsidx);
             let newupvls = cls
@@ -261,8 +256,6 @@ impl Machine {
         prog: &Program,
         cls_i: Option<ClosureIdx>,
     ) -> ReturnCode {
-        self.states_ptr = StateStoragePtr::from(cls_i);
-
         let (_fname, func) = &prog.global_fn_table[func_i];
         let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
         let mut pcounter = 0;
@@ -296,10 +289,11 @@ impl Machine {
                     let cls_i = Self::get_as::<ClosureIdx>(addr);
                     let cls = &self.closures[cls_i.0 as usize];
                     let pos_of_f = cls.fn_proto_pos;
-
+                    self.states_stack.push(cls_i);
                     self.call_function(func, nargs, nret_req, move |machine| {
                         machine.execute(pos_of_f, prog, Some(cls_i))
                     });
+                    self.states_stack.pop();
                 }
                 Instruction::Call(func, nargs, nret_req) => {
                     let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
@@ -329,8 +323,6 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    let (_name, f_proto) = &prog.global_fn_table[fn_proto_pos];
-                    //todo! garbage collection
                     self.closures.push(Closure::new(prog, fn_proto_pos));
                     let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
                     local_closures.push((dst as usize, vaddr));
@@ -340,7 +332,7 @@ impl Machine {
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    self.close_upvalues(&local_closures);
+                    self.close_upvalues(iret, nret, &local_closures);
                     let _ = self.return_general(iret, nret);
                     return nret.into();
                 }
