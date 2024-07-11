@@ -1,6 +1,7 @@
 #![feature(box_patterns)]
 #![feature(iterator_try_collect)]
 #![feature(iter_collect_into)]
+#![feature(if_let_guard)]
 #![feature(lazy_cell)]
 // pub mod wcalculus;
 pub mod ast;

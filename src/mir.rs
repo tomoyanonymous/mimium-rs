@@ -19,6 +19,7 @@ pub enum Value {
     Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
+    UpValue(VReg, Arc<Value>),
     State(VPtr),
     // immidiate mode floating point value
     Float(f64),
@@ -27,7 +28,7 @@ pub enum Value {
     // idx of the function in the program, size of internal state
     Function(usize, u64),
     ExtFunction(Label),
-    Closure(Arc<Function>),
+    Closure(Arc<Value>, Vec<UpIndex>),
     FixPoint,
     //internal state
     None, //??
@@ -50,12 +51,14 @@ pub enum Instruction {
     // Tuple(Vec<Value>),
     // Proj(Value, u64),
     // call function , arguments
-    Call(Arc<Value>, Vec<VPtr>),
+    Call(VPtr, Vec<VPtr>),
+    CallCls(VPtr, Vec<VPtr>),
+
     // make closure with upindexes
-    Closure(Arc<Function>),
-    //function offset  and localvar offset?
-    GetUpValue(u64, u64),
-    SetUpValue(u64, u64),
+    Closure(VPtr),
+    //label to funcproto  and localvar offset?
+    GetUpValue(String, u64),
+    SetUpValue(String, u64),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
@@ -129,13 +132,15 @@ pub struct Local {
     pub depth: usize,
     pub is_captured: bool,
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OpenUpValue(pub usize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
     // pub locals: Vec<Local>,
-    pub upindexes: Vec<UpIndex>,
+    pub upindexes: Vec<Arc<Value>>,
     // pub upperfn: Option<Arc<Self>>,
     pub body: Vec<Block>,
     pub state_size: u64,

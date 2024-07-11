@@ -9,7 +9,8 @@ pub mod bytecode;
 pub mod program;
 use bytecode::*;
 
-pub use program::{FuncProto, Program, UpIndex};
+use program::OpenUpValue;
+pub use program::{FuncProto, Program};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
@@ -59,18 +60,40 @@ impl From<Option<ClosureIdx>> for StateStoragePtr {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UpValue {
-    Open(Reg),
-    Closed(RawVal),
+    Open(usize),
+    Closed(Rc<RefCell<RawVal>>),
+}
+impl From<OpenUpValue> for UpValue {
+    fn from(value: OpenUpValue) -> Self {
+        Self::Open(value.0)
+    }
 }
 
 #[derive(Debug, Default, PartialEq)]
 //closure object dynamically allocated
 pub(crate) struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
-    pub upvalues: Vec<Rc<RefCell<UpValue>>>,
+    pub upvalues: Vec<UpValue>,
     state_storage: StateStorage,
+}
+impl Closure {
+    pub fn new(program: &Program, fn_i: usize) -> Self {
+        let fnproto = &program.global_fn_table[fn_i].1;
+        let upvalues = fnproto
+            .upindexes
+            .iter()
+            .map(|i| UpValue::Open(i.0))
+            .collect::<Vec<_>>();
+        let mut state_storage = StateStorage::default();
+        state_storage.resize(fnproto.state_size as usize);
+        Self {
+            fn_proto_pos: fn_i,
+            upvalues,
+            state_storage,
+        }
+    }
 }
 
 pub struct Machine {
@@ -160,18 +183,25 @@ impl Machine {
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
+    pub fn get_open_upvalue(&self, negative_offset: OpenUpValue) -> RawVal {
+        println!(
+            "baseptr:{}, upvalue:{}",
+            self.base_pointer, negative_offset.0
+        );
+        let abs_pos = self.base_pointer as usize - negative_offset.0 - 1;
+        self.stack[abs_pos as usize]
+    }
     fn get_current_state(&mut self) -> &mut StateStorage {
         let ptr = self.states_ptr; //implicit copy
         ptr.get(self)
     }
-
-    fn return_general(
-        &mut self,
-        iret: Reg,
-        nret: Reg,
-        local_upvalues: &mut Vec<Rc<RefCell<UpValue>>>,
-    ) -> &[u64] {
-        self.close_upvalues(local_upvalues);
+    fn get_local_closure(&self, clsidx: ClosureIdx) -> &Closure {
+        &self.closures[clsidx.0 as usize]
+    }
+    fn get_local_closure_mut(&mut self, clsidx: ClosureIdx) -> &mut Closure {
+        &mut self.closures[clsidx.0 as usize]
+    }
+    fn return_general(&mut self, iret: Reg, nret: Reg) -> &[u64] {
         let base = self.base_pointer as usize;
         let iret_abs = base + iret as usize;
         self.stack
@@ -207,12 +237,21 @@ impl Machine {
             .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
     }
-    fn close_upvalues(&self, broker: &mut Vec<Rc<RefCell<UpValue>>>) {
-        for v in broker.iter_mut() {
-            let mut v = v.borrow_mut();
-            if let UpValue::Open(i) = *v {
-                *v = UpValue::Closed(self.get_stack(i.into()));
-            }
+    fn close_upvalues(&mut self, local_closures: &[(usize, ClosureIdx)]) {
+        for (base_ptr_cls, clsidx) in local_closures.iter() {
+            let cls = self.get_local_closure(*clsidx);
+            let newupvls = cls
+                .upvalues
+                .iter()
+                .map(|upv| {
+                    if let UpValue::Open(i) = upv {
+                        UpValue::Closed(Rc::new(RefCell::new(self.stack[*base_ptr_cls - *i])))
+                    } else {
+                        upv.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            self.get_local_closure_mut(*clsidx).upvalues = newupvls;
         }
     }
     /// Execute function, return retcode.
@@ -225,7 +264,7 @@ impl Machine {
         self.states_ptr = StateStoragePtr::from(cls_i);
 
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
+        let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
         let mut pcounter = 0;
         if cfg!(test) {
             println!("{:?}", func);
@@ -291,50 +330,31 @@ impl Machine {
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let (_name, f_proto) = &prog.global_fn_table[fn_proto_pos];
-
-                    let inner_upvalues = f_proto
-                        .upindexes
-                        .iter()
-                        .map(|u_i| match u_i {
-                            UpIndex::Local(i) => {
-                                let res = Rc::new(RefCell::new(UpValue::Open(*i as u8)));
-                                local_upvalues.push(res.clone());
-                                res
-                            }
-                            UpIndex::Upvalue(u_i) => {
-                                let up_i = cls_i.unwrap();
-                                let upvalues = &self.closures[up_i.0 as usize].upvalues;
-                                Rc::clone(&upvalues[*u_i])
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    let mut state_storage = StateStorage::default();
-                    state_storage.resize(f_proto.state_size as usize);
                     //todo! garbage collection
-                    self.closures.push(Closure {
-                        fn_proto_pos,
-                        upvalues: inner_upvalues,
-                        state_storage, //todo
-                    });
-
+                    self.closures.push(Closure::new(prog, fn_proto_pos));
                     let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
+                    local_closures.push((dst as usize, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Return0 => {
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    let _ = self.return_general(iret, nret, &mut local_upvalues);
+                    self.close_upvalues(&local_closures);
+                    let _ = self.return_general(iret, nret);
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
                         let up_i = cls_i.unwrap();
                         let upvalues = &self.closures[up_i.0 as usize].upvalues;
-                        let rv: &UpValue = &upvalues[index as usize].borrow();
+                        let rv: &UpValue = &upvalues[index as usize];
                         match rv {
-                            UpValue::Open(i) => self.get_stack(*i as i64),
-                            UpValue::Closed(rawval) => *rawval,
+                            UpValue::Open(i) => {
+                                let idx = func.upindexes[*i];
+                                self.get_open_upvalue(idx)
+                            }
+                            UpValue::Closed(rawval) => *rawval.borrow(),
                         }
                     };
                     self.set_stack(dst as i64, rawv);
@@ -343,19 +363,16 @@ impl Machine {
                     let v = self.get_stack(src as i64);
                     let up_i = cls_i.unwrap();
                     let upvalues = &self.closures[up_i.0 as usize].upvalues;
-                    let res = {
-                        let rv: &mut UpValue = &mut upvalues[index as usize].borrow_mut();
-                        match rv {
-                            UpValue::Open(i) => Some(*i),
-                            UpValue::Closed(i) => {
-                                *i = v;
-                                // *rv = UpValue::Closed(v);
-                                None
-                            }
+
+                    let rv = &upvalues[index as usize];
+                    match rv {
+                        UpValue::Open(i) => {
+                            self.set_stack(*i as i64, v);
                         }
-                    };
-                    if let Some(i) = res {
-                        self.set_stack(i as i64, v);
+                        UpValue::Closed(i) => {
+                            let mut uv = i.borrow_mut();
+                            *uv = v;
+                        }
                     }
                 }
                 // Instruction::Close() => todo!(),

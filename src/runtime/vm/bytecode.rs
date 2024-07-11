@@ -1,8 +1,9 @@
 pub type Reg = u8; // register position
-pub type ConstPos = u8;
+pub type ConstPos = u16;
 pub type Offset = i16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+// #[repr(C)]
 pub enum Instruction {
     // Destination / Source
     Move(Reg, Reg),
@@ -19,7 +20,7 @@ pub enum Instruction {
     // Function Address,Nargs,Nret
     CallExtCls(Reg, u8, u8),
     // destination, index of inner function prototype in global function table.
-    Closure(Reg, ConstPos),
+    Closure(Reg, Reg),
 
     //destination,source
     GetUpValue(Reg, Reg),
@@ -27,7 +28,7 @@ pub enum Instruction {
     //call internal state over time, destination,source
     GetState(Reg),
     SetState(Reg),
-    ShiftStatePos(i16),
+    ShiftStatePos(Offset),
 
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
@@ -156,5 +157,5 @@ impl std::fmt::Display for Instruction {
 #[test]
 fn ensure_bytecode_size() {
     let size = std::mem::size_of::<Instruction>();
-    assert!(size == 8 || size == 4);
+    assert_eq!(4, size);
 }

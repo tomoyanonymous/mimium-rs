@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::Type;
+use crate::{mir::OpenUpValue, types::Type};
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -22,29 +22,31 @@ fn lib_printi(state: &mut Machine) -> i64 {
 #[test]
 fn closuretest() {
     //fn makeCounter(beg,inc){
-    // let n = beg+1; // local- 0:beg, 1:inc 2: 1 3:n
-    // return | | { //upvalue: n:3 inc:1
-    //              n = n+inc;
+    // let n = beg+1;
+    // return |x| { //local 0:x
+    //              n = n+inc+x;
     //              n
     //             }
     //}
     //fn main(){
     //  let c = makeCounter(13,7);
-    //  print(c()); //print 21
-    //  print(c()); // print 28
+    //  print(c(0)); //print 21
+    //  print(c(0)); // print 28
     //}
 
     let inner_insts = vec![
         Instruction::GetUpValue(0, 0), //load n
         Instruction::GetUpValue(1, 1), //load inc
         Instruction::AddI(0, 0, 1),    // store n+inc in new n
+        Instruction::Move(1, 0),       //load x
+        Instruction::AddI(0, 0, 1),    // store n+inc+x in new n
         Instruction::SetUpValue(0, 0), //store new n in upvalue index 0
         Instruction::Return(0, 1),     // return single value at 1
     ];
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![UpIndex::Local(3), UpIndex::Local(1)],
+        upindexes: vec![OpenUpValue(1), OpenUpValue(2)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         feedmap: vec![],
@@ -68,7 +70,7 @@ fn closuretest() {
         feedmap: vec![],
         state_size: 0,
     };
-    let inner_inst3 = vec![
+    let main_inst = vec![
         // no stack in the entry
         Instruction::MoveConst(0, 2), //load makecounter
         Instruction::MoveConst(1, 0), //load 2
@@ -76,12 +78,14 @@ fn closuretest() {
         Instruction::Call(0, 2, 1), // [(closure)]  call makecounter on register 2 with 2 arguments and 1 return value.return value (inner closure)is on reg 0
         //print(c())
         Instruction::Move(1, 0),          // move closure 0 to 1
+        Instruction::MoveConst(2, 3),    //load 0
         Instruction::CallCls(1, 0, 1), // call inner closure with 0 args and 1 return value.(result is in 0)
         Instruction::Move(2, 1),       // load result to reg 2
         Instruction::MoveConst(1, 3),  //set print into reg1
         Instruction::CallExtFun(1, 1, 0), //print result
-        //repeat precious 4 step : print(c())
+        //repeat precvous 4 step : print(c())
         Instruction::Move(1, 0), // move closure 0 to 1
+        Instruction::MoveConst(2, 3), //load 0
         Instruction::CallCls(1, 0, 1),
         Instruction::Move(2, 1),
         Instruction::MoveConst(1, 3),
@@ -92,7 +96,7 @@ fn closuretest() {
         nparam: 0,
         nret: 1,
         upindexes: vec![],
-        bytecodes: inner_inst3,
+        bytecodes: main_inst,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
         feedmap: vec![],
         state_size: 0,

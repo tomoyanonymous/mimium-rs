@@ -41,12 +41,13 @@ impl std::fmt::Display for Value {
             Value::Global(_) => todo!(),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
+            Value::UpValue(i, v) => write!(f, "upvalue [{i}]{}", *v),
             Value::Float(n) => write!(f, "float {n}"),
             Value::Integer(i) => write!(f, "int {i}"),
             Value::Bool(_) => todo!(),
             Value::Function(id, _statesize) => write!(f, "function {id}"),
             Value::ExtFunction(_) => todo!(),
-            Value::Closure(_) => todo!(),
+            Value::Closure(fun, upindex) => write!(f, "closure {} ({})", *fun, upindex.len()),
             Value::FixPoint => write!(f, "fixpoint"),
             Value::State(v) => write!(f, "state({})", *v),
             Value::None => write!(f, "none"),
@@ -70,13 +71,27 @@ impl std::fmt::Display for Instruction {
                 }
                 write!(f, "]")
             }
-            Instruction::Closure(_) => todo!(),
-            Instruction::GetUpValue(_, _) => todo!(),
-            Instruction::SetUpValue(_, _) => todo!(),
+            Instruction::CallCls(cls, args) => {
+                let _ = write!(f, "callcls {} [", *cls);
+                for a in args.iter() {
+                    let _ = write!(f, "{} ", *a);
+                }
+                write!(f, "]")
+            }
+
+            Instruction::Closure(fun) => {
+                if let Value::Function(idx, _) = fun.as_ref() {
+                    write!(f, "closure {idx}")
+                } else {
+                    write!(f,"closure {}",*fun)
+                }
+            }
+            Instruction::GetUpValue(_f, idx) => write!(f, "getupval {idx}"),
+            Instruction::SetUpValue(_f, idx) => write!(f, "setupval {idx}"),
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
             Instruction::GetState => write!(f, "getstate"),
-            Instruction::JmpIf(cond, tbb,ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
+            Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
             Instruction::Return(a) => write!(f, "ret {}", *a),

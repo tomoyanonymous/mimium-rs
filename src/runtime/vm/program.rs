@@ -1,20 +1,13 @@
 use super::{Instruction, RawVal, Reg};
 use crate::mir;
 use crate::types::Type;
-use std::cell::RefCell;
-use std::rc::Rc;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum UpIndex {
-    Local(usize),   // index of local variables in upper functions
-    Upvalue(usize), // index of upvalues in upper functions
-}
+pub use mir::OpenUpValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FuncProto {
     pub nparam: usize,
     pub nret: usize,
-    pub upindexes: Vec<UpIndex>,
+    pub upindexes: Vec<OpenUpValue>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
     // feedvalues are mapped in this vector
@@ -54,7 +47,6 @@ impl From<&mir::Function> for FuncProto {
         }
     }
 }
-
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {

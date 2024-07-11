@@ -13,6 +13,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrorKind {
     TypeMismatch(Type, Type),
+    NonFunction(Type),
     CircularType,
     IndexOutOfRange(u16, u16),
     IndexForNonTuple,
@@ -39,6 +40,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::NonPrimitiveInFeed => {
                 write!(f, "Function that uses self cannot be return function type.")
             }
+            ErrorKind::NonFunction(t) => write!(f, "{t} is not a function type."),
         }
     }
 }
@@ -146,7 +148,7 @@ impl InferContext {
         }
     }
 
-    fn unify_types(&mut self, t1: Type, t2: Type) -> Result<Type, Error> {
+    pub fn unify_types(&mut self, t1: Type, t2: Type) -> Result<Type, Error> {
         let mut unify_vec = |a1: Vec<Type>, a2: Vec<Type>| -> Result<Vec<_>, Error> {
             a1.clone()
                 .iter()
@@ -199,7 +201,7 @@ impl InferContext {
     }
 }
 
-fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
+pub fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
     let pt = match e {
         Literal::Float(_s) => PType::Numeric,
         Literal::Int(_s) => PType::Int,
@@ -208,6 +210,18 @@ fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
         Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
     };
     Ok(Type::Primitive(pt))
+}
+pub fn lookup(name: &str, ctx: &mut InferContext, span: &Span) -> Result<Type, Error> {
+    ctx.env.lookup(name).map_or_else(
+        || {
+            println!("{:#?}", ctx.env);
+            Err(Error(
+                ErrorKind::VariableNotFound(name.to_string()),
+                span.clone(),
+            ))
+        }, //todo:Span
+        |v| Ok(v.clone()),
+    )
 }
 
 pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Type, Error> {
@@ -296,13 +310,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             };
             res
         }
-        Expr::Var(name, _time) => ctx.env.lookup(&name).map_or(
-            Err(Error(
-                ErrorKind::VariableNotFound(name.clone()),
-                span.clone(),
-            )), //todo:Span
-            |v| Ok(v.clone()),
-        ),
+        Expr::Var(name, _time) => lookup(&name, ctx, span),
         Expr::Apply(fun, callee) => {
             let fnl = infer_type(fun, ctx)?;
             let callee_t = infer_vec(callee, ctx)?;
