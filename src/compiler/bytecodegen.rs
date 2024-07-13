@@ -210,13 +210,20 @@ impl ByteCodeGenerator {
                     pos as ConstPos,
                 ))
             }
-            mir::Instruction::Alloc(t) => None,
+            mir::Instruction::Alloc(_t) => {
+                let _ = self.get_destination(dst);
+                None
+            }
             mir::Instruction::Load(ptr) => {
                 let d = self.get_destination(dst);
                 let s = self.vregister.find_keep(ptr).unwrap();
                 (d != s).then(|| VmInstruction::Move(d, s))
             }
-            mir::Instruction::Store(dst, src) => self.insert_move(dst, src),
+            mir::Instruction::Store(dst, src) => {
+                let d = self.vregister.find_keep(dst).unwrap();
+                let s = self.vregister.find(src).unwrap();
+                (d != s).then(|| VmInstruction::Move(d, s))
+            }
             mir::Instruction::Call(v, args) => {
                 let nargs = args.len() as u8;
                 let res = match v.as_ref() {

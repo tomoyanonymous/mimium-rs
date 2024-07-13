@@ -105,6 +105,14 @@ fn ifblock() {
 }
 
 #[test]
+fn letmulti() {
+    let res = run_multiple_file("let_multi.mmm", 1).unwrap();
+    let ans = vec![3.0];
+    assert_eq!(res, ans);
+}
+
+
+#[test]
 fn closure_open(){
     let res = run_multiple_file("closure_open.mmm", 1).unwrap();
     let ans = vec![3.0];
