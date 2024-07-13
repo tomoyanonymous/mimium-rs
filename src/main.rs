@@ -1,7 +1,6 @@
 // pub mod wcalculus;
 use clap::Parser;
 
-use mimium_rs::ast_interpreter;
 use mimium_rs::compiler::{emit_ast, emit_bytecode};
 use mimium_rs::utils::miniprint::MiniPrint;
 use mimium_rs::utils::{error::report, fileloader};
@@ -23,7 +22,6 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let mut global_ctx = ast_interpreter::Context::new();
     match args.file {
         Some(file) => {
             let (content, fullpath) = fileloader::load(file.clone())?;

@@ -38,7 +38,7 @@ impl<T: Clone> Environment<T> {
             .0
             .iter()
             .enumerate()
-            .find(|(level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
+            .find(|(_level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
             .map(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
             .flatten()
         {

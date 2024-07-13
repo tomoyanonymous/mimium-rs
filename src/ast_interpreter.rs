@@ -1,11 +1,11 @@
 use crate::{
     ast,
     compiler::Error as CompileError,
-    compiler::{typing::infer_type, ErrorKind},
+    compiler::ErrorKind,
     integer, numeric,
     runtime::builtin_fn,
     string_t,
-    types::{Id, PType, Type, TypedId},
+    types::{PType, Type, TypedId},
     unit,
     utils::{
         environment::Environment,
@@ -257,9 +257,11 @@ pub fn eval_ast(
                 ErrorKind::VariableNotFound(v.clone()),
                 span.clone(),
             )),
-        ast::Expr::Block(b) => b.as_ref().map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
-            eval_ast(&body, ctx)
-        }),
+        ast::Expr::Block(b) => b
+            .as_ref()
+            .map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
+                eval_ast(&body, ctx)
+            }),
         ast::Expr::Tuple(v) => {
             let res = v
                 .iter()

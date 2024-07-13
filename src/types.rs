@@ -95,7 +95,7 @@ impl fmt::Display for Type {
             Type::Struct(v) => {
                 write!(f, "{v:?}")
             }
-            Type::Function(p, r, s) => {
+            Type::Function(p, r, _s) => {
                 let args = format_vec!(p);
                 write!(f, "({args})->{r}")
             }

@@ -1,4 +1,4 @@
-use super::{Instruction, RawVal, Reg};
+use super::{Instruction, RawVal};
 use crate::mir;
 use crate::types::Type;
 pub use mir::OpenUpValue;

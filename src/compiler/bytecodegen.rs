@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,18 +25,6 @@ impl VRegister {
         self.0[pos] = Some(v.clone());
         pos as Reg
     }
-    pub fn remove_value(&mut self, v: Arc<mir::Value>) {
-        // println!("rm   reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
-        match self.0.iter().position(|v1| match v1 {
-            Some(v1) => *v1 == v,
-            None => false,
-        }) {
-            Some(i) => self.0[i] = None,
-            None => {
-                panic!("value does not exist in virtual registers")
-            }
-        }
-    }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
         // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         //todo: Error handling
@@ -56,8 +43,9 @@ impl VRegister {
             _ => None,
         }
     }
-    //find for load instruction
+    //find for load and store instruction
     pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
+        // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         self.0
             .iter()
             .position(|v1| match v1 {
@@ -79,21 +67,6 @@ impl VRegister {
             (Some(pos), _) => Some(pos as Reg),
             _ => None,
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct VRegisterStack(Vec<VRegister>);
-impl VRegisterStack {
-    fn get_top_mut(&mut self) -> &mut VRegister {
-        self.0.last_mut().unwrap()
-    }
-    fn add_newvalue(&mut self, v: &Arc<mir::Value>) -> Reg {
-        self.get_top_mut().add_newvalue(v)
-    }
-    fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        // self.0.iter_mut().find(|vreg| vreg.find(v))
-        todo!()
     }
 }
 
@@ -149,15 +122,6 @@ impl ByteCodeGenerator {
                 unreachable!()
             }
         }
-    }
-    fn insert_move(
-        &mut self,
-        dst: &Arc<mir::Value>,
-        src: &Arc<mir::Value>,
-    ) -> Option<VmInstruction> {
-        let d = self.vregister.find(dst).unwrap();
-        let s = self.vregister.find(src).unwrap();
-        (d != s).then(|| VmInstruction::Move(s, d))
     }
     fn prepare_function(
         &mut self,
@@ -268,7 +232,7 @@ impl ByteCodeGenerator {
                         let dst = self.get_destination(dst);
                         Some(VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::Function(idx, state_size) => {
+                    mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(_idx) => {
@@ -295,7 +259,10 @@ impl ByteCodeGenerator {
                     *i as Reg,
                 ))
             }
-            mir::Instruction::SetUpValue(_f, i) => todo!(),
+            mir::Instruction::SetUpValue(_f, i) => Some(VmInstruction::SetUpValue(
+                self.get_destination(dst),
+                *i as Reg,
+            )),
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
             mir::Instruction::GetState => Some(VmInstruction::GetState(self.get_destination(dst))),
@@ -434,7 +401,7 @@ impl ByteCodeGenerator {
         }
         // succeeding block will be compiled recursively
         let block = &mirfunc.body[0];
-        block.0.iter().enumerate().for_each(|(i, (dst, inst))| {
+        block.0.iter().for_each(|(dst, inst)| {
             let newinst = self.emit_instruction(&mut func, mirfunc, dst.clone(), inst);
             if let Some(i) = newinst {
                 func.bytecodes.push(i);

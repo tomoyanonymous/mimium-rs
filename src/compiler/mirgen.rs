@@ -1,6 +1,6 @@
 use super::intrinsics;
 use crate::{numeric, unit};
-use super::typing::{self, infer_type_literal, lookup, InferContext};
+use super::typing::{self, infer_type_literal, InferContext};
 mod recursecheck;
 mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Label, Mir, UpIndex, VPtr, VReg, Value};
@@ -126,7 +126,7 @@ impl Context {
         self.valenv.push(bind);
     }
     fn lookup(&self, key: &str) -> LookupRes<VPtr> {
-        let local = self.valenv.iter().find(|(name, v)| name == key);
+        let local = self.valenv.iter().find(|(name, _v)| name == key);
         let parent = &self.parent;
         match (local, parent) {
             (Some((_localname, v)), None) => LookupRes::Global(v.clone()),
@@ -136,7 +136,7 @@ impl Context {
         }
     }
     fn lookup_upvalue(&self, key: &str) -> LookupRes<VPtr> {
-        let local = self.valenv.iter().find(|(name, v)| name == key);
+        let local = self.valenv.iter().find(|(name, _v)| name == key);
         let parent = &self.parent;
         match (local, parent) {
             (Some((_localname, v)), None) => LookupRes::Global(v.clone()),
@@ -270,7 +270,7 @@ fn eval_expr(
                     }
                     res
                 }
-                Value::Closure(v, upindexes) if let Value::Function(idx, statesize) =v.as_ref()
+                Value::Closure(v, _upindexes) if let Value::Function(idx, statesize) =v.as_ref()
                     => 
                 {
                     unreachable!()
@@ -312,7 +312,7 @@ fn eval_expr(
                     res
                 })
                 .collect::<Vec<_>>();
-            let atypes = binds.iter().map(|(name,a,t)| t.clone()).collect::<Vec<_>>();
+            let atypes = binds.iter().map(|(_name,_a,t)| t.clone()).collect::<Vec<_>>();
             let child = make_child_ctx(ctx_cell.clone(), &binds);
             let child_cell = Rc::new(RefCell::new(child));
 
