@@ -1,6 +1,6 @@
 use super::intrinsics;
 use crate::{numeric, unit};
-use super::typing::{self, infer_type, infer_type_literal, lookup, InferContext};
+use super::typing::{self, infer_type_literal, lookup, InferContext};
 mod recursecheck;
 mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Label, Mir, UpIndex, VPtr, VReg, Value};
@@ -174,7 +174,9 @@ fn eval_expr(
             let mut ctx = ctx_cell.borrow_mut();
             
             let v = match ctx.lookup(name) {
-                LookupRes::Local(v) => v.clone(),
+                LookupRes::Local(v) => {
+                    ctx.push_inst(Instruction::Load(v))
+                },
                 LookupRes::UpValue(v) => {
                     let fnlabel = ctx.parent.clone().unwrap().borrow_mut().fn_label.clone().unwrap();
                     let upindexes = &mut ctx.get_current_fn().upindexes;
@@ -222,15 +224,25 @@ fn eval_expr(
                 Err(CompileError(CompileErrorKind::TypingFailure(terr), span.clone()))
             };
             let rt = rtres?;
-            let makeargs = |args: &Vec<WithMeta<Expr>>,ctx_cell:&Rc<RefCell<Context>>| {
+            let makeargs = |args: &Vec<WithMeta<Expr>>,ctx_cell:&Rc<RefCell<Context>>,is_intrinsic:bool| {
                 args.iter()
-                    .map(|a_meta| eval_expr(ctx_cell, a_meta).map(|t| t.0))
+                    .map(|a_meta|->Result<Arc<Value>, CompileError> 
+                        {
+                            let (v,t)= eval_expr(ctx_cell, a_meta)?;
+                            let res = if !is_intrinsic{
+                                ctx_cell.borrow_mut().push_inst(Instruction::Alloc(t));
+                                ctx_cell.borrow_mut().push_inst(Instruction::Load(v.clone()))
+                            }else{
+                                v
+                            };
+                            Ok(res)
+                        })
                     .try_collect::<Vec<_>>()
             };
             let res = match f.as_ref() {
                 Value::Register(_c) => {
                     //closure
-                    let a_regs = makeargs(args,ctx_cell)?;
+                    let a_regs = makeargs(args,ctx_cell,false)?;
                     let mut ctx = ctx_cell.borrow_mut();
 
                     //do not increment state size for closure
@@ -243,7 +255,7 @@ fn eval_expr(
                         ctx.get_current_fn().state_size += statesize;
                         ctx.push_inst(Instruction::Uinteger(*idx as u64))
                     };
-                    let a_regs = makeargs(args,ctx_cell)?;
+                    let a_regs = makeargs(args,ctx_cell,false)?;
                     let mut ctx = ctx_cell.borrow_mut();
                     //insert pushstateoffset
                     if ctx.state_offset > 0 {
@@ -264,7 +276,7 @@ fn eval_expr(
                     unreachable!()
                 }
                 Value::ExtFunction(label) => {
-                    let a_regs = makeargs(args,ctx_cell)?;
+                    let a_regs = makeargs(args,ctx_cell,true)?;
                     if let Some(res) = ctx_cell
                         .borrow_mut()
                         .make_intrinsics(&label.0, a_regs.clone())
@@ -376,9 +388,19 @@ fn eval_expr(
                 if let Some(idt) = id.ty.clone(){
                     tenv.unify_types(idt, t.clone())?;
                 }
-                tenv.env.add_bind(&mut vec![(id.id.clone(),t)]);
-            }
-            ctx_cell.borrow_mut().add_bind((id.id.clone(), bodyv));
+                tenv.env.add_bind(&mut vec![(id.id.clone(),t.clone())]);
+            };
+             {
+            let mut ctx = ctx_cell.borrow_mut();   
+            let res = if let Some (_) = & ctx.func{
+                    let alloc = ctx.push_inst(Instruction::Alloc(t.clone()));
+                let _ = ctx.push_inst(Instruction::Store(alloc.clone(),bodyv.clone()));
+                alloc
+            }else{
+                bodyv
+            };
+            ctx.add_bind((id.id.clone(), res));
+             }   
             if let Some(then_e) = then {
                 eval_expr(ctx_cell, then_e)
             } else {
@@ -386,16 +408,23 @@ fn eval_expr(
             }
         }
         Expr::LetRec(id, body, then) => {
-            let bind = (id.id.clone(), Arc::new(Value::FixPoint));
             ctx_cell.borrow_mut().fn_label = Some(id.id.clone());
-            ctx_cell.borrow_mut().add_bind(bind);
-            {
+            let t = {
                 let ctx = ctx_cell.borrow_mut();
                 let mut tenv = ctx.typeenv.borrow_mut();
                 //todo:need to boolean and insert cast
                 let t = tenv.gen_intermediate_type();
-                tenv.env.add_bind(&mut vec![(id.id.clone(),t)]);
-            }
+                if let Some(idt) = id.ty.clone(){
+                    tenv.unify_types(idt, t.clone())?;
+                }
+                tenv.env.add_bind(&mut vec![(id.id.clone(),t.clone())]);
+                t
+            };
+            let fix = Arc::new(Value::FixPoint);
+            let alloc = ctx_cell.borrow_mut().push_inst(Instruction::Alloc(t.clone()));
+            let _ = ctx_cell.borrow_mut().push_inst(Instruction::Store(alloc.clone(),fix));
+            let bind = (id.id.clone(), alloc);
+            ctx_cell.borrow_mut().add_bind(bind);
             let _ = eval_expr(ctx_cell, body)?;
             if let Some(then_e) = then {
                 eval_expr(ctx_cell, then_e)

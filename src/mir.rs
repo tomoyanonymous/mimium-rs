@@ -42,9 +42,9 @@ pub enum Instruction {
     Integer(i64),
     //constant float
     Float(f64),
-    // allocate appropreate memory size depending on the type and return its pointer address
+    // allocate memory from stack depending on the size
     Alloc(Type),
-    // load value from the pointer type
+    // load value to register from the pointer type
     Load(VPtr),
     // store value to pointer
     Store(VPtr, VPtr),

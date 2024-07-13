@@ -1,13 +1,12 @@
+use crate::format_vec;
+
 use super::*;
 
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
-            let _ = write!(f, "fn {} [", fun.label.0);
-            fun.args.iter().for_each(|a| {
-                let _ = write!(f, "{} ", *a);
-            });
-            let _ = write!(f, "]\n");
+            let af = format_vec!(fun.args);
+            let _ = write!(f, "fn {} [{af}]\n", fun.label.0);
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "  block {i}\n");
                 for (v, insts) in block.0.iter() {
@@ -61,29 +60,20 @@ impl std::fmt::Display for Instruction {
             Instruction::Uinteger(u) => write!(f, "uint {u}"),
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
-            Instruction::Alloc(_) => todo!(),
-            Instruction::Load(_) => todo!(),
-            Instruction::Store(_, _) => todo!(),
+            Instruction::Alloc(t) => write!(f, "alloc {t}"),
+            Instruction::Load(src) => write!(f, "load {src}"),
+            Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
             Instruction::Call(fptr, args) => {
-                let _ = write!(f, "call {} [", *fptr);
-                for a in args.iter() {
-                    let _ = write!(f, "{} ", *a);
-                }
-                write!(f, "]")
+                write!(f, "call {} [{}]", *fptr, format_vec!(args))
             }
             Instruction::CallCls(cls, args) => {
-                let _ = write!(f, "callcls {} [", *cls);
-                for a in args.iter() {
-                    let _ = write!(f, "{} ", *a);
-                }
-                write!(f, "]")
+                write!(f, "callcls {} [{}]", *cls, format_vec!(args))
             }
-
             Instruction::Closure(fun) => {
                 if let Value::Function(idx, _) = fun.as_ref() {
                     write!(f, "closure {idx}")
                 } else {
-                    write!(f,"closure {}",*fun)
+                    write!(f, "closure {}", *fun)
                 }
             }
             Instruction::GetUpValue(_f, idx) => write!(f, "getupval {idx}"),
