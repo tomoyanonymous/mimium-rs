@@ -45,6 +45,12 @@ impl Type {
             false
         }
     }
+    pub fn is_function(&self) -> bool {
+        match self {
+            Type::Function(_, _, _) => true,
+            _ => false,
+        }
+    }
     pub fn apply_fn<F>(&self, closure: F) -> Self
     where
         F: Fn(Self) -> Self,

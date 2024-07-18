@@ -346,7 +346,7 @@ pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
     let res = Expr::Let(
         TypedId {
             ty: None,
-            id: "_mimium_global".to_string(),
+            id: GLOBAL_LABEL.to_string(),
         },
         Box::new(ast.clone()),
         None,

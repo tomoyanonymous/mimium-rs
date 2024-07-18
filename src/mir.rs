@@ -141,16 +141,17 @@ pub struct Function {
     pub args: Vec<Arc<Value>>,
     // pub locals: Vec<Local>,
     pub upindexes: Vec<Arc<Value>>,
-    // pub upperfn: Option<Arc<Self>>,
+    pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[VPtr]) -> Self {
+    pub fn new(name: &str, args: &[VPtr], upperfn_i: Option<usize>) -> Self {
         Self {
             label: Label(name.to_string()),
             args: args.to_vec(),
             upindexes: vec![],
+            upperfn_i,
             body: vec![Block::default()],
             state_size: 0,
         }

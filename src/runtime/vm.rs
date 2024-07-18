@@ -493,9 +493,7 @@ impl Machine {
                     let ptr = self.get_current_state().get_mut();
                     *ptr = Self::get_as::<f64>(v)
                 }
-                Instruction::ShiftStatePos(v) => {
-                    self.get_current_state().shift_pos(v)
-                }
+                Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
                 Instruction::Dummy => {
                     unreachable!()
                 }

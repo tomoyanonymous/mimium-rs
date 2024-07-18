@@ -40,7 +40,7 @@ pub fn run_bytecode_test(
     machine: &mut vm::Machine,
     bytecodes: &vm::Program,
 ) -> Result<f64, Vec<Box<dyn ReportableError>>> {
-    let retcode = machine.execute_entry(bytecodes,"dsp");
+    let retcode = machine.execute_entry(bytecodes, "dsp");
     if retcode >= 0 {
         Ok(vm::Machine::get_as::<f64>(*machine.get_top()))
     } else {

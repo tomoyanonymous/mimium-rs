@@ -7,8 +7,13 @@ impl std::fmt::Display for Mir {
         for fun in self.functions.iter() {
             let af = format_vec!(fun.args);
             let _ = write!(f, "fn {} [{af}]\n", fun.label.0);
+            let upi = format_vec!(fun.upindexes);
+            let _ = write!(f, "upindexes:[{upi}]");
+            if let Some(upper_i) = fun.upperfn_i {
+                let _ = write!(f, "upper:{upper_i}");
+            }
             for (i, block) in fun.body.iter().enumerate() {
-                let _ = write!(f, "  block {i}\n");
+                let _ = write!(f, "\n  block {i}\n");
                 for (v, insts) in block.0.iter() {
                     let _ = match v.as_ref() {
                         Value::None => write!(f, "  {: <10} {insts}\n", " "),

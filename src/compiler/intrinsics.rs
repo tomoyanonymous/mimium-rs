@@ -23,5 +23,3 @@ pub(crate) const COS: &'static str = "cos";
 pub(crate) const SQRT: &'static str = "sqrt";
 pub(crate) const ABS: &'static str = "abs";
 pub(crate) const LOG: &'static str = "log";
-
-

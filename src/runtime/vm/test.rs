@@ -78,13 +78,13 @@ fn closuretest() {
         Instruction::Call(0, 2, 1), // [(closure)]  call makecounter on register 2 with 2 arguments and 1 return value.return value (inner closure)is on reg 0
         //print(c())
         Instruction::Move(1, 0),          // move closure 0 to 1
-        Instruction::MoveConst(2, 3),    //load 0
+        Instruction::MoveConst(2, 3),     //load 0
         Instruction::CallCls(1, 0, 1), // call inner closure with 0 args and 1 return value.(result is in 0)
         Instruction::Move(2, 1),       // load result to reg 2
         Instruction::MoveConst(1, 3),  //set print into reg1
         Instruction::CallExtFun(1, 1, 0), //print result
         //repeat precvous 4 step : print(c())
-        Instruction::Move(1, 0), // move closure 0 to 1
+        Instruction::Move(1, 0),      // move closure 0 to 1
         Instruction::MoveConst(2, 3), //load 0
         Instruction::CallCls(1, 0, 1),
         Instruction::Move(2, 1),

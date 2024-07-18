@@ -399,6 +399,7 @@ impl ByteCodeGenerator {
         for a in mirfunc.args.iter() {
             self.vregister.add_newvalue(a);
         }
+
         // succeeding block will be compiled recursively
         let block = &mirfunc.body[0];
         block.0.iter().for_each(|(dst, inst)| {
@@ -446,7 +447,7 @@ mod test {
             0,
             Arc::new(mir::Argument(Label("hoge".to_string()), Type::Unknown)),
         ));
-        let mut func = mir::Function::new("test", &[arg.clone()]);
+        let mut func = mir::Function::new("test", &[arg.clone()], None);
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));
         block.0.push((resint.clone(), mir::Instruction::Integer(1)));
