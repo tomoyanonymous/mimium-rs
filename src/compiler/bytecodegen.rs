@@ -444,10 +444,50 @@ impl ByteCodeGenerator {
         self.program.clone()
     }
 }
+fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
+    let mut res = program.clone();
+    for (_, f) in res.global_fn_table.iter_mut() {
+        let mut remove_idx = std::collections::HashSet::<usize>::new();
+        let mut removeconst_idx = std::collections::HashMap::<usize,VmInstruction>::new();
 
+        for (i, pair) in f.bytecodes.windows(2).enumerate() {
+            match pair {
+                &[VmInstruction::Move(dst, src), VmInstruction::Move(dst2, src2)]
+                    if dst == src2 && src == dst2 =>
+                {
+                    remove_idx.insert(i);
+                    remove_idx.insert(i + 1);
+                }
+                &[VmInstruction::MoveConst(dst, src), VmInstruction::Move(dst2, src2)]
+                    if dst == src2 =>
+                {
+                    removeconst_idx.insert(i,VmInstruction::MoveConst(dst2, src));
+                    remove_idx.insert(i+1);
+                }
+                _ => {}
+            }
+        }
+        let mut res_bytecodes = vec![];
+        for (i, inst) in f.bytecodes.iter().enumerate() {
+            if remove_idx.contains(&i) {
+                // println!("removed redundunt mov")
+            }else if let Some(inst) = removeconst_idx.get(&i) {
+                res_bytecodes.push(*inst);
+            }else{
+                res_bytecodes.push(*inst);
+            }
+        }
+        f.bytecodes = res_bytecodes;
+    }
+    res
+}
+fn optimize(program: vm::Program) -> vm::Program {
+    remove_redundunt_mov(program)
+}
 pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
     let mut generator = ByteCodeGenerator::default();
-    Ok(generator.generate(mir))
+    let program = generator.generate(mir);
+    Ok(optimize(program))
 }
 
 mod test {
