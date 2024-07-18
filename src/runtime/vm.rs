@@ -67,11 +67,12 @@ impl From<OpenUpValue> for UpValue {
 //closure object dynamically allocated
 pub(crate) struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
+    pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
     pub upvalues: Vec<UpValue>,
     state_storage: StateStorage,
 }
 impl Closure {
-    pub fn new(program: &Program, fn_i: usize) -> Self {
+    pub fn new(program: &Program, base_ptr: u64, fn_i: usize) -> Self {
         let fnproto = &program.global_fn_table[fn_i].1;
         let upvalues = fnproto
             .upindexes
@@ -83,6 +84,7 @@ impl Closure {
         Self {
             fn_proto_pos: fn_i,
             upvalues,
+            base_ptr,
             state_storage,
         }
     }
@@ -173,13 +175,13 @@ impl Machine {
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
-    pub fn get_open_upvalue(&self, negative_offset: OpenUpValue) -> RawVal {
-        println!(
-            "baseptr:{}, upvalue:{}",
-            self.base_pointer, negative_offset.0
-        );
-        let abs_pos = self.base_pointer as usize - negative_offset.0 - 1;
-        self.stack[abs_pos as usize]
+    fn get_upvalue_offset(upper_base: usize, offset: OpenUpValue) -> usize {
+        upper_base + offset.0
+    }
+    pub fn get_open_upvalue(&self, upper_base: usize, offset: OpenUpValue) -> RawVal {
+        println!("upper base:{}, upvalue:{}", upper_base, offset.0);
+        let abs_pos = Self::get_upvalue_offset(upper_base, offset);
+        self.stack[abs_pos]
     }
 
     fn get_current_state(&mut self) -> &mut StateStorage {
@@ -241,8 +243,9 @@ impl Machine {
                 .upvalues
                 .iter()
                 .map(|upv| {
-                    if let UpValue::Open(OpenUpValue(i)) = upv {
-                        UpValue::Closed(Rc::new(RefCell::new(self.stack[*base_ptr_cls - *i])))
+                    if let UpValue::Open(i) = upv {
+                        let abs_pos = Self::get_upvalue_offset(*base_ptr_cls, *i);
+                        UpValue::Closed(Rc::new(RefCell::new(self.stack[abs_pos])))
                     } else {
                         upv.clone()
                     }
@@ -325,7 +328,8 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    self.closures.push(Closure::new(prog, fn_proto_pos));
+                    self.closures
+                        .push(Closure::new(prog, self.base_pointer, fn_proto_pos));
                     let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
                     local_closures.push((dst as usize, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
@@ -341,10 +345,12 @@ impl Machine {
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
                         let up_i = cls_i.unwrap();
-                        let upvalues = &self.closures[up_i.0 as usize].upvalues;
+                        let cls = &self.closures[up_i.0 as usize];
+                        let upper_base = cls.base_ptr as usize;
+                        let upvalues = &cls.upvalues;
                         let rv: &UpValue = &upvalues[index as usize];
                         match rv {
-                            UpValue::Open(i) => self.get_open_upvalue(*i),
+                            UpValue::Open(i) => self.get_open_upvalue(upper_base, *i),
                             UpValue::Closed(rawval) => *rawval.borrow(),
                         }
                     };
@@ -353,12 +359,13 @@ impl Machine {
                 Instruction::SetUpValue(index, src) => {
                     let v = self.get_stack(src as i64);
                     let up_i = cls_i.unwrap();
-                    let upvalues = &self.closures[up_i.0 as usize].upvalues;
-
-                    let rv = &upvalues[index as usize];
+                    let cls = &self.closures[up_i.0 as usize];
+                    let upper_base = cls.base_ptr as usize;
+                    let upvalues = &cls.upvalues;
+                    let rv: &UpValue = &upvalues[index as usize];
                     match rv {
                         UpValue::Open(OpenUpValue(i)) => {
-                            self.set_stack(*i as i64, v);
+                            self.stack[upper_base + i] = v;
                         }
                         UpValue::Closed(i) => {
                             let mut uv = i.borrow_mut();

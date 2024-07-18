@@ -5,53 +5,56 @@ mod recursecheck;
 mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Label, Mir, UpIndex, VPtr, VReg, Value};
 
+use std::default;
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::{GLOBAL_LABEL, Span, WithMeta};
+use crate::utils::metadata::{Span, WithMeta, GLOBAL_LABEL};
 
 use crate::ast::{Expr, Literal};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
 
+#[derive(Debug, Default)]
+struct ContextData {
+    pub func_i: usize,
+    pub current_bb: usize,
+    pub state_offset: u64,
+    pub fn_label: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct Context {
     pub typeenv: InferContext,
     valenv: Environment<VPtr>,
-    pub program: Mir,
-    func_i: usize,
-    parent: Option<usize>,
-    current_bb: usize,
-    upvalue_counts: Vec<usize>,
-    reg_count: VReg,
-    fn_label: Option<String>,
     anonymous_fncount: u64,
-    state_offset: u64,
+    reg_count: VReg,
+    pub program: Mir,
+    data: Vec<ContextData>,
+    data_i: usize,
 }
 
 impl Context {
     pub fn new() -> Self {
-        let program = mir::Mir::default();
         Self {
-            parent: None,
             typeenv: InferContext::new(),
             valenv: Environment::new(),
-            program,
-            func_i: 0,
-            current_bb: 0,
-            upvalue_counts: vec![],
+            program: Default::default(),
             reg_count: 0,
-            fn_label: String::from(GLOBAL_LABEL).into(),
             anonymous_fncount: 0,
-            state_offset: 0,
+            data: vec![ContextData::default()],
+            data_i: 0,
         }
     }
-
+    fn get_ctxdata(&mut self) -> &mut ContextData {
+        self.data.get_mut(self.data_i).unwrap()
+    }
     fn get_current_fn(&mut self) -> &mut mir::Function {
-        &mut self.program.functions[self.func_i]
+        let i = self.get_ctxdata().func_i;
+        &mut self.program.functions[i]
     }
     fn make_intrinsics(&mut self, label: &String, args: Vec<VPtr>) -> Option<VPtr> {
         let inst = match (label.as_str(), args.len()) {
@@ -71,7 +74,7 @@ impl Context {
         Some(self.push_inst(inst))
     }
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
-        let bbid = self.current_bb;
+        let bbid = self.get_ctxdata().current_bb;
         self.get_current_fn()
             .body
             .get_mut(bbid)
@@ -79,7 +82,7 @@ impl Context {
     }
     fn add_new_basicblock(&mut self) {
         let idx = self.get_current_fn().add_new_basicblock();
-        self.current_bb = idx;
+        self.get_ctxdata().current_bb = idx;
     }
     fn push_inst(&mut self, inst: Instruction) -> VPtr {
         let res = Arc::new(Value::Register(self.reg_count));
@@ -93,6 +96,12 @@ impl Context {
     // }
     fn add_bind(&mut self, bind: (String, VPtr)) {
         self.valenv.add_bind(&mut vec![bind]);
+    }
+    fn make_new_function(&mut self, name: &str, args: &[VPtr], parent_i: Option<usize>) -> usize {
+        let newf = mir::Function::new(name, args, parent_i);
+        self.program.functions.push(newf);
+        let idx = self.program.functions.len() - 1;
+        idx
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, Type), CompileError>>(
         &mut self,
@@ -112,25 +121,25 @@ impl Context {
         let vbinds = binds.iter().map(|(_, a, _)| a.clone()).collect::<Vec<_>>();
         self.valenv.extend();
         self.valenv.add_bind(&mut abinds);
-        let c_idx = self.make_new_function(&fname, vbinds.as_slice(), Some(self.func_i));
+        let label = self.get_ctxdata().func_i.clone();
+        let c_idx = self.make_new_function(&fname, vbinds.as_slice(), Some(label));
 
         self.typeenv.env.extend();
         self.typeenv.env.add_bind(&mut atbinds);
 
-        let parent_i = self.func_i;
-        let parent_bb = self.current_bb;
-        let parent_soffset = self.state_offset;
-
-        self.func_i = c_idx;
-        self.current_bb = 0;
-        self.state_offset = 0;
+        self.data.push(ContextData {
+            func_i: c_idx,
+            current_bb: 0,
+            state_offset: 0,
+            fn_label: Some(fname.clone()),
+        });
+        self.data_i += 1;
         //do action
         let (fptr, rest) = action(self, c_idx)?;
 
         //post action
-        self.func_i = parent_i;
-        self.current_bb = parent_bb;
-        self.state_offset = parent_soffset;
+        let _ = self.data.pop();
+        self.data_i -= 1;
         self.valenv.to_outer();
         self.typeenv.env.to_outer();
         Ok((c_idx, fptr, rest))
@@ -138,17 +147,12 @@ impl Context {
     fn lookup(&self, key: &str) -> LookupRes<VPtr> {
         match self.valenv.lookup_cls(key) {
             LookupRes::Local(v) => LookupRes::Local(v.clone()),
-            LookupRes::UpValue(v) => LookupRes::UpValue(v.clone()),
+            LookupRes::UpValue(level, v) => LookupRes::UpValue(level, v.clone()),
             LookupRes::Global(v) => LookupRes::Global(v.clone()),
             LookupRes::None => LookupRes::None,
         }
     }
-    fn make_new_function(&mut self, name: &str, args: &[VPtr], parent_i: Option<usize>) -> usize {
-        let newf = mir::Function::new(name, args, parent_i);
-        self.program.functions.push(newf);
-        let idx = self.program.functions.len() - 1;
-        idx
-    }
+
     pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
         let v = match lit {
             Literal::String(_) => todo!(),
@@ -164,14 +168,20 @@ impl Context {
     pub fn eval_var(&mut self, name: &str, span: &Span) -> Result<(VPtr, Type), CompileError> {
         let v = match self.lookup(name) {
             LookupRes::Local(v) => self.push_inst(Instruction::Load(v.clone())),
-            LookupRes::UpValue(v) => {
-                let fnlabel = self.fn_label.clone().unwrap();
-                let upindexes = &mut self.get_current_fn().upindexes;
-                upindexes.push(v.clone());
-                let i = (upindexes.len() - 1) as u64;
-                let upv = self.push_inst(Instruction::GetUpValue(fnlabel, i));
-                upv
-            }
+            LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
+                let current = self.data.get_mut(self.data_i - i).unwrap();
+                let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
+                currentf.upindexes.push(upv.clone());
+                let upi = (currentf.upindexes.len() - 1) as u64;
+
+                let res = Arc::new(Value::Register(self.reg_count));
+                self.reg_count += 1;
+                currentbb
+                    .0
+                    .push((res.clone(), Instruction::GetUpValue(upi)));
+                res
+            }),
             LookupRes::Global(v) => v.clone(),
             LookupRes::None => {
                 // let t = infer_type(e, &mut self.typeenv).expect("type infer error");
@@ -228,12 +238,7 @@ impl Context {
                         args.iter()
                             .map(|a_meta| -> Result<Arc<Value>, CompileError> {
                                 let (v, t) = ctx.eval_expr(a_meta)?;
-                                let res = if !is_intrinsic {
-                                    ctx.push_inst(Instruction::Alloc(t));
-                                    ctx.push_inst(Instruction::Load(v.clone()))
-                                } else {
-                                    v
-                                };
+                                let res = v;
                                 Ok(res)
                             })
                             .try_collect::<Vec<_>>()
@@ -253,7 +258,7 @@ impl Context {
                         };
                         let a_regs = makeargs(args,self,false)?;
                         //insert pushstateoffset
-                        if self.state_offset > 0 {
+                        if self.get_ctxdata().state_offset > 0 {
                             self.get_current_basicblock()
                                 .0
                                 .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
@@ -261,7 +266,7 @@ impl Context {
 
                         let res = self.push_inst(Instruction::Call(f.clone(), a_regs.clone()));
                         if *statesize > 0 {
-                            self.state_offset += 1;
+                            self.get_ctxdata().state_offset += 1;
                         }
                         res
                     }
@@ -306,7 +311,7 @@ impl Context {
                         res
                     })
                     .collect::<Vec<_>>();
-                let name = self.fn_label.clone().unwrap_or_else(|| {
+                let name = self.get_ctxdata().fn_label.clone().unwrap_or_else(|| {
                     let res = format!("lambda_{}", self.anonymous_fncount);
                     self.anonymous_fncount += 1;
                     res
@@ -325,7 +330,7 @@ impl Context {
                             let child = ctx.program.functions.get_mut(c_idx).unwrap();
                             child.state_size
                         };
-                        if ctx.state_offset > 1 && state_size > 0 {
+                        if ctx.get_ctxdata().state_offset > 1 && state_size > 0 {
                             ctx.get_current_basicblock().0.push((
                                 Arc::new(mir::Value::None),
                                 Instruction::PopStateOffset(state_size - 1),
@@ -379,25 +384,36 @@ impl Context {
                 if &id.id == GLOBAL_LABEL {
                     self.eval_expr(body)
                 } else {
-                    self.fn_label = Some(id.id.clone());
+                    self.get_ctxdata().fn_label = Some(id.id.clone());
+                    let insert_pos = if self.program.functions.is_empty() {
+                        0
+                    } else {
+                        self.get_current_basicblock().0.len()
+                    };
                     let (bodyv, t) = self.eval_expr(body)?;
                     //todo:need to boolean and insert cast
                     if let Some(idt) = id.ty.clone() {
                         self.typeenv.unify_types(idt, t.clone())?;
                     }
-                    self.typeenv
-                        .env
-                        .add_bind(&mut vec![(id.id.clone(), t.clone())]);
-                    let res = if t.is_primitive() {
-                        let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                        let _ = self.push_inst(Instruction::Store(alloc.clone(), bodyv.clone()));
-                        alloc
-                    } else {
-                        bodyv
-                    };
-                    self.add_bind((id.id.clone(), res));
 
                     if let Some(then_e) = then {
+                        self.typeenv
+                            .env
+                            .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                        let res = if (t.is_primitive())
+                            || (t.is_function() && self.get_current_fn().upperfn_i != Some(0))
+                        {
+                            let alloc_res = Arc::new(Value::Register(self.reg_count));
+                            let block = &mut self.get_current_basicblock().0;
+                            block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
+                            self.reg_count += 1;
+                            let _ = self
+                                .push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
+                            alloc_res
+                        } else {
+                            bodyv
+                        };
+                        self.add_bind((id.id.clone(), res));
                         self.eval_expr(then_e)
                     } else {
                         Ok((Arc::new(Value::None), unit!()))
@@ -408,7 +424,7 @@ impl Context {
                 if &id.id == GLOBAL_LABEL {
                     self.eval_expr(body)
                 } else {
-                    self.fn_label = Some(id.id.clone());
+                    self.get_ctxdata().fn_label = Some(id.id.clone());
                     let t = {
                         let tenv = &mut self.typeenv;
                         //todo:need to boolean and insert cast
@@ -438,7 +454,7 @@ impl Context {
                 //todo:need to boolean and insert cast
                 self.typeenv.unify_types(t_cond, numeric!())?;
 
-                let bbidx = self.current_bb;
+                let bbidx = self.get_ctxdata().current_bb;
                 let _ = self.push_inst(Instruction::JmpIf(
                     c,
                     (bbidx + 1) as u64,

@@ -9,11 +9,11 @@ use vm::bytecode::Instruction as VmInstruction;
 
 use super::mirgen::{CompileError, CompileErrorKind};
 #[derive(Debug)]
-struct VRegister(Vec<Option<Arc<mir::Value>>>);
+struct VRegister(Vec<Option<Arc<mir::Value>>>, usize);
 
 impl Default for VRegister {
     fn default() -> Self {
-        Self(vec![None; 256])
+        Self(vec![None; 256], 0)
     }
 }
 
@@ -21,10 +21,29 @@ impl VRegister {
     pub fn reset(&mut self) {
         self.0.fill(None);
     }
+    pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
+        // println!(
+        //     "alloc reg:{v} {:?},{}",
+        //     self.0.as_slice()[0..10].to_vec(),
+        //     self.1
+        // );
+        self.0[self.1] = Some(v.clone());
+        let res = self.1 as Reg;
+        self.1 += 1;
+        res
+    }
     pub fn add_newvalue(&mut self, v: &Arc<mir::Value>) -> Reg {
-        // println!("add  reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
-        let pos = self.0.iter().position(|v| v.is_none()).unwrap();
+        let len = self.0.len();
+        let pos = self.0[self.1..len]
+            .iter()
+            .position(|v| v.is_none())
+            .unwrap()
+            + self.1;
         self.0[pos] = Some(v.clone());
+        // println!(
+        //     "add  reg:{v} to {pos} {:?}",
+        //     self.0.as_slice()[0..10].to_vec()
+        // );
         pos as Reg
     }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
@@ -73,8 +92,36 @@ impl VRegister {
 }
 
 #[derive(Debug, Default)]
+struct VStack(Vec<VRegister>);
+impl VStack {
+    fn get_top(&mut self) -> &mut VRegister {
+        self.0.last_mut().unwrap()
+    }
+    fn get_parent(&mut self) -> &mut VRegister {
+        debug_assert!(self.0.len() >= 2);
+        let idx = self.0.len() - 2;
+        self.0.get_mut(idx).unwrap()
+    }
+    pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
+        self.get_top().push_stack(v)
+    }
+    pub fn add_newvalue(&mut self, v: &Arc<mir::Value>) -> Reg {
+        self.get_top().add_newvalue(v)
+    }
+    pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
+        self.get_top().find(v)
+    }
+    pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
+        self.get_top().find_keep(v)
+    }
+    pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
+        self.get_top().find_upvalue(v)
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ByteCodeGenerator {
-    vregister: VRegister,
+    vregister: VStack,
     bb_index: usize,
     fnmap: HashMap<String, usize>,
     program: vm::Program,
@@ -139,7 +186,16 @@ impl ByteCodeGenerator {
             adsts.push((adst, src))
         }
         for (adst, src) in adsts.iter() {
-            if *adst as Reg != *src {
+            let is_samedst = *adst as Reg != *src;
+            let is_swapping =
+                if let Some(VmInstruction::Move(dst2, src2)) = funcproto.bytecodes.last() {
+                    *dst2 == *src && *adst == *src2 as usize
+                } else {
+                    false
+                };
+            if is_swapping {
+                let _ = funcproto.bytecodes.pop();
+            } else if !is_samedst {
                 funcproto
                     .bytecodes
                     .push(VmInstruction::Move(*adst as Reg, *src));
@@ -177,7 +233,7 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::Alloc(_t) => {
-                let _ = self.get_destination(dst);
+                let _ = self.vregister.push_stack(&dst);
                 None
             }
             mir::Instruction::Load(ptr) => {
@@ -186,8 +242,8 @@ impl ByteCodeGenerator {
                 (d != s).then(|| VmInstruction::Move(d, s))
             }
             mir::Instruction::Store(dst, src) => {
-                let d = self.vregister.find_keep(dst).unwrap();
                 let s = self.vregister.find(src).unwrap();
+                let d = self.vregister.find_keep(dst).unwrap();
                 (d != s).then(|| VmInstruction::Move(d, s))
             }
             mir::Instruction::Call(v, args) => {
@@ -200,11 +256,11 @@ impl ByteCodeGenerator {
                         funcproto
                             .bytecodes
                             .push(VmInstruction::Call(fadd, nargs, 1));
-                        if dst != fadd {
-                            Some(VmInstruction::Move(dst, fadd))
-                        } else {
-                            None
+                        for a in args {
+                            //reset register for args
+                            let _ = self.vregister.find(a);
                         }
+                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
@@ -232,7 +288,11 @@ impl ByteCodeGenerator {
                             .bytecodes
                             .push(VmInstruction::CallCls(fadd, nargs, 1));
                         let dst = self.get_destination(dst);
-                        Some(VmInstruction::Move(dst, fadd))
+                        for a in args {
+                            //reset register for args
+                            let _ = self.vregister.find(a);
+                        }
+                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
@@ -250,38 +310,45 @@ impl ByteCodeGenerator {
                 }
             }
             mir::Instruction::Closure(idxcell) => {
-                let dst = self.get_destination(dst);
                 let idx = self.vregister.find(idxcell).unwrap();
+                let dst = self.get_destination(dst);
                 Some(VmInstruction::Closure(dst, idx))
             }
-            mir::Instruction::GetUpValue(_f, i) => {
+            mir::Instruction::GetUpValue(i) => {
                 let upval = &mirfunc.upindexes[*i as usize];
-                let v = self.vregister.find_upvalue(upval.clone()).expect("faild to find upvalue");
+                let parent = self.vregister.get_parent();
+
+                let v = parent
+                    .find_upvalue(upval.clone())
+                    .expect("faild to find upvalue");
                 let ouv = mir::OpenUpValue(v as usize);
-                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize){
+                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
-                }else{
+                } else {
                     funcproto.upindexes.push(ouv);
                 }
                 Some(VmInstruction::GetUpValue(
                     self.get_destination(dst),
-                    *i as Reg ,
+                    *i as Reg,
                 ))
             }
-            mir::Instruction::SetUpValue(_f, i) =>{
+            mir::Instruction::SetUpValue(i) => {
                 let upval = &mirfunc.upindexes[*i as usize];
-                let v = self.vregister.find_upvalue(upval.clone()).expect("faild to find upvalue");
+                let parent = self.vregister.get_parent();
+                let v = parent
+                    .find_upvalue(upval.clone())
+                    .expect("faild to find upvalue");
                 let ouv = mir::OpenUpValue(v as usize);
-                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize){
+                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
-                }else{
+                } else {
                     funcproto.upindexes.push(ouv);
                 }
                 Some(VmInstruction::SetUpValue(
                     self.get_destination(dst),
-                    *i as Reg ,
+                    *i as Reg,
                 ))
-        },
+            }
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
             mir::Instruction::GetState => Some(VmInstruction::GetState(self.get_destination(dst))),
@@ -414,9 +481,9 @@ impl ByteCodeGenerator {
     fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
         // println!("generating function {}", mirfunc.label.0);
         let mut func = vm::FuncProto::from(mirfunc);
-        // self.vregister.reset();
+        self.vregister.0.push(VRegister::default());
         for a in mirfunc.args.iter() {
-            self.vregister.add_newvalue(a);
+            self.vregister.push_stack(a);
         }
 
         // succeeding block will be compiled recursively
@@ -448,7 +515,7 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
     let mut res = program.clone();
     for (_, f) in res.global_fn_table.iter_mut() {
         let mut remove_idx = std::collections::HashSet::<usize>::new();
-        let mut removeconst_idx = std::collections::HashMap::<usize,VmInstruction>::new();
+        let mut removeconst_idx = std::collections::HashMap::<usize, VmInstruction>::new();
 
         for (i, pair) in f.bytecodes.windows(2).enumerate() {
             match pair {
@@ -461,8 +528,8 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
                 &[VmInstruction::MoveConst(dst, src), VmInstruction::Move(dst2, src2)]
                     if dst == src2 =>
                 {
-                    removeconst_idx.insert(i,VmInstruction::MoveConst(dst2, src));
-                    remove_idx.insert(i+1);
+                    removeconst_idx.insert(i, VmInstruction::MoveConst(dst2, src));
+                    remove_idx.insert(i + 1);
                 }
                 _ => {}
             }
@@ -471,9 +538,9 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
         for (i, inst) in f.bytecodes.iter().enumerate() {
             if remove_idx.contains(&i) {
                 // println!("removed redundunt mov")
-            }else if let Some(inst) = removeconst_idx.get(&i) {
+            } else if let Some(inst) = removeconst_idx.get(&i) {
                 res_bytecodes.push(*inst);
-            }else{
+            } else {
                 res_bytecodes.push(*inst);
             }
         }
@@ -482,7 +549,8 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
     res
 }
 fn optimize(program: vm::Program) -> vm::Program {
-    remove_redundunt_mov(program)
+    // remove_redundunt_mov(program)
+    program
 }
 pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
     let mut generator = ByteCodeGenerator::default();

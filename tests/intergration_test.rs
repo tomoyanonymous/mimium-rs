@@ -114,6 +114,13 @@ fn letmulti() {
 #[test]
 fn closure_open() {
     let res = run_multiple_file("closure_open.mmm", 1).unwrap();
-    let ans = vec![3.0];
+    let ans = vec![4.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn closure_open_3nested() {
+    let res = run_multiple_file("closure_open_3nested.mmm", 1).unwrap();
+    let ans = vec![2.0];
     assert_eq!(res, ans);
 }

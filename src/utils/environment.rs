@@ -9,7 +9,7 @@ pub struct Error(String);
 #[derive(Clone, Debug, PartialEq)]
 pub enum LookupRes<T: Clone> {
     Local(T),
-    UpValue(T),
+    UpValue(usize, T),
     Global(T),
     None,
 }
@@ -45,13 +45,13 @@ impl<T: Clone> Environment<T> {
             None => LookupRes::None,
             Some((0, e)) => LookupRes::Local(e),
             Some((level, e)) if level >= self.0.len() - 1 => LookupRes::Global(e),
-            Some((_level, e)) => LookupRes::UpValue(e),
+            Some((level, e)) => LookupRes::UpValue(level, e),
         }
     }
     pub fn lookup(&self, name: &str) -> Option<&T> {
         match self.lookup_cls(name) {
             LookupRes::None => None,
-            LookupRes::Global(e) | LookupRes::Local(e) | LookupRes::UpValue(e) => Some(e),
+            LookupRes::Global(e) | LookupRes::Local(e) | LookupRes::UpValue(_, e) => Some(e),
         }
     }
 }

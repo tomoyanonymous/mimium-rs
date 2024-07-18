@@ -57,8 +57,8 @@ pub enum Instruction {
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
-    GetUpValue(String, u64),
-    SetUpValue(String, u64),
+    GetUpValue(u64),
+    SetUpValue(u64),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
