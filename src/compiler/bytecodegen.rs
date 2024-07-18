@@ -6,6 +6,8 @@ use crate::runtime::vm::bytecode::{ConstPos, Reg};
 use crate::runtime::vm::{self};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
+
+use super::mirgen::{CompileError, CompileErrorKind};
 #[derive(Debug)]
 struct VRegister(Vec<Option<Arc<mir::Value>>>);
 
@@ -45,7 +47,7 @@ impl VRegister {
     }
     //find for load and store instruction
     pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        // println!("findkeep reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         self.0
             .iter()
             .position(|v1| match v1 {
@@ -55,7 +57,7 @@ impl VRegister {
             .map(|pos| pos as Reg)
     }
     pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        // println!("findup reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == v,
@@ -253,16 +255,33 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::Closure(dst, idx))
             }
             mir::Instruction::GetUpValue(_f, i) => {
-                // let fnidx = self.fnmap.get(f).unwrap();
+                let upval = &mirfunc.upindexes[*i as usize];
+                let v = self.vregister.find_upvalue(upval.clone()).expect("faild to find upvalue");
+                let ouv = mir::OpenUpValue(v as usize);
+                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize){
+                    *ui = ouv;
+                }else{
+                    funcproto.upindexes.push(ouv);
+                }
                 Some(VmInstruction::GetUpValue(
                     self.get_destination(dst),
-                    *i as Reg,
+                    *i as Reg ,
                 ))
             }
-            mir::Instruction::SetUpValue(_f, i) => Some(VmInstruction::SetUpValue(
-                self.get_destination(dst),
-                *i as Reg,
-            )),
+            mir::Instruction::SetUpValue(_f, i) =>{
+                let upval = &mirfunc.upindexes[*i as usize];
+                let v = self.vregister.find_upvalue(upval.clone()).expect("faild to find upvalue");
+                let ouv = mir::OpenUpValue(v as usize);
+                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize){
+                    *ui = ouv;
+                }else{
+                    funcproto.upindexes.push(ouv);
+                }
+                Some(VmInstruction::SetUpValue(
+                    self.get_destination(dst),
+                    *i as Reg ,
+                ))
+        },
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
             mir::Instruction::GetState => Some(VmInstruction::GetState(self.get_destination(dst))),
@@ -395,7 +414,7 @@ impl ByteCodeGenerator {
     fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
         // println!("generating function {}", mirfunc.label.0);
         let mut func = vm::FuncProto::from(mirfunc);
-        self.vregister.reset();
+        // self.vregister.reset();
         for a in mirfunc.args.iter() {
             self.vregister.add_newvalue(a);
         }

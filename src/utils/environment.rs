@@ -44,7 +44,7 @@ impl<T: Clone> Environment<T> {
         {
             None => LookupRes::None,
             Some((0, e)) => LookupRes::Local(e),
-            Some((level, e)) if level >= self.0.len() - 2 => LookupRes::Global(e),
+            Some((level, e)) if level >= self.0.len() - 1 => LookupRes::Global(e),
             Some((_level, e)) => LookupRes::UpValue(e),
         }
     }

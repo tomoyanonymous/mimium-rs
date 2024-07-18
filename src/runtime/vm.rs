@@ -54,12 +54,12 @@ impl StateStorageStack {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UpValue {
-    Open(usize),
+    Open(OpenUpValue),
     Closed(Rc<RefCell<RawVal>>),
 }
 impl From<OpenUpValue> for UpValue {
     fn from(value: OpenUpValue) -> Self {
-        Self::Open(value.0)
+        Self::Open(value)
     }
 }
 
@@ -76,7 +76,7 @@ impl Closure {
         let upvalues = fnproto
             .upindexes
             .iter()
-            .map(|i| UpValue::Open(i.0))
+            .map(|i| UpValue::Open(*i))
             .collect::<Vec<_>>();
         let mut state_storage = StateStorage::default();
         state_storage.resize(fnproto.state_size as usize);
@@ -241,7 +241,7 @@ impl Machine {
                 .upvalues
                 .iter()
                 .map(|upv| {
-                    if let UpValue::Open(i) = upv {
+                    if let UpValue::Open(OpenUpValue(i)) = upv {
                         UpValue::Closed(Rc::new(RefCell::new(self.stack[*base_ptr_cls - *i])))
                     } else {
                         upv.clone()
@@ -344,10 +344,7 @@ impl Machine {
                         let upvalues = &self.closures[up_i.0 as usize].upvalues;
                         let rv: &UpValue = &upvalues[index as usize];
                         match rv {
-                            UpValue::Open(i) => {
-                                let idx = func.upindexes[*i];
-                                self.get_open_upvalue(idx)
-                            }
+                            UpValue::Open(i) => self.get_open_upvalue(*i),
                             UpValue::Closed(rawval) => *rawval.borrow(),
                         }
                     };
@@ -360,7 +357,7 @@ impl Machine {
 
                     let rv = &upvalues[index as usize];
                     match rv {
-                        UpValue::Open(i) => {
+                        UpValue::Open(OpenUpValue(i)) => {
                             self.set_stack(*i as i64, v);
                         }
                         UpValue::Closed(i) => {
