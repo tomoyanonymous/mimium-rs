@@ -124,3 +124,16 @@ fn closure_open_3nested() {
     let ans = vec![2.0];
     assert_eq!(res, ans);
 }
+#[test]
+fn closure_open_inline() {
+    let res = run_multiple_file("closure_open_inline.mmm", 1).unwrap();
+    let ans = vec![2.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn closure_closed() {
+    let res = run_multiple_file("closure_closed.mmm", 1).unwrap();
+    let ans = vec![-6.0];
+    assert_eq!(res, ans);
+}

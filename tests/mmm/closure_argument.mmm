@@ -1,0 +1,8 @@
+//answer:24
+fn hof(f:(float)->float,y){
+    f(y*2.0)
+}
+fn dsp(){
+    let x = |y| {y*3.0}
+    hof(x,4.0)
+}

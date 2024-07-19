@@ -1,0 +1,16 @@
+fn test(x){
+    let y = 5.0
+    let f = | | { 
+        let z = 3.0
+        let ff = | |{ x-y *z}
+         ff()
+        }
+    f
+}
+
+fn dsp(){
+    let f2 = test(9.0)
+    f2()
+}
+
+

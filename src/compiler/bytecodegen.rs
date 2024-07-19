@@ -22,11 +22,11 @@ impl VRegister {
         self.0.fill(None);
     }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
-        // println!(
-        //     "alloc reg:{v} {:?},{}",
-        //     self.0.as_slice()[0..10].to_vec(),
-        //     self.1
-        // );
+        println!(
+            "alloc reg:{v} {:?},{}",
+            self.0.as_slice()[0..10].to_vec(),
+            self.1
+        );
         self.0[self.1] = Some(v.clone());
         let res = self.1 as Reg;
         self.1 += 1;
@@ -40,14 +40,14 @@ impl VRegister {
             .unwrap()
             + self.1;
         self.0[pos] = Some(v.clone());
-        // println!(
-        //     "add  reg:{v} to {pos} {:?}",
-        //     self.0.as_slice()[0..10].to_vec()
-        // );
+        println!(
+            "add  reg:{v} to {pos} {:?}",
+            self.0.as_slice()[0..10].to_vec()
+        );
         pos as Reg
     }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        // println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == *v,
@@ -66,7 +66,7 @@ impl VRegister {
     }
     //find for load and store instruction
     pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        // println!("findkeep reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        println!("findkeep reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         self.0
             .iter()
             .position(|v1| match v1 {
@@ -76,7 +76,7 @@ impl VRegister {
             .map(|pos| pos as Reg)
     }
     pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        // println!("findup reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        println!("findup reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == v,

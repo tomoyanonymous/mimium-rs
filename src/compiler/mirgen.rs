@@ -167,7 +167,13 @@ impl Context {
     }
     pub fn eval_var(&mut self, name: &str, span: &Span) -> Result<(VPtr, Type), CompileError> {
         let v = match self.lookup(name) {
-            LookupRes::Local(v) => self.push_inst(Instruction::Load(v.clone())),
+            LookupRes::Local(v) => match v.as_ref() {
+                Value::Function(i, _s) => {
+                    let reg = self.push_inst(Instruction::Uinteger(*i as u64));
+                    self.push_inst(Instruction::Load(reg))
+                }
+                _ => self.push_inst(Instruction::Load(v.clone())),
+            },
             LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
                 let current = self.data.get_mut(self.data_i - i).unwrap();
                 let currentf = self.program.functions.get_mut(current.func_i).unwrap();
