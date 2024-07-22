@@ -170,7 +170,7 @@ impl Context {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i, _s) => {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
-                    self.push_inst(Instruction::Load(reg))
+                    self.push_inst(Instruction::Closure(reg))
                 }
                 _ => self.push_inst(Instruction::Load(v.clone())),
             },
@@ -240,10 +240,10 @@ impl Context {
                 };
                 let rt = rtres?;
                 let makeargs =
-                    |args: &Vec<WithMeta<Expr>>, ctx: &mut Context, is_intrinsic: bool| {
+                    |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
                         args.iter()
                             .map(|a_meta| -> Result<Arc<Value>, CompileError> {
-                                let (v, t) = ctx.eval_expr(a_meta)?;
+                                let (v, _t) = ctx.eval_expr(a_meta)?;
                                 let res = v;
                                 Ok(res)
                             })
@@ -252,7 +252,7 @@ impl Context {
                 let res = match f.as_ref() {
                     Value::Register(_c) => {
                         //closure
-                        let a_regs = makeargs(args,self,false)?;
+                        let a_regs = makeargs(args,self)?;
                         //do not increment state size for closure
                         let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
                         res
@@ -262,7 +262,7 @@ impl Context {
                             self.get_current_fn().state_size += statesize;
                             self.push_inst(Instruction::Uinteger(*idx as u64))
                         };
-                        let a_regs = makeargs(args,self,false)?;
+                        let a_regs = makeargs(args,self)?;
                         //insert pushstateoffset
                         if self.get_ctxdata().state_offset > 0 {
                             self.get_current_basicblock()
@@ -280,7 +280,7 @@ impl Context {
                         unreachable!()
                     }
                     Value::ExtFunction(label) => {
-                        let a_regs = makeargs(args,self,true)?;
+                        let a_regs = makeargs(args,self)?;
 
                         if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())
                         {

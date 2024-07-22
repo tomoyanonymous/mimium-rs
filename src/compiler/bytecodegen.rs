@@ -186,7 +186,7 @@ impl ByteCodeGenerator {
             adsts.push((adst, src))
         }
         for (adst, src) in adsts.iter() {
-            let is_samedst = *adst as Reg != *src;
+            let is_samedst = *adst as Reg == *src;
             let is_swapping =
                 if let Some(VmInstruction::Move(dst2, src2)) = funcproto.bytecodes.last() {
                     *dst2 == *src && *adst == *src2 as usize
@@ -515,14 +515,23 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
     let mut res = program.clone();
     for (_, f) in res.global_fn_table.iter_mut() {
         let mut remove_idx = std::collections::HashSet::<usize>::new();
+        let mut reduce_idx = std::collections::HashMap::<usize, VmInstruction>::new();
+
         let mut removeconst_idx = std::collections::HashMap::<usize, VmInstruction>::new();
 
         for (i, pair) in f.bytecodes.windows(2).enumerate() {
             match pair {
                 &[VmInstruction::Move(dst, src), VmInstruction::Move(dst2, src2)]
                     if dst == src2 && src == dst2 =>
+                //case of swapping
                 {
                     remove_idx.insert(i);
+                    remove_idx.insert(i + 1);
+                }
+                &[VmInstruction::Move(dst, src), VmInstruction::Move(dst2, src2)]
+                    if dst == src2 =>
+                {
+                    reduce_idx.insert(i, VmInstruction::Move(dst2, src));
                     remove_idx.insert(i + 1);
                 }
                 &[VmInstruction::MoveConst(dst, src), VmInstruction::Move(dst2, src2)]
@@ -539,6 +548,8 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
             if remove_idx.contains(&i) {
                 // println!("removed redundunt mov")
             } else if let Some(inst) = removeconst_idx.get(&i) {
+                res_bytecodes.push(*inst);
+            } else if let Some(inst) = reduce_idx.get(&i) {
                 res_bytecodes.push(*inst);
             } else {
                 res_bytecodes.push(*inst);

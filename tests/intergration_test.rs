@@ -137,3 +137,10 @@ fn closure_closed() {
     let ans = vec![-6.0];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn closure_argument() {
+    let res = run_multiple_file("closure_argument.mmm", 1).unwrap();
+    let ans = vec![24.0];
+    assert_eq!(res, ans);
+}
