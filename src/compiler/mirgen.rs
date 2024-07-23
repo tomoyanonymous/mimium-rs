@@ -22,13 +22,12 @@ struct ContextData {
     pub func_i: usize,
     pub current_bb: usize,
     pub state_offset: u64,
-    pub fn_label: Option<String>,
 }
-
 #[derive(Debug)]
 pub struct Context {
     pub typeenv: InferContext,
     valenv: Environment<VPtr>,
+    pub fn_label: Option<String>,
     anonymous_fncount: u64,
     reg_count: VReg,
     pub program: Mir,
@@ -43,6 +42,7 @@ impl Context {
             valenv: Environment::new(),
             program: Default::default(),
             reg_count: 0,
+            fn_label: None,
             anonymous_fncount: 0,
             data: vec![ContextData::default()],
             data_i: 0,
@@ -51,6 +51,17 @@ impl Context {
     fn get_ctxdata(&mut self) -> &mut ContextData {
         self.data.get_mut(self.data_i).unwrap()
     }
+
+    fn consume_fnlabel(&mut self) -> String {
+        let res = self.fn_label.clone().unwrap_or_else(|| {
+            let res = format!("lambda_{}", self.anonymous_fncount);
+            self.anonymous_fncount += 1;
+            res
+        });
+        self.fn_label = None;
+        res
+    }
+
     fn get_current_fn(&mut self) -> &mut mir::Function {
         let i = self.get_ctxdata().func_i;
         &mut self.program.functions[i]
@@ -130,7 +141,6 @@ impl Context {
             func_i: c_idx,
             current_bb: 0,
             state_offset: 0,
-            fn_label: Some(fname.clone()),
         });
         self.data_i += 1;
         //do action
@@ -315,11 +325,7 @@ impl Context {
                         res
                     })
                     .collect::<Vec<_>>();
-                let name = self.get_ctxdata().fn_label.clone().unwrap_or_else(|| {
-                    let res = format!("lambda_{}", self.anonymous_fncount);
-                    self.anonymous_fncount += 1;
-                    res
-                });
+                let name = self.consume_fnlabel();
                 let (c_idx, f, res_type) =
                     self.do_in_child_ctx(&name, binds.as_slice(), |ctx, c_idx| {
                         let (res, mut res_type) = ctx.eval_expr(&body)?;
@@ -385,7 +391,7 @@ impl Context {
                 Ok((Arc::new(Value::State(retv)), t))
             }
             Expr::Let(id, body, then) => {
-                self.get_ctxdata().fn_label = Some(id.id.clone());
+                self.fn_label = Some(id.id.clone());
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
@@ -421,7 +427,7 @@ impl Context {
                 }
             }
             Expr::LetRec(id, body, then) => {
-                self.get_ctxdata().fn_label = Some(id.id.clone());
+                self.fn_label = Some(id.id.clone());
                 let t = {
                     let tenv = &mut self.typeenv;
                     //todo:need to boolean and insert cast
