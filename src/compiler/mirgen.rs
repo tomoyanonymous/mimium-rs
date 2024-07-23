@@ -1,11 +1,10 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
 use crate::{numeric, unit};
-mod recursecheck;
-mod selfconvert;
+pub(crate) mod recursecheck;
+pub mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Label, Mir, UpIndex, VPtr, VReg, Value};
 
-use std::default;
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
@@ -239,16 +238,15 @@ impl Context {
                     ))
                 };
                 let rt = rtres?;
-                let makeargs =
-                    |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
-                        args.iter()
-                            .map(|a_meta| -> Result<Arc<Value>, CompileError> {
-                                let (v, _t) = ctx.eval_expr(a_meta)?;
-                                let res = v;
-                                Ok(res)
-                            })
-                            .try_collect::<Vec<_>>()
-                    };
+                let makeargs = |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
+                    args.iter()
+                        .map(|a_meta| -> Result<Arc<Value>, CompileError> {
+                            let (v, _t) = ctx.eval_expr(a_meta)?;
+                            let res = v;
+                            Ok(res)
+                        })
+                        .try_collect::<Vec<_>>()
+                };
                 let res = match f.as_ref() {
                     Value::Register(_c) => {
                         //closure
@@ -387,71 +385,63 @@ impl Context {
                 Ok((Arc::new(Value::State(retv)), t))
             }
             Expr::Let(id, body, then) => {
-                if &id.id == GLOBAL_LABEL {
-                    self.eval_expr(body)
+                self.get_ctxdata().fn_label = Some(id.id.clone());
+                let insert_pos = if self.program.functions.is_empty() {
+                    0
                 } else {
-                    self.get_ctxdata().fn_label = Some(id.id.clone());
-                    let insert_pos = if self.program.functions.is_empty() {
-                        0
-                    } else {
-                        self.get_current_basicblock().0.len()
-                    };
-                    let (bodyv, t) = self.eval_expr(body)?;
-                    //todo:need to boolean and insert cast
-                    if let Some(idt) = id.ty.clone() {
-                        self.typeenv.unify_types(idt, t.clone())?;
-                    }
+                    self.get_current_basicblock().0.len()
+                };
+                let (bodyv, t) = self.eval_expr(body)?;
+                //todo:need to boolean and insert cast
+                if let Some(idt) = id.ty.clone() {
+                    self.typeenv.unify_types(idt, t.clone())?;
+                }
 
-                    if let Some(then_e) = then {
-                        self.typeenv
-                            .env
-                            .add_bind(&mut vec![(id.id.clone(), t.clone())]);
-                        let res = if (t.is_primitive())
-                            || (t.is_function() && self.get_current_fn().upperfn_i != Some(0))
-                        {
-                            let alloc_res = Arc::new(Value::Register(self.reg_count));
-                            let block = &mut self.get_current_basicblock().0;
-                            block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
-                            self.reg_count += 1;
-                            let _ = self
-                                .push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
-                            alloc_res
-                        } else {
-                            bodyv
-                        };
-                        self.add_bind((id.id.clone(), res));
-                        self.eval_expr(then_e)
+                if let Some(then_e) = then {
+                    self.typeenv
+                        .env
+                        .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                    let res = if (t.is_primitive())
+                        || (t.is_function() && self.get_current_fn().upperfn_i != Some(0))
+                    {
+                        let alloc_res = Arc::new(Value::Register(self.reg_count));
+                        let block = &mut self.get_current_basicblock().0;
+                        block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
+                        self.reg_count += 1;
+                        let _ =
+                            self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
+                        alloc_res
                     } else {
-                        Ok((Arc::new(Value::None), unit!()))
-                    }
+                        bodyv
+                    };
+                    self.add_bind((id.id.clone(), res));
+                    self.eval_expr(then_e)
+                } else {
+                    Ok((Arc::new(Value::None), unit!()))
                 }
             }
             Expr::LetRec(id, body, then) => {
-                if &id.id == GLOBAL_LABEL {
-                    self.eval_expr(body)
-                } else {
-                    self.get_ctxdata().fn_label = Some(id.id.clone());
-                    let t = {
-                        let tenv = &mut self.typeenv;
-                        //todo:need to boolean and insert cast
-                        let t = tenv.gen_intermediate_type();
-                        if let Some(idt) = id.ty.clone() {
-                            tenv.unify_types(idt, t.clone())?;
-                        }
-                        tenv.env.add_bind(&mut vec![(id.id.clone(), t.clone())]);
-                        t
-                    };
-                    let fix = Arc::new(Value::FixPoint);
-                    let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                    let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
-                    let bind = (id.id.clone(), alloc);
-                    self.add_bind(bind);
-                    let _ = self.eval_expr(body)?;
-                    if let Some(then_e) = then {
-                        self.eval_expr(then_e)
-                    } else {
-                        Ok((Arc::new(Value::None), unit!()))
+                self.get_ctxdata().fn_label = Some(id.id.clone());
+                let t = {
+                    let tenv = &mut self.typeenv;
+                    //todo:need to boolean and insert cast
+                    let t = tenv.gen_intermediate_type();
+                    if let Some(idt) = id.ty.clone() {
+                        tenv.unify_types(idt, t.clone())?;
                     }
+                    tenv.env.add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                    t
+                };
+                let fix = Arc::new(Value::FixPoint);
+                let alloc = self.push_inst(Instruction::Alloc(t.clone()));
+                let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
+                let bind = (id.id.clone(), alloc);
+                self.add_bind(bind);
+                let _ = self.eval_expr(body)?;
+                if let Some(then_e) = then {
+                    self.eval_expr(then_e)
+                } else {
+                    Ok((Arc::new(Value::None), unit!()))
                 }
             }
             Expr::LetTuple(_, _, _) => todo!(),
@@ -524,12 +514,12 @@ impl ReportableError for CompileError {
 }
 
 pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
-    let mut ctx = Context::new();
     let ast2 = recursecheck::convert_recurse(&src);
     let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
+    let mut ctx = Context::new();
     let _res = ctx.eval_expr(&expr2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb

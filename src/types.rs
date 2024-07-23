@@ -119,7 +119,7 @@ impl fmt::Display for Type {
 impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
         match &self.ty {
-            Some(t) => format!("(tid {} {:#?})", self.id, t), //todo:type
+            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
             None => self.id.clone(),
         }
     }

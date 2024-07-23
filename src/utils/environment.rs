@@ -15,9 +15,7 @@ pub enum LookupRes<T: Clone> {
 }
 impl<T: Clone> Environment<T> {
     pub fn new() -> Self {
-        let mut res = Self(EnvInner::new());
-        res.extend();
-        res
+        Self(EnvInner::new())
     }
     pub fn is_global(&self) -> bool {
         self.0.len() <= 1
