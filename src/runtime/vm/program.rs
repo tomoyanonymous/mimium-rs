@@ -76,7 +76,17 @@ impl std::fmt::Display for Program {
                 let _ = write!(f, "  {}\n", inst);
             }
         }
-        let _ = write!(f, "ext_fun:\n{:?}\n", self.ext_fun_table);
+        let _ = write!(
+            f,
+            "ext_fun:\n{:?}\n",
+            self.ext_fun_table
+                .iter()
+                .fold("".to_string(), |s, (f, _)| if s.is_empty() {
+                    format!("{f}")
+                } else {
+                    format!("{s}, {f}")
+                })
+        );
         write!(f, "ext_cls:\n{:?}", self.ext_cls_table)
     }
 }

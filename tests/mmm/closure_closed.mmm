@@ -1,8 +1,14 @@
-fn test(x){
+//expect -6.0
+fn test(x:float){
     let y = 5.0
     let f = | | { 
         let z = 3.0
-        let ff = | |{ x-y *z}
+        let ff = | |{ 
+            let a = x
+            let b = y
+            let c = z
+            a-b*c 
+            }
          ff()
         }
     f

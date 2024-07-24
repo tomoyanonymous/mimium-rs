@@ -1,5 +1,6 @@
 use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
+use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
 use crate::utils::{
     environment::Environment,
@@ -72,6 +73,8 @@ impl InferContext {
         };
         res.env.extend();
         Self::register_intrinsics(&mut res.env);
+        Self::register_builtin(&mut res.env);
+
         res
     }
     fn register_intrinsics(env: &mut Environment<Type>) {
@@ -100,6 +103,14 @@ impl InferContext {
             .map(|n| (n.to_string(), uniop_ty.clone()))
             .collect_into(&mut binds);
         env.add_bind(&mut binds);
+    }
+    fn register_builtin(env: &mut Environment<Type>) {
+        let mut binds = builtin::BUILTIN_FNS
+            .iter()
+            .map(|(name, _, t)| (name.to_string(), t.clone()))
+            .collect::<Vec<_>>();
+        env.add_bind(&mut binds);
+
     }
     pub fn gen_intermediate_type(&mut self) -> Type {
         let res = Type::Intermediate(self.interm_idx);

@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+pub mod builtin;
 pub mod bytecode;
 pub mod program;
 use bytecode::*;
@@ -90,6 +91,18 @@ impl Closure {
     }
 }
 
+#[derive(Clone, Copy)]
+enum RawValType {
+    Float,
+    Int,
+    UInt,
+}
+impl Default for RawValType {
+    fn default() -> Self {
+        RawValType::Int
+    }
+}
+
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
@@ -100,17 +113,22 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
+    debug_stacktype: Vec<RawValType>,
 }
 
 macro_rules! binop {
     ($op:tt,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
         $self.set_stack($dst as i64, Self::to_value::<$t>(
             Self::get_as::<$t>($self.get_stack($src1 as i64))
         $op Self::get_as::<$t>($self.get_stack($src2 as i64))))
+    }
     };
 }
 macro_rules! binopmethod {
-    ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+    ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {{
+        $self.set_stacktype($dst as i64, RawValType::Float);
         $self.set_stack(
             $dst as i64,
             Self::to_value::<$t>(
@@ -118,7 +136,7 @@ macro_rules! binopmethod {
                     .$op(Self::get_as::<$t>($self.get_stack($src2 as i64))),
             ),
         )
-    };
+    }};
 }
 macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
@@ -136,12 +154,15 @@ macro_rules! uniopmethod {
     }};
 }
 
-fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
+fn set_vec<T>(vec: &mut Vec<T>, i: usize, value: T)
+where
+    T: Clone + std::default::Default,
+{
     match i.cmp(&vec.len()) {
         Ordering::Less => vec[i] = value,
         Ordering::Equal => vec.push(value),
         Ordering::Greater => {
-            vec.resize(i, 0u64);
+            vec.resize(i, T::default());
             vec.push(value);
         }
     }
@@ -149,16 +170,21 @@ fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
 
 impl Machine {
     pub fn new() -> Self {
+        let ext_fun_table = builtin::BUILTIN_FNS
+            .iter()
+            .map(|(name, f, _t)| (name.to_string(), *f))
+            .collect::<Vec<_>>();
         Self {
             stack: vec![],
             base_pointer: 0,
             closures: vec![],
-            ext_fun_table: vec![],
+            ext_fun_table,
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
+            debug_stacktype: vec![RawValType::Int; 255],
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -170,6 +196,13 @@ impl Machine {
             &mut self.stack,
             (self.base_pointer as i64 + offset) as usize,
             v,
+        );
+    }
+    fn set_stacktype(&mut self, offset: i64, t: RawValType) {
+        set_vec(
+            &mut self.debug_stacktype,
+            (self.base_pointer as i64 + offset) as usize,
+            t,
         );
     }
     pub fn get_top(&self) -> &RawVal {
@@ -217,35 +250,43 @@ impl Machine {
         assert_eq!(std::mem::size_of::<T>(), 8);
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(
+        &mut self,
+        func_pos: u8,
+        _nargs: u8,
+        nret_req: u8,
+        mut action: F,
+    ) -> ReturnCode
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
         let offset = (func_pos + 1) as u64;
 
         self.base_pointer += offset;
-        let nret = action(self) as u8;
+        let nret = action(self);
 
-        if nret_req > nret {
+        if nret_req > nret as u8 {
             panic!("invalid number of return value required.");
         }
         // shrink stack so as to match with number of return values
         self.stack
             .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
+        nret
     }
     fn close_upvalues(&mut self, _iret: Reg, _nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
         //todo! drop local closure which wont escape from local
 
-        for (base_ptr_cls, clsidx) in local_closures.iter() {
+        for (_base_ptr_cls, clsidx) in local_closures.iter() {
             let cls = self.get_local_closure(*clsidx);
+
             let newupvls = cls
                 .upvalues
                 .iter()
                 .map(|upv| {
                     if let UpValue::Open(i) = upv {
-                        let abs_pos = Self::get_upvalue_offset(*base_ptr_cls, *i);
-                        UpValue::Closed(Rc::new(RefCell::new(self.stack[abs_pos])))
+                        let ov = self.get_open_upvalue(self.base_pointer as usize, *i);
+                        UpValue::Closed(Rc::new(RefCell::new(ov)))
                     } else {
                         upv.clone()
                     }
@@ -274,7 +315,11 @@ impl Machine {
                     if i == self.base_pointer as usize {
                         print!("!");
                     }
-                    print!("{:?}", self.stack[i]);
+                    match self.debug_stacktype[i] {
+                        RawValType::Float => print!("{}f", Self::get_as::<f64>(self.stack[i])),
+                        RawValType::Int => print!("{}i", Self::get_as::<i64>(self.stack[i])),
+                        RawValType::UInt => print!("{}u", Self::get_as::<u64>(self.stack[i])),
+                    }
                     if i < self.stack.len() - 1 {
                         print!(", ");
                     }
@@ -309,7 +354,13 @@ impl Machine {
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
                     let f = self.ext_fun_table[ext_fn_idx].1;
-                    self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    let nret = self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    // return
+                    let base = self.base_pointer as usize;
+                    let iret = base + func as usize + 1;
+                    self.stack
+                        .copy_within(iret..(iret + nret as usize), base + func as usize);
+                    self.stack.truncate(base + func as usize + nret as usize);
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
                     // todo: load closure index via constant for the case of more than 255 closures in program
@@ -346,11 +397,13 @@ impl Machine {
                     let rawv = {
                         let up_i = cls_i.unwrap();
                         let cls = &self.closures[up_i.0 as usize];
-                        let upper_base = cls.base_ptr as usize;
                         let upvalues = &cls.upvalues;
                         let rv: &UpValue = &upvalues[index as usize];
                         match rv {
-                            UpValue::Open(i) => self.get_open_upvalue(upper_base, *i),
+                            UpValue::Open(i) => {
+                                let upper_base = cls.base_ptr as usize;
+                                self.get_open_upvalue(upper_base, *i)
+                            }
                             UpValue::Closed(rawval) => *rawval.borrow(),
                         }
                     };

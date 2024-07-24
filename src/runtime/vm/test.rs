@@ -1,5 +1,10 @@
 use super::*;
-use crate::{mir::OpenUpValue, types::Type};
+use crate::{
+    function,
+    mir::OpenUpValue,
+    numeric,
+    types::{PType, Type},
+};
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -16,7 +21,7 @@ fn lib_printi(state: &mut Machine) -> i64 {
     let v = state.get_top();
     let i = Machine::get_as::<i64>(*v);
     println!("{}", i);
-    return 0;
+    return 1;
 }
 
 #[test]
@@ -82,14 +87,14 @@ fn closuretest() {
         Instruction::CallCls(1, 0, 1), // call inner closure with 0 args and 1 return value.(result is in 0)
         Instruction::Move(2, 1),       // load result to reg 2
         Instruction::MoveConst(1, 3),  //set print into reg1
-        Instruction::CallExtFun(1, 1, 0), //print result
+        Instruction::CallExtFun(1, 1, 1), //print result
         //repeat precvous 4 step : print(c())
         Instruction::Move(1, 0),      // move closure 0 to 1
         Instruction::MoveConst(2, 3), //load 0
         Instruction::CallCls(1, 0, 1),
         Instruction::Move(2, 1),
         Instruction::MoveConst(1, 3),
-        Instruction::CallExtFun(1, 1, 0),
+        Instruction::CallExtFun(1, 1, 1),
         Instruction::Return0,
     ];
     let main_f = FuncProto {
@@ -108,10 +113,10 @@ fn closuretest() {
     ];
     let mut machine = Machine::new();
 
-    machine.install_extern_fn("lib_printi".to_string(), lib_printi);
+    // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
+        ext_fun_table: vec![("probe".to_string(), function!(vec![numeric!()], numeric!()))],
         ext_cls_table: vec![],
     };
     // let mut feedstate = FeedState::default();

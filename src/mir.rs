@@ -6,8 +6,8 @@ pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Label(pub String);
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Global(Label, Type);
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct Global(VPtr);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Argument(pub Label, pub Type);
@@ -15,7 +15,7 @@ pub struct Argument(pub Label, pub Type);
 pub type VReg = u64;
 #[derive(Debug, PartialEq)]
 pub enum Value {
-    Global(Global),
+    Global(VPtr),
     Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
@@ -27,7 +27,7 @@ pub enum Value {
     Bool(bool),
     // idx of the function in the program, size of internal state
     Function(usize, u64),
-    ExtFunction(Label),
+    ExtFunction(Label,Type),
     Closure(Arc<Value>, Vec<UpIndex>),
     FixPoint,
     //internal state
@@ -165,5 +165,5 @@ impl Function {
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
-    pub globals: Vec<Global>,
+    pub globals: Vec<VPtr>,
 }

@@ -248,7 +248,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::Call(v, args) => {
                 let nargs = args.len() as u8;
-                let res = match v.as_ref() {
+                match v.as_ref() {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(v).unwrap();
                         let fadd = self.prepare_function(funcproto, faddress, args);
@@ -265,9 +265,27 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(_idx) => {
-                        todo!()
-                        // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
+                    mir::Value::ExtFunction(label, ty) => {
+                        let idx = {
+                            self.program
+                                .ext_fun_table
+                                .push((label.0.clone(), ty.clone()));
+                            self.program.ext_fun_table.len() - 1
+                        };
+                        let fi = funcproto.add_new_constant(idx as u64);
+                        let dst = self.get_destination(dst);
+                        funcproto
+                            .bytecodes
+                            .push(VmInstruction::MoveConst(dst, fi as ConstPos));
+                        let fadd = self.prepare_function(funcproto, dst, args);
+                        funcproto
+                            .bytecodes
+                            .push(VmInstruction::CallExtFun(fadd as Reg, nargs, 1));
+                        for a in args {
+                            //reset register for args
+                            let _ = self.vregister.find(a);
+                        }
+                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
                     mir::Value::Closure(_cls, _reg) => {
                         todo!()
@@ -275,8 +293,7 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::FixPoint => todo!(),
                     _ => unreachable!(),
-                };
-                res
+                }
             }
             mir::Instruction::CallCls(f, args) => {
                 let nargs = args.len() as u8;
@@ -297,7 +314,7 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(_idx) => {
+                    mir::Value::ExtFunction(_idx, ty) => {
                         todo!()
                         // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
                     }

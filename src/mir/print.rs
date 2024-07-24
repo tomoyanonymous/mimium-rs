@@ -50,7 +50,7 @@ impl std::fmt::Display for Value {
             Value::Integer(i) => write!(f, "int {i}"),
             Value::Bool(_) => todo!(),
             Value::Function(id, _statesize) => write!(f, "function {id}"),
-            Value::ExtFunction(_) => todo!(),
+            Value::ExtFunction(label,t) => write!(f,"extfun {label} {t}"),
             Value::Closure(fun, upindex) => write!(f, "closure {} ({})", *fun, upindex.len()),
             Value::FixPoint => write!(f, "fixpoint"),
             Value::State(v) => write!(f, "state({})", *v),

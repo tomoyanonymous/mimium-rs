@@ -25,12 +25,12 @@ struct ContextData {
 }
 #[derive(Debug)]
 pub struct Context {
-    pub typeenv: InferContext,
+    typeenv: InferContext,
     valenv: Environment<VPtr>,
-    pub fn_label: Option<String>,
+    fn_label: Option<String>,
     anonymous_fncount: u64,
     reg_count: VReg,
-    pub program: Mir,
+    program: Mir,
     data: Vec<ContextData>,
     data_i: usize,
 }
@@ -197,16 +197,34 @@ impl Context {
                     .push((res.clone(), Instruction::GetUpValue(upi)));
                 res
             }),
-            LookupRes::Global(v) => v.clone(),
+            LookupRes::Global(v) => Arc::new(Value::Global(v.clone())),
             LookupRes::None => {
-                // let t = infer_type(e, &mut self.typeenv).expect("type infer error");
-                // program.ext_cls_table.push((v.clone(),t));
-                Arc::new(Value::ExtFunction(Label(name.to_string())))
+                let ty =
+                    typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
+                Arc::new(Value::ExtFunction(Label(name.to_string()), ty))
             }
         };
 
         let ty = typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
         Ok((v, ty.clone()))
+    }
+    fn emit_fncall(&mut self, idx: u64, statesize: u64, args: Vec<VPtr>) -> VPtr {
+        let f = {
+            self.get_current_fn().state_size += statesize;
+            self.push_inst(Instruction::Uinteger(idx))
+        };
+        //insert pushstateoffset
+        if self.get_ctxdata().state_offset > 0 {
+            self.get_current_basicblock()
+                .0
+                .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
+        }
+
+        let res = self.push_inst(Instruction::Call(f.clone(), args));
+        if statesize > 0 {
+            self.get_ctxdata().state_offset += 1;
+        }
+        res
     }
     pub fn eval_expr(&mut self, e_meta: &WithMeta<Expr>) -> Result<(VPtr, Type), CompileError> {
         let WithMeta(e, span) = e_meta;
@@ -258,6 +276,20 @@ impl Context {
                         .try_collect::<Vec<_>>()
                 };
                 let res = match f.as_ref() {
+                    Value::Global(v) =>{
+                        let a_regs = makeargs(args, self)?;
+                        match v.as_ref(){
+                            Value::Function(idx,statesize) =>{
+                                self.emit_fncall(*idx as u64, *statesize,a_regs)
+                            }
+                            Value::Register(_c)=>{
+                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
+                            },
+                            _ => {
+                                panic!("calling non-function global value")
+                            }
+                        }
+                    },
                     Value::Register(_c) => {
                         //closure
                         let a_regs = makeargs(args,self)?;
@@ -265,36 +297,22 @@ impl Context {
                         let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
                         res
                     }
-                    Value::Function(idx, statesize) => {
-                        let f =  {
-                            self.get_current_fn().state_size += statesize;
-                            self.push_inst(Instruction::Uinteger(*idx as u64))
-                        };
-                        let a_regs = makeargs(args,self)?;
-                        //insert pushstateoffset
-                        if self.get_ctxdata().state_offset > 0 {
-                            self.get_current_basicblock()
-                                .0
-                                .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
-                        }
 
-                        let res = self.push_inst(Instruction::Call(f.clone(), a_regs.clone()));
-                        if *statesize > 0 {
-                            self.get_ctxdata().state_offset += 1;
-                        }
-                        res
+                    Value::Function(idx, statesize) => {
+                        let a_regs = makeargs(args, self)?;
+                        self.emit_fncall(*idx as u64, *statesize,a_regs)
                     }
                     Value::Closure(v, _upindexes) if let Value::Function(idx, statesize) = v.as_ref() =>{
                         unreachable!()
                     }
-                    Value::ExtFunction(label) => {
+                    Value::ExtFunction(label,_ty) => {
                         let a_regs = makeargs(args,self)?;
 
                         if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())
                         {
                         res
                         } else {
-                            todo!()
+                            self.push_inst(Instruction::Call(f.clone(), a_regs.clone()))
                         }
                     }
                     // Value::ExternalClosure(i) => todo!(),
