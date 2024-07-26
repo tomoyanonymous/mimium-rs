@@ -199,6 +199,7 @@ impl ByteCodeGenerator {
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
+        fidx: usize,
         mirfunc: &mir::Function,
         dst: Arc<mir::Value>,
         mirinst: &mir::Instruction,
@@ -290,11 +291,7 @@ impl ByteCodeGenerator {
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::Closure(_cls, _reg) => {
-                        todo!()
-                        // VmInstruction::CallCls(reg as Reg, nargs, 1)
-                    }
-                    mir::Value::FixPoint => todo!(),
+                    mir::Value::FixPoint => unreachable!("fixpoint should be called with callcls."),
                     _ => unreachable!(),
                 }
             }
@@ -314,6 +311,25 @@ impl ByteCodeGenerator {
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
+                    mir::Value::FixPoint => {
+                        let constpos = funcproto.add_new_constant(fidx as u64);
+                        let dummy = Arc::new(mir::Value::None);
+                        let vpos = self.vregister.add_newvalue(&dummy);
+                        funcproto
+                            .bytecodes
+                            .push(VmInstruction::MoveConst(vpos, constpos as u16));
+                        let cpos = self.vregister.add_newvalue(&dummy);
+                        let dst = self.get_destination(dst);
+
+                        funcproto.bytecodes.push(VmInstruction::Closure(cpos, vpos));
+
+                        for a in args {
+                            //reset register for args
+                            let _ = self.vregister.find(a);
+                        }
+                        let _ = self.vregister.find(&dummy);
+                        Some(VmInstruction::CallCls(dst, nargs, 1))
+                    }
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
@@ -321,11 +337,6 @@ impl ByteCodeGenerator {
                         todo!()
                         // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
                     }
-                    mir::Value::Closure(_cls, _reg) => {
-                        todo!()
-                        // VmInstruction::CallCls(reg as Reg, nargs, 1)
-                    }
-                    mir::Value::FixPoint => todo!(),
                     _ => unreachable!(),
                 }
             }
@@ -337,7 +348,7 @@ impl ByteCodeGenerator {
             mir::Instruction::GetUpValue(i) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let parent = self.vregister.get_parent();
-
+                //todo:recursively find upvalue
                 let v = parent
                     .find_upvalue(upval.clone())
                     .expect("faild to find upvalue");
@@ -383,7 +394,7 @@ impl ByteCodeGenerator {
                     .iter()
                     .for_each(|(dst, t_inst)| {
                         if let Some(inst) =
-                            self.emit_instruction(funcproto, mirfunc, dst.clone(), t_inst)
+                            self.emit_instruction(funcproto, fidx, mirfunc, dst.clone(), t_inst)
                         {
                             then_bytecodes.push(inst);
                         }
@@ -395,7 +406,7 @@ impl ByteCodeGenerator {
                     .iter()
                     .for_each(|(dst, t_inst)| {
                         if let Some(inst) =
-                            self.emit_instruction(funcproto, mirfunc, dst.clone(), t_inst)
+                            self.emit_instruction(funcproto, fidx, mirfunc, dst.clone(), t_inst)
                         {
                             else_bytecodes.push(inst);
                         };
@@ -502,7 +513,11 @@ impl ByteCodeGenerator {
             }
         }
     }
-    fn generate_funcproto(&mut self, mirfunc: &mir::Function) -> (String, vm::FuncProto) {
+    fn generate_funcproto(
+        &mut self,
+        mirfunc: &mir::Function,
+        fidx: usize,
+    ) -> (String, vm::FuncProto) {
         // println!("generating function {}", mirfunc.label.0);
         let mut func = vm::FuncProto::from(mirfunc);
         self.vregister.0.push(VRegister::default());
@@ -513,7 +528,7 @@ impl ByteCodeGenerator {
         // succeeding block will be compiled recursively
         let block = &mirfunc.body[0];
         block.0.iter().for_each(|(dst, inst)| {
-            let newinst = self.emit_instruction(&mut func, mirfunc, dst.clone(), inst);
+            let newinst = self.emit_instruction(&mut func, fidx, mirfunc, dst.clone(), inst);
             if let Some(i) = newinst {
                 func.bytecodes.push(i);
             }
@@ -528,7 +543,7 @@ impl ByteCodeGenerator {
             .map(|(i, func)| {
                 let label = &func.label.0;
                 self.fnmap.insert(label.clone(), i);
-                self.generate_funcproto(func)
+                self.generate_funcproto(func, i)
             })
             .collect();
 

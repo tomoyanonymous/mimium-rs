@@ -162,7 +162,11 @@ fn test_fndef() {
     let ans = WithMeta(
         Expr::LetRec(
             TypedId {
-                ty: None,
+                ty: Some(Type::Function(
+                    vec![Type::Unknown, Type::Unknown],
+                    Box::new(Type::Unknown),
+                    None,
+                )),
                 id: "hoge".to_string(),
             },
             Box::new(WithMeta(

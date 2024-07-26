@@ -1,0 +1,16 @@
+fn counter(inc:float){
+    self+inc
+}
+
+fn replicate(n:float,gen:(float)->float){
+    if (n>0.0){
+        let c = replicate(n - 1.0,gen)
+        |x| {gen(x) * n + c(x)}
+    }else{
+        |x| {gen(x)}
+    }
+}
+let mycounter = replicate(3.0,counter);
+fn dsp(){
+    mycounter(0.1)
+}

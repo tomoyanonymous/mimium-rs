@@ -19,16 +19,10 @@ pub enum Value {
     Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
-    UpValue(VReg, Arc<Value>),
     State(VPtr),
-    // immidiate mode floating point value
-    Float(f64),
-    Integer(i64),
-    Bool(bool),
     // idx of the function in the program, size of internal state
     Function(usize, u64),
     ExtFunction(Label,Type),
-    Closure(Arc<Value>, Vec<UpIndex>),
     FixPoint,
     //internal state
     None, //??

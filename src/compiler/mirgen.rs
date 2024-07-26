@@ -202,7 +202,7 @@ impl Context {
             }),
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone())),
-                Value::Function(_, _) | Value::Register(_) => v.clone(),
+                Value::Function(_, _) | Value::Register(_) | Value::FixPoint => v.clone(),
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
@@ -300,7 +300,7 @@ impl Context {
                             Value::Function(idx,statesize) =>{
                                 self.emit_fncall(*idx as u64, *statesize,a_regs)
                             }
-                            Value::Register(_c)=>{
+                            Value::Register(_)|Value::FixPoint=>{
                                 self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
                             },
                             _ => {
@@ -308,7 +308,7 @@ impl Context {
                             }
                         }
                     },
-                    Value::Register(_c) => {
+                    Value::Register(_)| Value::FixPoint => {
                         //closure
                         //do not increment state size for closure
                         let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
@@ -318,9 +318,6 @@ impl Context {
                     Value::Function(idx, statesize) => {
 
                         self.emit_fncall(*idx as u64, *statesize,a_regs)
-                    }
-                    Value::Closure(v, _upindexes) if let Value::Function(idx, statesize) = v.as_ref() =>{
-                        unreachable!()
                     }
                     Value::ExtFunction(label,_ty) => {
 
@@ -449,6 +446,8 @@ impl Context {
                 self.typeenv
                     .env
                     .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                self.fn_label = None;
+
                 match (
                     is_global,
                     matches!(bodyv.as_ref(), Value::Function(_, _)),
@@ -493,14 +492,21 @@ impl Context {
                     idt
                 };
                 let fix = Arc::new(Value::FixPoint);
-                let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
-                let bind = (id.id.clone(), alloc);
+                // let alloc = self.push_inst(Instruction::Alloc(t.clone()));
+                // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
+                let bind = (id.id.clone(), fix);
                 self.add_bind(bind);
-                let (_b, bt) = self.eval_expr(body)?;
+                let (b, bt) = self.eval_expr(body)?;
                 let rest = self.typeenv.unify_types(t, bt)?;
                 self.typeenv.env.add_bind(&mut vec![(id.id.clone(), rest)]);
-
+                //set bind from fixpoint to computed lambda 
+                let (_, v) = self
+                    .valenv
+                    .0
+                    .iter_mut()
+                    .find_map(|lenv| lenv.iter_mut().find(|(name, v)| *name == id.id.clone()))
+                    .unwrap();
+                *v = b;
                 if let Some(then_e) = then {
                     self.eval_expr(then_e)
                 } else {
