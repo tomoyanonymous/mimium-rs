@@ -113,6 +113,7 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
+    global_vals: Vec<RawVal>,
     debug_stacktype: Vec<RawValType>,
 }
 
@@ -184,6 +185,7 @@ impl Machine {
             cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
+            global_vals: vec![],
             debug_stacktype: vec![RawValType::Int; 255],
         }
     }
@@ -426,6 +428,12 @@ impl Machine {
                         }
                     }
                 }
+                Instruction::GetGlobal(dst, gid) => {
+                    self.set_stack(dst as i64, self.global_vals[gid as usize])
+                }
+                Instruction::SetGlobal(gid, src) => {
+                    self.global_vals[gid as usize] = self.get_stack(src as i64);
+                }
                 // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
                     // -1 is for the offset in last increment
@@ -566,6 +574,7 @@ impl Machine {
     }
     pub fn link_functions(&mut self, prog: &Program) {
         //link external functions
+        self.global_vals = prog.global_vals.clone();
         prog.ext_fun_table
             .iter()
             .enumerate()
@@ -604,13 +613,17 @@ impl Machine {
             .enumerate()
             .find(|(_i, (name, _))| name == entry)
         {
-            self.global_states.resize(func.state_size as usize);
-            // 0 is always base pointer to the main function
-            if self.stack.len() > 0 {
-                self.stack[0] = 0;
+            if !func.bytecodes.is_empty() {
+                self.global_states.resize(func.state_size as usize);
+                // 0 is always base pointer to the main function
+                if self.stack.len() > 0 {
+                    self.stack[0] = 0;
+                }
+                self.base_pointer = 1;
+                self.execute(i, &prog, None)
+            } else {
+                0
             }
-            self.base_pointer = 1;
-            self.execute(i, &prog, None)
         } else {
             -1
         }

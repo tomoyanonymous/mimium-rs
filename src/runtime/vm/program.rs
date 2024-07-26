@@ -53,6 +53,7 @@ pub struct Program {
     pub global_fn_table: Vec<(String, FuncProto)>,
     pub ext_fun_table: Vec<(String, Type)>,
     pub ext_cls_table: Vec<(String, Type)>,
+    pub global_vals: Vec<RawVal>,
 }
 impl Program {
     pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
@@ -87,6 +88,7 @@ impl std::fmt::Display for Program {
                     format!("{s}, {f}")
                 })
         );
-        write!(f, "ext_cls:\n{:?}", self.ext_cls_table)
+        let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
+        write!(f, "globals:\n{:?}", self.global_vals)
     }
 }

@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mir::{self, Mir};
-use crate::runtime::vm::bytecode::{ConstPos, Reg};
+use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
-use super::mirgen::{CompileError, CompileErrorKind};
 #[derive(Debug)]
 struct VRegister(Vec<Option<Arc<mir::Value>>>, usize);
 
@@ -114,9 +113,6 @@ impl VStack {
     pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
         self.get_top().find_keep(v)
     }
-    pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        self.get_top().find_upvalue(v)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -124,6 +120,7 @@ pub struct ByteCodeGenerator {
     vregister: VStack,
     bb_index: usize,
     fnmap: HashMap<String, usize>,
+    globals: Vec<Arc<mir::Value>>,
     program: vm::Program,
 }
 
@@ -157,18 +154,14 @@ impl ByteCodeGenerator {
     fn get_destination(&mut self, dst: Arc<mir::Value>) -> Reg {
         self.vregister.add_newvalue(&dst)
     }
-    fn find_upvalue(&mut self, fnid: usize, v: &Arc<mir::Value>) -> Reg {
-        match v.as_ref() {
-            mir::Value::Global(_) => todo!(),
-            mir::Value::Argument(_, _) | mir::Value::Register(_) => {
-                self.vregister.find_keep(v).unwrap()
-            }
-            mir::Value::UpValue(_f, upv) => {
-                panic!()
-                // self.find_upvalue(funcproto, upv)
-            }
-            _ => {
-                unreachable!()
+    fn get_or_insert_global(&mut self, gv: Arc<mir::Value>) -> GlobalPos {
+        match self.globals.iter().position(|v| gv == *v) {
+            Some(idx) => idx as GlobalPos,
+            None => {
+                self.globals.push(gv.clone());
+                let idx = (self.globals.len() - 1) as GlobalPos;
+                self.program.global_vals.push(idx as u64);
+                idx
             }
         }
     }
@@ -245,6 +238,16 @@ impl ByteCodeGenerator {
                 let s = self.vregister.find(src).unwrap();
                 let d = self.vregister.find_keep(dst).unwrap();
                 (d != s).then(|| VmInstruction::Move(d, s))
+            }
+            mir::Instruction::GetGlobal(v) => {
+                let dst = self.get_destination(dst);
+                let idx = self.get_or_insert_global(v.clone());
+                Some(VmInstruction::GetGlobal(dst, idx))
+            }
+            mir::Instruction::SetGlobal(v, src) => {
+                let s = self.vregister.find(src).unwrap();
+                let idx = self.get_or_insert_global(v.clone());
+                Some(VmInstruction::SetGlobal(idx, s))
             }
             mir::Instruction::Call(v, args) => {
                 let nargs = args.len() as u8;
@@ -425,7 +428,11 @@ impl ByteCodeGenerator {
                 unreachable!()
             }
             mir::Instruction::Return(v) => {
-                Some(VmInstruction::Return(self.vregister.find(v).unwrap(), 1))
+                let inst = match v.as_ref() {
+                    mir::Value::None => VmInstruction::Return0,
+                    _ => VmInstruction::Return(self.vregister.find(v).unwrap(), 1),
+                };
+                Some(inst)
             }
             mir::Instruction::ReturnFeed(new) => {
                 let old = self.vregister.add_newvalue(&dst);

@@ -51,18 +51,20 @@ pub fn run_bytecode_test(
 pub fn run_bytecode_test_multiple(
     bytecodes: &vm::Program,
     times: u64,
-) -> Result<f64, Vec<Box<dyn ReportableError>>> {
+) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut machine = vm::Machine::new();
-    let mut ret = 0.0;
+    let mut ret = vec![];
     machine.link_functions(bytecodes);
+    let _retcode = machine.execute_entry(bytecodes, "_mimium_global");
     for i in 0..times {
-        ret = run_bytecode_test(&mut machine, bytecodes)?;
-        println!("time:{}, res: {}", i, ret)
+        let res = run_bytecode_test(&mut machine, bytecodes)?;
+        ret.push(res);
+        println!("time:{}, res: {}", i, res)
     }
     Ok(ret)
 }
 
-pub fn run_source_test(src: &str) -> Result<f64, Vec<Box<dyn ReportableError>>> {
+pub fn run_source_test(src: &str, times: u64) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
-    run_bytecode_test_multiple(&bytecode, 10)
+    run_bytecode_test_multiple(&bytecode, times)
 }

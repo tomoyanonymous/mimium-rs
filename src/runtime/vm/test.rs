@@ -118,6 +118,7 @@ fn closuretest() {
         global_fn_table,
         ext_fun_table: vec![("probe".to_string(), function!(vec![numeric!()], numeric!()))],
         ext_cls_table: vec![],
+        global_vals: vec![],
     };
     // let mut feedstate = FeedState::default();
     let res = machine.execute_main(&prog);
@@ -163,6 +164,7 @@ fn rust_closure_test() {
         global_fn_table,
         ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
         ext_cls_table: vec![("rustclosure".to_string(), Type::Unknown)],
+        global_vals: vec![],
     };
     // let mut feedstate = FeedState::default();
     let res = machine.execute_main(&prog);

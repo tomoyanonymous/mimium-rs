@@ -42,7 +42,7 @@ impl std::fmt::Display for Argument {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Global(_) => todo!(),
+            Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
             Value::UpValue(i, v) => write!(f, "upvalue [{i}]{}", *v),
@@ -50,7 +50,7 @@ impl std::fmt::Display for Value {
             Value::Integer(i) => write!(f, "int {i}"),
             Value::Bool(_) => todo!(),
             Value::Function(id, _statesize) => write!(f, "function {id}"),
-            Value::ExtFunction(label,t) => write!(f,"extfun {label} {t}"),
+            Value::ExtFunction(label, t) => write!(f, "extfun {label} {t}"),
             Value::Closure(fun, upindex) => write!(f, "closure {} ({})", *fun, upindex.len()),
             Value::FixPoint => write!(f, "fixpoint"),
             Value::State(v) => write!(f, "state({})", *v),
@@ -83,8 +83,11 @@ impl std::fmt::Display for Instruction {
             }
             Instruction::GetUpValue(idx) => write!(f, "getupval {idx}"),
             Instruction::SetUpValue(idx) => write!(f, "setupval {idx}"),
+            Instruction::GetGlobal(v) => write!(f, "getglobal {}", *v),
+            Instruction::SetGlobal(dst, src) => write!(f, "setglobal {} {}", *dst, *src),
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
+
             Instruction::GetState => write!(f, "getstate"),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),

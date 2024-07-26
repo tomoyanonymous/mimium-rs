@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 println!("Filename: {}", fullpath.display());
-                match runtime::run_source_test(&content.clone()) {
+                match runtime::run_source_test(&content.clone(),10) {
                     Ok(v) => {
                         println!("Filename: {}", fullpath.display());
                         println!("Value:\n{:?}", v);

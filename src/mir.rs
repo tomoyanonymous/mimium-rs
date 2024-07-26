@@ -53,7 +53,8 @@ pub enum Instruction {
     // call function , arguments
     Call(VPtr, Vec<VPtr>),
     CallCls(VPtr, Vec<VPtr>),
-
+    GetGlobal(VPtr),
+    SetGlobal(VPtr,VPtr),
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
@@ -139,7 +140,6 @@ pub struct OpenUpValue(pub usize);
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
-    // pub locals: Vec<Local>,
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
@@ -165,5 +165,4 @@ impl Function {
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
-    pub globals: Vec<VPtr>,
 }

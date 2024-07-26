@@ -41,8 +41,9 @@ impl<T: Clone> Environment<T> {
             .flatten()
         {
             None => LookupRes::None,
-            Some((0, e)) => LookupRes::Local(e),
             Some((level, e)) if level >= self.0.len() - 1 => LookupRes::Global(e),
+            Some((0, e)) if self.0.len() <= 1 => LookupRes::Global(e),
+            Some((0, e)) => LookupRes::Local(e),
             Some((level, e)) => LookupRes::UpValue(level, e),
         }
     }

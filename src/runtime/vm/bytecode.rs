@@ -1,5 +1,6 @@
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
+pub type GlobalPos = u16;
 pub type Offset = i16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +26,10 @@ pub enum Instruction {
     //destination,source
     GetUpValue(Reg, Reg),
     SetUpValue(Reg, Reg),
+
+    //destination,source
+    GetGlobal(Reg, GlobalPos),
+    SetGlobal(GlobalPos, Reg),
     //call internal state over time, destination,source
     GetState(Reg),
     SetState(Reg),
@@ -100,6 +105,8 @@ impl std::fmt::Display for Instruction {
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
+            Instruction::GetGlobal(dst, src) => write!(f, "{:<10} {} {}", "getglobal", dst, src),
+            Instruction::SetGlobal(dst, src) => write!(f, "{:<10} {} {}", "setglobal", dst, src),
             Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpifneg", dst, cond),
             Instruction::AbsF(dst, src) => write!(f, "{:<10} {} {}", "absf", dst, src),
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),

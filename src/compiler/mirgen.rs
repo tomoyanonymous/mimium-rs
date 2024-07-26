@@ -94,9 +94,13 @@ impl Context {
         let idx = self.get_current_fn().add_new_basicblock();
         self.get_ctxdata().current_bb = idx;
     }
-    fn push_inst(&mut self, inst: Instruction) -> VPtr {
+    fn gen_new_register(&mut self) -> VPtr {
         let res = Arc::new(Value::Register(self.reg_count));
         self.reg_count += 1;
+        res
+    }
+    fn push_inst(&mut self, inst: Instruction) -> VPtr {
+        let res = self.gen_new_register();
         self.get_current_basicblock().0.push((res.clone(), inst));
         res
     }
@@ -184,20 +188,23 @@ impl Context {
                 _ => self.push_inst(Instruction::Load(v.clone())),
             },
             LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
+                let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
                 let currentf = self.program.functions.get_mut(current.func_i).unwrap();
                 let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
                 currentf.upindexes.push(upv.clone());
                 let upi = (currentf.upindexes.len() - 1) as u64;
 
-                let res = Arc::new(Value::Register(self.reg_count));
-                self.reg_count += 1;
                 currentbb
                     .0
                     .push((res.clone(), Instruction::GetUpValue(upi)));
                 res
             }),
-            LookupRes::Global(v) => Arc::new(Value::Global(v.clone())),
+            LookupRes::Global(v) => match v.as_ref() {
+                Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone())),
+                Value::Function(_, _) | Value::Register(_) => v.clone(),
+                _ => unreachable!("non global_value"),
+            },
             LookupRes::None => {
                 let ty =
                     typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
@@ -270,7 +277,14 @@ impl Context {
                     args.iter()
                         .map(|a_meta| -> Result<Arc<Value>, CompileError> {
                             let (v, _t) = ctx.eval_expr(a_meta)?;
-                            let res = v;
+                            let res = match v.as_ref() {
+                                // for the higher order function, make closure regardless it is global function
+                                Value::Function(idx, _) => {
+                                    let f = ctx.push_inst(Instruction::Uinteger(*idx as u64));
+                                    ctx.push_inst(Instruction::Closure(f))
+                                }
+                                _ => v.clone(),
+                            };
                             Ok(res)
                         })
                         .try_collect::<Vec<_>>()
@@ -365,9 +379,16 @@ impl Context {
                             )); //todo:offset size
                         }
                         match (res.as_ref(), res_type.clone()) {
-                            (_, Type::Primitive(PType::Unit) | Type::Unknown) => {}
+                            (_, Type::Primitive(PType::Unit) | Type::Unknown) => {
+                                let _ = ctx.push_inst(Instruction::Return(Arc::new(Value::None)));
+                            }
                             (Value::State(v), _) => {
                                 let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone()));
+                            }
+                            (Value::Function(i, _), _) => {
+                                let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
+                                let cls = ctx.push_inst(Instruction::Closure(idx));
+                                let _ = ctx.push_inst(Instruction::Return(cls));
                             }
                             (_, _) => {
                                 let _ = ctx.push_inst(Instruction::Return(res.clone()));
@@ -393,7 +414,6 @@ impl Context {
                 Ok((res, fty))
             }
             Expr::Feed(id, expr) => {
-                // self.reg_count += 1;
                 let res = self.push_inst(Instruction::GetState);
                 self.add_bind((id.clone(), res.clone()));
                 let tf = {
@@ -415,33 +435,42 @@ impl Context {
                 } else {
                     self.get_current_basicblock().0.len()
                 };
+                let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(body)?;
                 //todo:need to boolean and insert cast
                 if let Some(idt) = id.ty.clone() {
                     self.typeenv.unify_types(idt, t.clone())?;
                 }
-
-                if let Some(then_e) = then {
-                    self.typeenv
-                        .env
-                        .add_bind(&mut vec![(id.id.clone(), t.clone())]);
-                    let res = if (t.is_primitive())
-                        || (t.is_function() && self.get_current_fn().upperfn_i != Some(0))
-                    {
-                        let alloc_res = Arc::new(Value::Register(self.reg_count));
+                self.typeenv
+                    .env
+                    .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                match (
+                    is_global,
+                    matches!(bodyv.as_ref(), Value::Function(_, _)),
+                    then,
+                ) {
+                    (true, false, Some(then_e)) => {
+                        let gv = Arc::new(Value::Global(bodyv.clone()));
+                        let _greg =
+                            self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone()));
+                        self.add_bind((id.id.clone(), gv));
+                        self.eval_expr(then_e)
+                    }
+                    (false, false, Some(then_e)) => {
+                        let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
-                        self.reg_count += 1;
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
-                        alloc_res
-                    } else {
-                        bodyv
-                    };
-                    self.add_bind((id.id.clone(), res));
-                    self.eval_expr(then_e)
-                } else {
-                    Ok((Arc::new(Value::None), unit!()))
+
+                        self.add_bind((id.id.clone(), alloc_res));
+                        self.eval_expr(then_e)
+                    }
+                    (_, _, Some(then_e)) => {
+                        self.add_bind((id.id.clone(), bodyv));
+                        self.eval_expr(then_e)
+                    }
+                    (_, _, None) => Ok((Arc::new(Value::None), unit!())),
                 }
             }
             Expr::LetRec(id, body, then) => {
