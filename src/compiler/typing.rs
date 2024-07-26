@@ -116,12 +116,30 @@ impl InferContext {
             .map(|(name, _, t)| (name.to_string(), t.clone()))
             .collect::<Vec<_>>();
         env.add_bind(&mut binds);
-
     }
     pub fn gen_intermediate_type(&mut self) -> Type {
         let res = Type::Intermediate(self.interm_idx);
         self.interm_idx += 1;
         res
+    }
+    pub fn convert_unknown_to_intermediate(&mut self, t: &Type) -> Type {
+        match t {
+            Type::Unknown => self.gen_intermediate_type(),
+            _ => t.clone(),
+        }
+    }
+    pub fn convert_unknown_function(
+        &mut self,
+        atypes: &Vec<Type>,
+        rty: &Type,
+        s: &Option<Box<Type>>,
+    ) -> Type {
+        let a = atypes
+            .iter()
+            .map(|a| self.convert_unknown_to_intermediate(a))
+            .collect();
+        let r = self.convert_unknown_to_intermediate(&rty);
+        Type::Function(a, Box::new(r), s.clone())
     }
     // return true when the circular loop of intermediate variable exists.
     pub fn occur_check(&self, id1: i64, t2: Type) -> bool {
@@ -301,7 +319,14 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         Expr::Let(id, body, then) => {
             let c = ctx;
             let bodyt = infer_type(body, c)?;
-            let idt = id.ty.clone().unwrap_or(c.gen_intermediate_type());
+            let idt = match id.ty.as_ref() {
+                Some(Type::Function(atypes, box rty, s)) => {
+                    c.convert_unknown_function(atypes, rty, s)
+                }
+                Some(t) => t.clone(),
+                None => c.gen_intermediate_type(),
+            };
+
             let bodyt_u = c.unify_types(idt, bodyt)?;
             c.env.add_bind(&mut vec![(id.clone().id, bodyt_u)]);
             let res = match then {
@@ -315,7 +340,13 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
-            let idt = id.clone().ty.unwrap_or(c.gen_intermediate_type());
+            let idt = match id.ty.as_ref() {
+                Some(Type::Function(atypes, box rty, s)) => {
+                    c.convert_unknown_function(atypes, rty, s)
+                }
+                _ => panic!("type for letrec is limited to function type in mimium."),
+            };
+
             let body_i = c.gen_intermediate_type();
             c.env.add_bind(&mut vec![(id.clone().id, body_i)]);
             let bodyt = infer_type(body, c)?;

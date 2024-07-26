@@ -262,36 +262,40 @@ impl Context {
                 // } else {
                 //     1
                 // };
-                let (f, t) = self.eval_expr(f)?;
-                let rtres: Result<Type, CompileError> = if let Type::Function(_a, box r, _s) = t {
-                    Ok(r)
+                let (f, ft) = self.eval_expr(f)?;
+                let atvvec = args
+                    .iter()
+                    .map(|a_meta| -> Result<_, CompileError> {
+                        let (v, t) = self.eval_expr(a_meta)?;
+                        let res = match v.as_ref() {
+                            // for the higher order function, make closure regardless it is global function
+                            Value::Function(idx, _) => {
+                                let f = self.push_inst(Instruction::Uinteger(*idx as u64));
+                                self.push_inst(Instruction::Closure(f))
+                            }
+                            _ => v.clone(),
+                        };
+                        Ok((res, t))
+                    })
+                    .try_collect::<Vec<_>>()?;
+                let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
+                let rt = self.typeenv.gen_intermediate_type();
+                let ftype = self
+                    .typeenv
+                    .unify_types(ft, Type::Function(atvec, Box::new(rt), None))?;
+                let rt = if let Type::Function(_, box rt, _) = ftype {
+                    Ok(rt.clone())
                 } else {
-                    let terr = typing::ErrorKind::NonFunction(t);
                     Err(CompileError(
-                        CompileErrorKind::TypingFailure(terr),
+                        CompileErrorKind::TypingFailure(typing::ErrorKind::NonFunction(
+                            ftype.clone(),
+                        )),
                         span.clone(),
                     ))
-                };
-                let rt = rtres?;
-                let makeargs = |args: &Vec<WithMeta<Expr>>, ctx: &mut Context| {
-                    args.iter()
-                        .map(|a_meta| -> Result<Arc<Value>, CompileError> {
-                            let (v, _t) = ctx.eval_expr(a_meta)?;
-                            let res = match v.as_ref() {
-                                // for the higher order function, make closure regardless it is global function
-                                Value::Function(idx, _) => {
-                                    let f = ctx.push_inst(Instruction::Uinteger(*idx as u64));
-                                    ctx.push_inst(Instruction::Closure(f))
-                                }
-                                _ => v.clone(),
-                            };
-                            Ok(res)
-                        })
-                        .try_collect::<Vec<_>>()
-                };
+                }?;
                 let res = match f.as_ref() {
                     Value::Global(v) =>{
-                        let a_regs = makeargs(args, self)?;
+
                         match v.as_ref(){
                             Value::Function(idx,statesize) =>{
                                 self.emit_fncall(*idx as u64, *statesize,a_regs)
@@ -306,21 +310,19 @@ impl Context {
                     },
                     Value::Register(_c) => {
                         //closure
-                        let a_regs = makeargs(args,self)?;
                         //do not increment state size for closure
                         let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
                         res
                     }
 
                     Value::Function(idx, statesize) => {
-                        let a_regs = makeargs(args, self)?;
+
                         self.emit_fncall(*idx as u64, *statesize,a_regs)
                     }
                     Value::Closure(v, _upindexes) if let Value::Function(idx, statesize) = v.as_ref() =>{
                         unreachable!()
                     }
                     Value::ExtFunction(label,_ty) => {
-                        let a_regs = makeargs(args,self)?;
 
                         if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())
                         {
@@ -341,14 +343,11 @@ impl Context {
                     .enumerate()
                     .map(|(idx, name)| {
                         let label = name.0.id.clone();
-                        let a = Argument(
-                            Label(label.clone()),
-                            name.0.ty.clone().unwrap_or(Type::Unknown),
-                        );
                         let t = name.0.ty.clone().unwrap_or_else(|| {
                             let tenv = &mut self.typeenv;
                             tenv.gen_intermediate_type()
                         });
+                        let a = Argument(Label(label.clone()), t.clone());
                         let res = (
                             label.clone(),
                             Arc::new(Value::Argument(idx, Arc::new(a))),
@@ -438,9 +437,15 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(body)?;
                 //todo:need to boolean and insert cast
-                if let Some(idt) = id.ty.clone() {
-                    self.typeenv.unify_types(idt, t.clone())?;
-                }
+                let idt = match id.ty.as_ref() {
+                    Some(Type::Function(atypes, box rty, s)) => {
+                        self.typeenv.convert_unknown_function(atypes, rty, s)
+                    }
+                    Some(t) => t.clone(),
+                    None => self.typeenv.gen_intermediate_type(),
+                };
+                self.typeenv.unify_types(idt, t.clone())?;
+
                 self.typeenv
                     .env
                     .add_bind(&mut vec![(id.id.clone(), t.clone())]);
@@ -477,20 +482,25 @@ impl Context {
                 self.fn_label = Some(id.id.clone());
                 let t = {
                     let tenv = &mut self.typeenv;
-                    //todo:need to boolean and insert cast
-                    let t = tenv.gen_intermediate_type();
-                    if let Some(idt) = id.ty.clone() {
-                        tenv.unify_types(idt, t.clone())?;
-                    }
-                    tenv.env.add_bind(&mut vec![(id.id.clone(), t.clone())]);
-                    t
+                    let idt = match id.ty.as_ref() {
+                        Some(Type::Function(atypes, box rty, s)) => {
+                            tenv.convert_unknown_function(atypes, rty, s)
+                        }
+                        Some(t) => t.clone(),
+                        None => tenv.gen_intermediate_type(),
+                    };
+                    tenv.env.add_bind(&mut vec![(id.id.clone(), idt.clone())]);
+                    idt
                 };
                 let fix = Arc::new(Value::FixPoint);
                 let alloc = self.push_inst(Instruction::Alloc(t.clone()));
                 let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
                 let bind = (id.id.clone(), alloc);
                 self.add_bind(bind);
-                let _ = self.eval_expr(body)?;
+                let (_b, bt) = self.eval_expr(body)?;
+                let rest = self.typeenv.unify_types(t, bt)?;
+                self.typeenv.env.add_bind(&mut vec![(id.id.clone(), rest)]);
+
                 if let Some(then_e) = then {
                     self.eval_expr(then_e)
                 } else {

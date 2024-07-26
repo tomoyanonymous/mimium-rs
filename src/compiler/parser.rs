@@ -291,6 +291,18 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
             .then(stmt.clone().map(|e| Box::new(e)).or_not())
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
+                let atypes = ids
+                    .iter()
+                    .map(|WithMeta(TypedId { ty, id: _ }, _)| ty.clone().unwrap_or(Type::Unknown))
+                    .collect::<Vec<_>>();
+                let fname = TypedId {
+                    ty: Some(Type::Function(
+                        atypes,
+                        Box::new(r_type.clone().unwrap_or(Type::Unknown)),
+                        None,
+                    )),
+                    id: fname.id.clone(),
+                };
                 WithMeta(
                     Expr::LetRec(
                         fname,
