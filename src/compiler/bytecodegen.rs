@@ -126,7 +126,6 @@ impl VStack {
 #[derive(Debug, Default)]
 pub struct ByteCodeGenerator {
     vregister: VStack,
-    bb_index: usize,
     fnmap: HashMap<String, usize>,
     globals: Vec<Arc<mir::Value>>,
     program: vm::Program,
@@ -209,7 +208,7 @@ impl ByteCodeGenerator {
     }
     fn prepare_function(
         &mut self,
-        funcproto: &mut vm::FuncProto,
+        bytecodes_dst: &mut Vec<VmInstruction>,
         faddress: Reg,
         args: &[Arc<mir::Value>],
     ) -> Reg {
@@ -222,18 +221,15 @@ impl ByteCodeGenerator {
         }
         for (adst, src) in adsts.iter() {
             let is_samedst = *adst as Reg == *src;
-            let is_swapping =
-                if let Some(VmInstruction::Move(dst2, src2)) = funcproto.bytecodes.last() {
-                    *dst2 == *src && *adst == *src2 as usize
-                } else {
-                    false
-                };
+            let is_swapping = if let Some(VmInstruction::Move(dst2, src2)) = bytecodes_dst.last() {
+                *dst2 == *src && *adst == *src2 as usize
+            } else {
+                false
+            };
             if is_swapping {
-                let _ = funcproto.bytecodes.pop();
+                let _ = bytecodes_dst.pop();
             } else if !is_samedst {
-                funcproto
-                    .bytecodes
-                    .push(VmInstruction::Move(*adst as Reg, *src));
+                bytecodes_dst.push(VmInstruction::Move(*adst as Reg, *src));
             }
         }
         dst
@@ -241,6 +237,7 @@ impl ByteCodeGenerator {
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
+        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
         fidx: usize,
         mirfunc: &mir::Function,
         dst: Arc<mir::Value>,
@@ -297,11 +294,12 @@ impl ByteCodeGenerator {
                 match v.as_ref() {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(v).unwrap();
-                        let fadd = self.prepare_function(funcproto, faddress, args);
+                        let bytecodes_dst =
+                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                        let fadd = self.prepare_function(bytecodes_dst, faddress, args);
                         let dst = self.get_destination(dst);
-                        funcproto
-                            .bytecodes
-                            .push(VmInstruction::Call(fadd, nargs, 1));
+
+                        bytecodes_dst.push(VmInstruction::Call(fadd, nargs, 1));
                         for a in args {
                             //reset register for args
                             let _ = self.vregister.find(a);
@@ -320,20 +318,20 @@ impl ByteCodeGenerator {
                         };
                         let fi = funcproto.add_new_constant(idx as u64);
                         let dst = self.get_destination(dst);
-                        funcproto
-                            .bytecodes
-                            .push(VmInstruction::MoveConst(dst, fi as ConstPos));
-                        let fadd = self.prepare_function(funcproto, dst, args);
-                        funcproto
-                            .bytecodes
-                            .push(VmInstruction::CallExtFun(fadd as Reg, nargs, 1));
+                        let bytecodes_dst =
+                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                        let fadd = self.prepare_function(bytecodes_dst, dst, args);
+                        bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
+                        bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, 1));
                         for a in args {
                             //reset register for args
                             let _ = self.vregister.find(a);
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::FixPoint => unreachable!("fixpoint should be called with callcls."),
+                    mir::Value::FixPoint(_) => {
+                        unreachable!("fixpoint should be called with callcls.")
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -342,10 +340,10 @@ impl ByteCodeGenerator {
                 match f.as_ref() {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(f).unwrap();
-                        let fadd = self.prepare_function(funcproto, faddress, args);
-                        funcproto
-                            .bytecodes
-                            .push(VmInstruction::CallCls(fadd, nargs, 1));
+                        let bytecodes_dst =
+                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                        let fadd = self.prepare_function(bytecodes_dst, faddress, args);
+                        bytecodes_dst.push(VmInstruction::CallCls(fadd, nargs, 1));
                         let dst = self.get_destination(dst);
                         for a in args {
                             //reset register for args
@@ -353,29 +351,10 @@ impl ByteCodeGenerator {
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::FixPoint => {
-                        let constpos = funcproto.add_new_constant(fidx as u64);
-                        let dummy = Arc::new(mir::Value::None);
-                        let vpos = self.vregister.add_newvalue(&dummy);
-                        funcproto
-                            .bytecodes
-                            .push(VmInstruction::MoveConst(vpos, constpos as u16));
-                        let cpos = self.vregister.add_newvalue(&dummy);
-                        let dst = self.get_destination(dst);
-
-                        funcproto.bytecodes.push(VmInstruction::Closure(cpos, vpos));
-
-                        for a in args {
-                            //reset register for args
-                            let _ = self.vregister.find(a);
-                        }
-                        let _ = self.vregister.find(&dummy);
-                        Some(VmInstruction::CallCls(dst, nargs, 1))
-                    }
                     mir::Value::Function(_idx, _state_size) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(_idx, ty) => {
+                    mir::Value::ExtFunction(_idx, _) => {
                         todo!()
                         // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
                     }
@@ -423,14 +402,18 @@ impl ByteCodeGenerator {
                 let c = self.vregister.find(cond).unwrap();
                 let mut then_bytecodes: Vec<VmInstruction> = vec![];
                 let mut else_bytecodes: Vec<VmInstruction> = vec![];
-
                 mirfunc.body[*tbb as usize]
                     .0
                     .iter()
                     .for_each(|(dst, t_inst)| {
-                        if let Some(inst) =
-                            self.emit_instruction(funcproto, fidx, mirfunc, dst.clone(), t_inst)
-                        {
+                        if let Some(inst) = self.emit_instruction(
+                            funcproto,
+                            Some(&mut then_bytecodes),
+                            fidx,
+                            mirfunc,
+                            dst.clone(),
+                            t_inst,
+                        ) {
                             then_bytecodes.push(inst);
                         }
                     });
@@ -440,9 +423,14 @@ impl ByteCodeGenerator {
                     .0
                     .iter()
                     .for_each(|(dst, t_inst)| {
-                        if let Some(inst) =
-                            self.emit_instruction(funcproto, fidx, mirfunc, dst.clone(), t_inst)
-                        {
+                        if let Some(inst) = self.emit_instruction(
+                            funcproto,
+                            Some(&mut else_bytecodes),
+                            fidx,
+                            mirfunc,
+                            dst.clone(),
+                            t_inst,
+                        ) {
                             else_bytecodes.push(inst);
                         };
                     });
@@ -466,7 +454,6 @@ impl ByteCodeGenerator {
 
                 funcproto.bytecodes.append(&mut then_bytecodes);
                 funcproto.bytecodes.append(&mut else_bytecodes);
-
                 Some(VmInstruction::Return(phi, 1))
             }
             mir::Instruction::Jmp(offset) => Some(VmInstruction::Jmp(*offset)),
@@ -482,9 +469,10 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::ReturnFeed(new) => {
                 let old = self.vregister.add_newvalue(&dst);
-                funcproto.bytecodes.push(VmInstruction::GetState(old));
+                let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                bytecodes_dst.push(VmInstruction::GetState(old));
                 let new = self.vregister.find(new).unwrap();
-                funcproto.bytecodes.push(VmInstruction::SetState(new));
+                bytecodes_dst.push(VmInstruction::SetState(new));
                 Some(VmInstruction::Return(old, 1))
             }
             mir::Instruction::AddF(v1, v2) => self.emit_binop2(VmInstruction::AddF, &dst, v1, v2),
@@ -530,7 +518,7 @@ impl ByteCodeGenerator {
         // succeeding block will be compiled recursively
         let block = &mirfunc.body[0];
         block.0.iter().for_each(|(dst, inst)| {
-            let newinst = self.emit_instruction(&mut func, fidx, mirfunc, dst.clone(), inst);
+            let newinst = self.emit_instruction(&mut func, None, fidx, mirfunc, dst.clone(), inst);
             if let Some(i) = newinst {
                 func.bytecodes.push(i);
             }

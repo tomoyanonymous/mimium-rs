@@ -3,14 +3,14 @@ use super::typing::{self, infer_type_literal, InferContext};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
-use crate::mir::{self, Argument, Instruction, Label, Mir, UpIndex, VPtr, VReg, Value};
+use crate::mir::{self, Argument, Instruction, Label, Mir, VPtr, VReg, Value};
 
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::{Span, WithMeta, GLOBAL_LABEL};
+use crate::utils::metadata::{Span, WithMeta};
 
 use crate::ast::{Expr, Literal};
 // pub mod closure_convert;
@@ -210,7 +210,7 @@ impl Context {
             }),
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone())),
-                Value::Function(_, _) | Value::Register(_) | Value::FixPoint => v.clone(),
+                Value::Function(_, _) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
@@ -302,36 +302,40 @@ impl Context {
                     ))
                 }?;
                 let res = match f.as_ref() {
-                    Value::Global(v) =>{
-
-                        match v.as_ref(){
-                            Value::Function(idx,statesize) =>{
-                                self.emit_fncall(*idx as u64, *statesize,a_regs)
-                            }
-                            Value::Register(_)|Value::FixPoint=>{
-                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
-                            },
-                            _ => {
-                                panic!("calling non-function global value")
-                            }
+                    Value::Global(v) => match v.as_ref() {
+                        Value::Function(idx, statesize) => {
+                            self.emit_fncall(*idx as u64, *statesize, a_regs)
+                        }
+                        Value::Register(_) => {
+                            self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
+                        }
+                        Value::FixPoint(fnid) => {
+                            let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
+                            let cls = self.push_inst(Instruction::Closure(clspos));
+                            self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                        }
+                        _ => {
+                            panic!("calling non-function global value")
                         }
                     },
-                    Value::Register(_)| Value::FixPoint => {
+                    Value::Register(_) => {
                         //closure
                         //do not increment state size for closure
                         let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
                         res
                     }
+                    Value::FixPoint(fnid) => {
+                        let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
+                        let cls = self.push_inst(Instruction::Closure(clspos));
+                        self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                    }
 
                     Value::Function(idx, statesize) => {
-
-                        self.emit_fncall(*idx as u64, *statesize,a_regs)
+                        self.emit_fncall(*idx as u64, *statesize, a_regs)
                     }
-                    Value::ExtFunction(label,_ty) => {
-
-                        if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())
-                        {
-                        res
+                    Value::ExtFunction(label, _ty) => {
+                        if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone()) {
+                            res
                         } else {
                             self.push_inst(Instruction::Call(f.clone(), a_regs.clone()))
                         }
@@ -499,20 +503,23 @@ impl Context {
                     tenv.env.add_bind(&mut vec![(id.id.clone(), idt.clone())]);
                     idt
                 };
-                let fix = Arc::new(Value::FixPoint);
+                let nextfunid = self.program.functions.len();
+                let fix = Arc::new(Value::FixPoint(nextfunid));
+
                 // let alloc = self.push_inst(Instruction::Alloc(t.clone()));
                 // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
                 let bind = (id.id.clone(), fix);
                 self.add_bind(bind);
                 let (b, bt) = self.eval_expr(body)?;
                 let rest = self.typeenv.unify_types(t, bt)?;
+
                 self.typeenv.env.add_bind(&mut vec![(id.id.clone(), rest)]);
-                //set bind from fixpoint to computed lambda 
+                //set bind from fixpoint to computed lambda
                 let (_, v) = self
                     .valenv
                     .0
                     .iter_mut()
-                    .find_map(|lenv| lenv.iter_mut().find(|(name, v)| *name == id.id.clone()))
+                    .find_map(|lenv| lenv.iter_mut().find(|(name, _)| *name == id.id.clone()))
                     .unwrap();
                 *v = b;
                 if let Some(then_e) = then {
@@ -536,14 +543,29 @@ impl Context {
                 //insert then block
                 self.add_new_basicblock();
                 let (t, thent) = self.eval_expr(then)?;
+                let t = match t.as_ref() {
+                    Value::Function(idx, _) => {
+                        let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
+                        self.push_inst(Instruction::Closure(cpos))
+                    }
+                    _ => t,
+                };
                 //jmp to ret is inserted in bytecodegen
-
                 //insert else block
                 self.add_new_basicblock();
                 let (e, elset) = match else_ {
                     Some(box e) => self.eval_expr(&e),
                     None => Ok((Arc::new(Value::None), unit!())),
                 }?;
+                //if returning non-closure function, make closure
+                let e = match e.as_ref() {
+                    Value::Function(idx, _) => {
+                        let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
+                        self.push_inst(Instruction::Closure(cpos))
+                    }
+                    _ => e,
+                };
+
                 self.typeenv.unify_types(thent.clone(), elset)?;
                 //insert return block
                 self.add_new_basicblock();
@@ -602,13 +624,4 @@ pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
         eb
     })?;
     Ok(ctx.program.clone())
-}
-
-fn resolve_upvalue(v: &Arc<Value>, ctx: &mut Context) {
-    match v.as_ref() {
-        Value::Argument(i, v) => {}
-        Value::Register(i) => todo!(),
-        Value::State(v) => todo!(),
-        _ => unreachable!(),
-    }
 }

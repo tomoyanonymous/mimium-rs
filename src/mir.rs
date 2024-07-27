@@ -1,6 +1,6 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::types::Type;
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -23,7 +23,7 @@ pub enum Value {
     // idx of the function in the program, size of internal state
     Function(usize, u64),
     ExtFunction(Label,Type),
-    FixPoint,
+    FixPoint(usize),//function id
     //internal state
     None, //??
 }

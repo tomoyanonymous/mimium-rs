@@ -353,9 +353,9 @@ impl Machine {
                         print!("!");
                     }
                     match self.debug_stacktype[i] {
-                        RawValType::Float => print!("{}f", Self::get_as::<f64>(self.stack[i])),
-                        RawValType::Int => print!("{}i", Self::get_as::<i64>(self.stack[i])),
-                        RawValType::UInt => print!("{}u", Self::get_as::<u64>(self.stack[i])),
+                        RawValType::Float => print!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
+                        RawValType::Int => print!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
+                        RawValType::UInt => print!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
                     }
                     if i < self.stack.len() - 1 {
                         print!(", ");
@@ -476,7 +476,7 @@ impl Machine {
                 }
                 Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
-                    if Self::get_as::<f64>(cond_v) < 0.0 {
+                    if Self::get_as::<f64>(cond_v) <= 0.0 {
                         increment = offset;
                     }
                 }

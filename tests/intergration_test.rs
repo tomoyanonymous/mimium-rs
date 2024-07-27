@@ -34,6 +34,13 @@ fn adder() {
 }
 
 #[test]
+fn recursion() {
+    let res = run_file_test("recursion.mmm", 1).unwrap();
+    let ans = vec![5.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn counter() {
     let res = run_file_test("counter.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
@@ -69,10 +76,8 @@ fn loopcounter() {
 #[test]
 fn primitive_sin() {
     let res = run_file_test("primitive_sin.mmm", 1).unwrap();
-    let ans = vec![
-        0.0,
-    ];
-    let r =  (res[0] - ans[0]).abs() < std::f64::EPSILON;
+    let ans = vec![0.0];
+    let r = (res[0] - ans[0]).abs() < std::f64::EPSILON;
     assert!(r);
 }
 
@@ -156,6 +161,24 @@ fn stateful_closure() {
         22.099999999999998,
         22.400000000000002,
         22.7,
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn hof_state() {
+    let res = run_file_test("hof_state.mmm", 10).unwrap();
+    let ans = vec![
+        0.0,
+        0.6000000000000001,
+        1.2000000000000002,
+        1.8000000000000003,
+        2.4000000000000004,
+        3.0,
+        3.5999999999999996,
+        4.199999999999999,
+        4.8,
+        5.3999999999999995,
     ];
     assert_eq!(res, ans);
 }
