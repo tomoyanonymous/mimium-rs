@@ -78,6 +78,14 @@ impl Context {
             (intrinsics::SIN, 1) => Instruction::SinF(args[0].clone()),
             (intrinsics::COS, 1) => Instruction::CosF(args[0].clone()),
             (intrinsics::LOG, 2) => Instruction::LogF(args[0].clone(), args[1].clone()),
+            (intrinsics::GT, 2) => Instruction::Gt(args[0].clone(), args[1].clone()),
+            (intrinsics::GE, 2) => Instruction::Ge(args[0].clone(), args[1].clone()),
+            (intrinsics::LT, 2) => Instruction::Lt(args[0].clone(), args[1].clone()),
+            (intrinsics::LE, 2) => Instruction::Le(args[0].clone(), args[1].clone()),
+            (intrinsics::EQ, 2) => Instruction::Eq(args[0].clone(), args[1].clone()),
+            (intrinsics::NE, 2) => Instruction::Ne(args[0].clone(), args[1].clone()),
+            (intrinsics::AND, 2) => Instruction::And(args[0].clone(), args[1].clone()),
+            (intrinsics::OR, 2) => Instruction::Or(args[0].clone(), args[1].clone()),
 
             _ => return None,
         };

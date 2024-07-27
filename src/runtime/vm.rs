@@ -127,6 +127,34 @@ macro_rules! binop {
     }
     };
 }
+macro_rules! binop_bool {
+    ($op:tt, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
+        let bres:bool =
+            Self::get_as::<f64>($self.get_stack($src1 as i64))
+        $op Self::get_as::<f64>($self.get_stack($src2 as i64));
+        let fres = if bres{
+            1.0f64
+        }else{
+            0.0f64
+        };
+        $self.set_stack($dst as i64,Self::to_value::<f64>(fres))
+    }
+    };
+}
+macro_rules! binop_bool_compose {//for and&or
+    ($op:tt, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
+        let bres:bool =
+            Self::get_as::<f64>($self.get_stack($src1 as i64))>0.0
+        $op Self::get_as::<f64>($self.get_stack($src2 as i64))>0.0;
+        let fres = if bres{ 1.0f64 }else{ 0.0f64 };
+        $self.set_stack($dst as i64,Self::to_value::<f64>(fres))
+    }
+    };
+}
 macro_rules! binopmethod {
     ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {{
         $self.set_stacktype($dst as i64, RawValType::Float);
@@ -145,6 +173,13 @@ macro_rules! uniop {
             Self::to_value::<$t>(
             $op Self::get_as::<$t>($self.get_stack($src as i64))))
     };
+}
+macro_rules! uniop_bool {
+    ($op:tt, $dst:expr,$src:expr,$self:ident) => {{
+        let bres: bool = $op(Self::get_as::<f64>($self.get_stack($src as i64)) > 0.0);
+        let fres = if bres { 1.0f64 } else { 0.0f64 };
+        $self.set_stack($dst as i64, Self::to_value::<f64>(fres))
+    }};
 }
 macro_rules! uniopmethod {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {{
@@ -445,98 +480,38 @@ impl Machine {
                         increment = offset;
                     }
                 }
-                Instruction::AddF(dst, src1, src2) => {
-                    binop!(+,f64,dst,src1,src2,self)
-                }
-                Instruction::SubF(dst, src1, src2) => {
-                    binop!(-,f64,dst,src1,src2,self)
-                }
-                Instruction::MulF(dst, src1, src2) => {
-                    binop!(*,f64,dst,src1,src2,self)
-                }
-                Instruction::DivF(dst, src1, src2) => {
-                    binop!(/,f64,dst,src1,src2,self)
-                }
-                Instruction::ModF(dst, src1, src2) => {
-                    binop!(%,f64,dst,src1,src2,self)
-                }
-                Instruction::NegF(dst, src) => {
-                    uniop!(-,f64,dst,src,self)
-                }
-                Instruction::AbsF(dst, src) => {
-                    uniopmethod!(abs, f64, dst, src, self)
-                }
-                Instruction::SqrtF(dst, src) => {
-                    uniopmethod!(sqrt, f64, dst, src, self)
-                }
-                Instruction::SinF(dst, src) => {
-                    uniopmethod!(sin, f64, dst, src, self)
-                }
-                Instruction::CosF(dst, src) => {
-                    uniopmethod!(cos, f64, dst, src, self)
-                }
-
+                Instruction::AddF(dst, src1, src2) => binop!(+,f64,dst,src1,src2,self),
+                Instruction::SubF(dst, src1, src2) => binop!(-,f64,dst,src1,src2,self),
+                Instruction::MulF(dst, src1, src2) => binop!(*,f64,dst,src1,src2,self),
+                Instruction::DivF(dst, src1, src2) => binop!(/,f64,dst,src1,src2,self),
+                Instruction::ModF(dst, src1, src2) => binop!(%,f64,dst,src1,src2,self),
+                Instruction::NegF(dst, src) => uniop!(-,f64,dst,src,self),
+                Instruction::AbsF(dst, src) => uniopmethod!(abs, f64, dst, src, self),
+                Instruction::SqrtF(dst, src) => uniopmethod!(sqrt, f64, dst, src, self),
+                Instruction::SinF(dst, src) => uniopmethod!(sin, f64, dst, src, self),
+                Instruction::CosF(dst, src) => uniopmethod!(cos, f64, dst, src, self),
                 Instruction::PowF(dst, src1, src2) => {
                     binopmethod!(powf, f64, dst, src1, src2, self)
                 }
-                Instruction::LogF(dst, src1, src2) => {
-                    binopmethod!(log, f64, dst, src1, src2, self)
-                }
-                Instruction::AddI(dst, src1, src2) => {
-                    binop!(+,i64,dst,src1,src2,self)
-                }
-                Instruction::SubI(dst, src1, src2) => {
-                    binop!(-,i64,dst,src1,src2,self)
-                }
-                Instruction::MulI(dst, src1, src2) => {
-                    binop!(*,i64,dst,src1,src2,self)
-                }
-                Instruction::DivI(dst, src1, src2) => {
-                    binop!(/,i64,dst,src1,src2,self)
-                }
-                Instruction::ModI(dst, src1, src2) => {
-                    binop!(%,i64,dst,src1,src2,self)
-                }
-                Instruction::NegI(dst, src) => {
-                    uniop!(-,i64,dst,src,self)
-                }
-                Instruction::AbsI(dst, src) => {
-                    uniopmethod!(abs, i64, dst, src, self)
-                }
-                Instruction::PowI(dst, lhs, rhs) => {
-                    binop!(^,i64,dst,lhs,rhs,self)
-                }
-                Instruction::LogI(_, _, _) => {
-                    //?
-                    todo!();
-                }
-                Instruction::Not(dst, src) => {
-                    uniop!(!, bool, dst, src, self)
-                }
-                Instruction::Eq(dst, src1, src2) => {
-                    binop!(==,bool,dst,src1,src2,self)
-                }
-                Instruction::Ne(dst, src1, src2) => {
-                    binop!(!=,bool,dst,src1,src2,self)
-                }
-                Instruction::Gt(dst, src1, src2) => {
-                    binop!(>,bool,dst,src1,src2,self)
-                }
-                Instruction::Ge(dst, src1, src2) => {
-                    binop!(>=,bool,dst,src1,src2,self)
-                }
-                Instruction::Lt(dst, src1, src2) => {
-                    binop!(<,bool,dst,src1,src2,self)
-                }
-                Instruction::Le(dst, src1, src2) => {
-                    binop!(<=,bool,dst,src1,src2,self)
-                }
-                Instruction::And(dst, src1, src2) => {
-                    binop!(&&,bool,dst,src1,src2,self)
-                }
-                Instruction::Or(dst, src1, src2) => {
-                    binop!(||,bool,dst,src1,src2,self)
-                }
+                Instruction::LogF(dst, src1, src2) => binopmethod!(log, f64, dst, src1, src2, self),
+                Instruction::AddI(dst, src1, src2) => binop!(+,i64,dst,src1,src2,self),
+                Instruction::SubI(dst, src1, src2) => binop!(-,i64,dst,src1,src2,self),
+                Instruction::MulI(dst, src1, src2) => binop!(*,i64,dst,src1,src2,self),
+                Instruction::DivI(dst, src1, src2) => binop!(/,i64,dst,src1,src2,self),
+                Instruction::ModI(dst, src1, src2) => binop!(%,i64,dst,src1,src2,self),
+                Instruction::NegI(dst, src) => uniop!(-,i64,dst,src,self),
+                Instruction::AbsI(dst, src) => uniopmethod!(abs, i64, dst, src, self),
+                Instruction::PowI(dst, lhs, rhs) => binop!(^,i64,dst,lhs,rhs,self),
+                Instruction::LogI(_, _, _) => todo!(),
+                Instruction::Not(dst, src) => uniop_bool!(!, dst, src, self),
+                Instruction::Eq(dst, src1, src2) => binop_bool!(==,dst,src1,src2,self),
+                Instruction::Ne(dst, src1, src2) => binop_bool!(!=,dst,src1,src2,self),
+                Instruction::Gt(dst, src1, src2) => binop_bool!(>,dst,src1,src2,self),
+                Instruction::Ge(dst, src1, src2) => binop_bool!(>=,dst,src1,src2,self),
+                Instruction::Lt(dst, src1, src2) => binop_bool!(<,dst,src1,src2,self),
+                Instruction::Le(dst, src1, src2) => binop_bool!(<=,dst,src1,src2,self),
+                Instruction::And(dst, src1, src2) => binop_bool_compose!(&&,dst,src1,src2,self),
+                Instruction::Or(dst, src1, src2) => binop_bool_compose!(||,dst,src1,src2,self),
                 Instruction::CastFtoI(dst, src) => self.set_stack(
                     dst as i64,
                     Self::to_value::<i64>(Self::get_as::<f64>(self.get_stack(src as i64)) as i64),

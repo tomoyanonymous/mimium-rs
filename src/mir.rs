@@ -98,8 +98,8 @@ pub enum Instruction {
     LogI(VPtr, VPtr),
     // primitive Operations for bool
     Not(VPtr),
-    Eq(VPtr),
-    Ne(VPtr),
+    Eq(VPtr,VPtr),
+    Ne(VPtr,VPtr),
     Gt(VPtr, VPtr),
     Ge(VPtr, VPtr),
     Lt(VPtr, VPtr),

@@ -67,6 +67,16 @@ fn loopcounter() {
 }
 
 #[test]
+fn primitive_sin() {
+    let res = run_file_test("primitive_sin.mmm", 1).unwrap();
+    let ans = vec![
+        0.0,
+    ];
+    let r =  (res[0] - ans[0]).abs() < std::f64::EPSILON;
+    assert!(r);
+}
+
+#[test]
 fn sinewave() {
     let res = run_file_test("sinwave.mmm", 10).unwrap();
     let ans = vec![

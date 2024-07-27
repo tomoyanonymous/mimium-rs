@@ -15,6 +15,14 @@ impl Default for VRegister {
         Self(vec![None; 256], 0)
     }
 }
+fn tostring_helper(vec: &[Option<Arc<mir::Value>>]) -> String {
+    vec[0..10].iter().fold("".to_string(), |s, a| {
+        format!(
+            "{s} {}",
+            a.clone().map_or("()".to_string(), |a| format!("{a}"))
+        )
+    })
+}
 
 impl VRegister {
     pub fn reset(&mut self) {
@@ -22,8 +30,8 @@ impl VRegister {
     }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
         println!(
-            "alloc reg:{v} {:?},{}",
-            self.0.as_slice()[0..10].to_vec(),
+            "alloc reg:{v} {},{}",
+            tostring_helper(self.0.as_slice()),
             self.1
         );
         self.0[self.1] = Some(v.clone());
@@ -40,13 +48,13 @@ impl VRegister {
             + self.1;
         self.0[pos] = Some(v.clone());
         println!(
-            "add  reg:{v} to {pos} {:?}",
-            self.0.as_slice()[0..10].to_vec()
+            "add  reg:{v} to {pos} {}",
+            tostring_helper(self.0.as_slice()),
         );
         pos as Reg
     }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        println!("find reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        println!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == *v,
@@ -64,8 +72,8 @@ impl VRegister {
         }
     }
     //find for load and store instruction
-    pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        println!("findkeep reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+    pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
+        println!("findkeep reg:{v} {}", tostring_helper(self.0.as_slice()),);
         self.0
             .iter()
             .position(|v1| match v1 {
@@ -75,7 +83,7 @@ impl VRegister {
             .map(|pos| pos as Reg)
     }
     pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        println!("findup reg:{v} {:?}", self.0.as_slice()[0..10].to_vec());
+        println!("findup reg:{v} {}", tostring_helper(self.0.as_slice()),);
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == v,
@@ -96,10 +104,10 @@ impl VStack {
     fn get_top(&mut self) -> &mut VRegister {
         self.0.last_mut().unwrap()
     }
-    fn get_parent(&mut self) -> &mut VRegister {
+    fn get_parent(&mut self) -> Option<&mut VRegister> {
         debug_assert!(self.0.len() >= 2);
         let idx = self.0.len() - 2;
-        self.0.get_mut(idx).unwrap()
+        self.0.get_mut(idx)
     }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
         self.get_top().push_stack(v)
@@ -141,15 +149,40 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 }
 
 impl ByteCodeGenerator {
-    fn get_binop(
-        &mut self,
-        _funcproto: &mut vm::FuncProto,
-        v1: &Arc<mir::Value>,
-        v2: &Arc<mir::Value>,
-    ) -> (Reg, Reg) {
+    fn get_binop(&mut self, v1: &Arc<mir::Value>, v2: &Arc<mir::Value>) -> (Reg, Reg) {
         let r1 = self.vregister.find(v1).unwrap();
         let r2 = self.vregister.find(v2).unwrap();
         (r1, r2)
+    }
+    fn emit_binop1<F>(
+        &mut self,
+        inst: F,
+        dst: &Arc<mir::Value>,
+        v1: &Arc<mir::Value>,
+    ) -> Option<VmInstruction>
+    where
+        F: FnOnce(Reg, Reg) -> VmInstruction,
+    {
+        let r1 = self.vregister.find(v1).unwrap();
+        let dst = self.get_destination(dst.clone());
+        let i = inst(dst, r1);
+        Some(i)
+    }
+    fn emit_binop2<F>(
+        &mut self,
+        inst: F,
+        dst: &Arc<mir::Value>,
+        v1: &Arc<mir::Value>,
+        v2: &Arc<mir::Value>,
+    ) -> Option<VmInstruction>
+    where
+        F: FnOnce(Reg, Reg, Reg) -> VmInstruction,
+    {
+        //the order matters! get destination later on arguments
+        let (r1, r2) = self.get_binop(v1, v2);
+        let dst = self.get_destination(dst.clone());
+        let i = inst(dst, r1, r2);
+        Some(i)
     }
     fn get_destination(&mut self, dst: Arc<mir::Value>) -> Reg {
         self.vregister.add_newvalue(&dst)
@@ -164,6 +197,15 @@ impl ByteCodeGenerator {
                 idx
             }
         }
+    }
+    fn find_upvalue(&self, upval: &Arc<mir::Value>) -> Reg {
+        let vstack = &self.vregister.0;
+        let res = vstack
+            .iter()
+            .rev()
+            .skip(1)
+            .find_map(|vreg| vreg.find_keep(upval));
+        res.expect("failed to find upvalue")
     }
     fn prepare_function(
         &mut self,
@@ -347,11 +389,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::GetUpValue(i) => {
                 let upval = &mirfunc.upindexes[*i as usize];
-                let parent = self.vregister.get_parent();
-                //todo:recursively find upvalue
-                let v = parent
-                    .find_upvalue(upval.clone())
-                    .expect("faild to find upvalue");
+                let v = self.find_upvalue(upval);
                 let ouv = mir::OpenUpValue(v as usize);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
@@ -365,10 +403,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::SetUpValue(i) => {
                 let upval = &mirfunc.upindexes[*i as usize];
-                let parent = self.vregister.get_parent();
-                let v = parent
-                    .find_upvalue(upval.clone())
-                    .expect("faild to find upvalue");
+                let v = self.find_upvalue(upval);
                 let ouv = mir::OpenUpValue(v as usize);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
@@ -452,62 +487,29 @@ impl ByteCodeGenerator {
                 funcproto.bytecodes.push(VmInstruction::SetState(new));
                 Some(VmInstruction::Return(old, 1))
             }
-            mir::Instruction::AddF(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::AddF(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::SubF(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::SubF(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::MulF(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::MulF(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::DivF(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::DivF(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::ModF(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::ModF(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::SinF(v1) => {
-                let src = self.vregister.find(v1).unwrap();
-                Some(VmInstruction::SinF(self.get_destination(dst), src))
-            }
-            mir::Instruction::CosF(v1) => {
-                let src = self.vregister.find(v1).unwrap();
-                Some(VmInstruction::CosF(self.get_destination(dst), src))
-            }
-            mir::Instruction::AbsF(v1) => {
-                let src = self.vregister.find(v1).unwrap();
-                Some(VmInstruction::AbsF(self.get_destination(dst), src))
-            }
-            mir::Instruction::SqrtF(v1) => {
-                let src = self.vregister.find(v1).unwrap();
-                Some(VmInstruction::SqrtF(self.get_destination(dst), src))
-            }
-            mir::Instruction::AddI(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::AddI(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::SubI(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::SubI(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::MulI(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::MulI(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::DivI(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::DivI(self.get_destination(dst), r1, r2))
-            }
-            mir::Instruction::ModI(v1, v2) => {
-                let (r1, r2) = self.get_binop(funcproto, v1, v2);
-                Some(VmInstruction::ModI(self.get_destination(dst), r1, r2))
-            }
+            mir::Instruction::AddF(v1, v2) => self.emit_binop2(VmInstruction::AddF, &dst, v1, v2),
+            mir::Instruction::SubF(v1, v2) => self.emit_binop2(VmInstruction::SubF, &dst, v1, v2),
+            mir::Instruction::MulF(v1, v2) => self.emit_binop2(VmInstruction::MulF, &dst, v1, v2),
+            mir::Instruction::DivF(v1, v2) => self.emit_binop2(VmInstruction::DivF, &dst, v1, v2),
+            mir::Instruction::ModF(v1, v2) => self.emit_binop2(VmInstruction::ModF, &dst, v1, v2),
+            mir::Instruction::SinF(v1) => self.emit_binop1(VmInstruction::SinF, &dst, v1),
+            mir::Instruction::CosF(v1) => self.emit_binop1(VmInstruction::CosF, &dst, v1),
+            mir::Instruction::AbsF(v1) => self.emit_binop1(VmInstruction::AbsF, &dst, v1),
+            mir::Instruction::SqrtF(v1) => self.emit_binop1(VmInstruction::SqrtF, &dst, v1),
+            mir::Instruction::AddI(v1, v2) => self.emit_binop2(VmInstruction::AddI, &dst, v1, v2),
+            mir::Instruction::SubI(v1, v2) => self.emit_binop2(VmInstruction::SubI, &dst, v1, v2),
+            mir::Instruction::MulI(v1, v2) => self.emit_binop2(VmInstruction::MulI, &dst, v1, v2),
+            mir::Instruction::DivI(v1, v2) => self.emit_binop2(VmInstruction::DivI, &dst, v1, v2),
+            mir::Instruction::ModI(v1, v2) => self.emit_binop2(VmInstruction::ModI, &dst, v1, v2),
+            mir::Instruction::Gt(v1, v2) => self.emit_binop2(VmInstruction::Gt, &dst, v1, v2),
+            mir::Instruction::Ge(v1, v2) => self.emit_binop2(VmInstruction::Ge, &dst, v1, v2),
+            mir::Instruction::Lt(v1, v2) => self.emit_binop2(VmInstruction::Lt, &dst, v1, v2),
+            mir::Instruction::Le(v1, v2) => self.emit_binop2(VmInstruction::Le, &dst, v1, v2),
+            mir::Instruction::Eq(v1, v2) => self.emit_binop2(VmInstruction::Eq, &dst, v1, v2),
+            mir::Instruction::Ne(v1, v2) => self.emit_binop2(VmInstruction::Ne, &dst, v1, v2),
+            mir::Instruction::And(v1, v2) => self.emit_binop2(VmInstruction::And, &dst, v1, v2),
+            mir::Instruction::Or(v1, v2) => self.emit_binop2(VmInstruction::Or, &dst, v1, v2),
+
             _ => {
                 unimplemented!()
             }
