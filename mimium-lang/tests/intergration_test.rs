@@ -1,13 +1,9 @@
-extern crate mimium_rs;
+extern crate mimium_lang;
 use std::path::PathBuf;
 
-use mimium_rs::{
-    compiler,
-    runtime::{self, run_source_test, vm},
-    utils::{
-        error::{report, ReportableError},
-        fileloader,
-    },
+use mimium_lang::{
+    runtime::run_source_test,
+    utils::{error::report, fileloader},
 };
 
 fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {

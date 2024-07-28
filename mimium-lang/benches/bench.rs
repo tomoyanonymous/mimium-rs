@@ -8,8 +8,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mimium_rs::ast_interpreter::{eval_ast, Context};
-    use mimium_rs::compiler::emit_ast;
+    use mimium_lang::ast_interpreter::{eval_ast, Context};
+    use mimium_lang::compiler::emit_ast;
     use test::Bencher;
 
     #[bench]

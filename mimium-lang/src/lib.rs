@@ -12,6 +12,7 @@ pub mod utils;
 
 pub mod compiler;
 pub mod runtime;
+pub mod audio;
 
 pub mod ast_interpreter;
 pub mod mir_interpreter;

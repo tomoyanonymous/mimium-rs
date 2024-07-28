@@ -1,11 +1,11 @@
 // pub mod wcalculus;
 use clap::Parser;
 
-use mimium_rs::compiler::{emit_ast, emit_bytecode};
-use mimium_rs::utils::error::ReportableError;
-use mimium_rs::utils::miniprint::MiniPrint;
-use mimium_rs::utils::{error::report, fileloader};
-use mimium_rs::{compiler::emit_mir, repl, runtime,compiler::mirgen::selfconvert};
+use mimium_lang::compiler::{emit_ast, emit_bytecode};
+use mimium_lang::utils::error::ReportableError;
+use mimium_lang::utils::miniprint::MiniPrint;
+use mimium_lang::utils::{error::report, fileloader};
+use mimium_lang::{compiler::emit_mir, repl, runtime,compiler::mirgen::selfconvert};
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
