@@ -60,7 +60,7 @@ macro_rules! lambda {
             Expr::Lambda(
                 $args
                     .iter()
-                    .map(|a:&&'static str| {
+                    .map(|a: &&'static str| {
                         WithMeta(
                             crate::types::TypedId {
                                 ty: None,

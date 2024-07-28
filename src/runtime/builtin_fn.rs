@@ -115,10 +115,17 @@ mod intrinsic {
         pub fn print(x: f64) {
             print!("{x}");
         }
+        pub fn probe(x: f64) -> f64 {
+            print!("{x}");
+            x
+        }
         pub fn println(x: f64) {
             println!("{x}");
         }
-
+        pub fn probeln(x: f64) -> f64 {
+            println!("{x}");
+            x
+        }
         pub fn add(x: f64, y: f64) -> f64 {
             x + y
         }
@@ -215,7 +222,7 @@ macro_rules! f2_f {
     };
 }
 
-pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 45]> = LazyCell::new(|| {
+pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 47]> = LazyCell::new(|| {
     [
         i_i!(not),
         i_i!(abs),
@@ -277,6 +284,16 @@ pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 45]> = LazyCell::new(|| {
             "println",
             function!(vec![numeric!()], unit!()),
             intrinsic::numeric::println as *const (),
+        ),
+        (
+            "probe",
+            function!(vec![numeric!()], numeric!()),
+            intrinsic::numeric::probe as *const (),
+        ),
+        (
+            "probeln",
+            function!(vec![numeric!()], numeric!()),
+            intrinsic::numeric::probeln as *const (),
         ),
     ]
 });

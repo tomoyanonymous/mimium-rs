@@ -22,7 +22,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error{}
+impl std::error::Error for Error {}
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {

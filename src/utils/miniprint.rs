@@ -14,7 +14,7 @@ pub trait MiniPrint {
                 ')' => {
                     level -= 1;
                 }
-                ' ' =>{
+                ' ' => {
                     res.push('\n');
                     for _i in 0..level {
                         res.push_str(indent);
@@ -22,7 +22,7 @@ pub trait MiniPrint {
                 }
                 _ => {}
             }
-      
+
             res.push(c);
         }
         res

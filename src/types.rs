@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::format_vec;
+
 use super::utils::miniprint::MiniPrint;
 
 /// Basic types that are not boxed.
@@ -41,6 +43,12 @@ impl Type {
             true
         } else {
             false
+        }
+    }
+    pub fn is_function(&self) -> bool {
+        match self {
+            Type::Function(_, _, _) => true,
+            _ => false,
         }
     }
     pub fn apply_fn<F>(&self, closure: F) -> Self
@@ -86,15 +94,20 @@ impl fmt::Display for Type {
         match self {
             Type::Primitive(p) => write!(f, "{p}"),
             Type::Array(a) => write!(f, "[{a}]"),
-            Type::Tuple(v) => write!(f, "({v:?})"),
-            Type::Struct(s) => write!(f, "{{{s:?}}}"),
-            Type::Function(p, r, s) => {
-                write!(f, "({:?})->", p)?;
-                write!(f, "{:?}[{:?}]", r, s)
+            Type::Tuple(v) => {
+                let vf = format_vec!(v);
+                write!(f, "{vf}")
             }
-            Type::Ref(x) => write!(f, "&{:?}", x),
+            Type::Struct(v) => {
+                write!(f, "{v:?}")
+            }
+            Type::Function(p, r, _s) => {
+                let args = format_vec!(p);
+                write!(f, "({args})->{r}")
+            }
+            Type::Ref(x) => write!(f, "&{x}"),
 
-            Type::Code(c) => write!(f, "<{:?}>", c),
+            Type::Code(c) => write!(f, "<{c}>"),
             Type::Intermediate(id) => {
                 write!(f, "intermediate[{}]", id,)
             }
@@ -106,7 +119,7 @@ impl fmt::Display for Type {
 impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
         match &self.ty {
-            Some(t) => format!("(tid {} {:#?})", self.id, t), //todo:type
+            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
             None => self.id.clone(),
         }
     }

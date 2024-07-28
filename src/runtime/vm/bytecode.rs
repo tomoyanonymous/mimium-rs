@@ -1,8 +1,10 @@
 pub type Reg = u8; // register position
-pub type ConstPos = u8;
+pub type ConstPos = u16;
+pub type GlobalPos = u16;
 pub type Offset = i16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+// #[repr(C)]
 pub enum Instruction {
     // Destination / Source
     Move(Reg, Reg),
@@ -19,15 +21,19 @@ pub enum Instruction {
     // Function Address,Nargs,Nret
     CallExtCls(Reg, u8, u8),
     // destination, index of inner function prototype in global function table.
-    Closure(Reg, ConstPos),
+    Closure(Reg, Reg),
 
     //destination,source
     GetUpValue(Reg, Reg),
     SetUpValue(Reg, Reg),
+
+    //destination,source
+    GetGlobal(Reg, GlobalPos),
+    SetGlobal(GlobalPos, Reg),
     //call internal state over time, destination,source
     GetState(Reg),
     SetState(Reg),
-    ShiftStatePos(i16),
+    ShiftStatePos(Offset),
 
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
@@ -78,6 +84,7 @@ pub enum Instruction {
     CastFtoI(Reg, Reg),
     CastItoF(Reg, Reg),
     CastItoB(Reg, Reg),
+    Dummy,
 }
 
 impl std::fmt::Display for Instruction {
@@ -98,7 +105,9 @@ impl std::fmt::Display for Instruction {
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
-            Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpif", dst, cond),
+            Instruction::GetGlobal(dst, src) => write!(f, "{:<10} {} {}", "getglobal", dst, src),
+            Instruction::SetGlobal(dst, src) => write!(f, "{:<10} {} {}", "setglobal", dst, src),
+            Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpifneg", dst, cond),
             Instruction::AbsF(dst, src) => write!(f, "{:<10} {} {}", "absf", dst, src),
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),
             Instruction::SinF(dst, src) => write!(f, "{:<10} {} {}", "sin", dst, src),
@@ -146,6 +155,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Le(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "lt", dst, lhs, rhs),
             Instruction::And(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "and", dst, lhs, rhs),
             Instruction::Or(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "or", dst, lhs, rhs),
+            Instruction::Dummy => write!(f, "dummy"),
         }
     }
 }
@@ -154,5 +164,5 @@ impl std::fmt::Display for Instruction {
 #[test]
 fn ensure_bytecode_size() {
     let size = std::mem::size_of::<Instruction>();
-    assert!(size == 8 || size == 4);
+    assert_eq!(4, size);
 }

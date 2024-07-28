@@ -291,6 +291,18 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
             .then(stmt.clone().map(|e| Box::new(e)).or_not())
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
+                let atypes = ids
+                    .iter()
+                    .map(|WithMeta(TypedId { ty, id: _ }, _)| ty.clone().unwrap_or(Type::Unknown))
+                    .collect::<Vec<_>>();
+                let fname = TypedId {
+                    ty: Some(Type::Function(
+                        atypes,
+                        Box::new(r_type.clone().unwrap_or(Type::Unknown)),
+                        None,
+                    )),
+                    id: fname.id.clone(),
+                };
                 WithMeta(
                     Expr::LetRec(
                         fname,
@@ -305,7 +317,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             })
             .labelled("function decl");
         let macro_s = just(Token::Macro)
-            .ignore_then(lvar)
+            .ignore_then(lvar.clone())
             .then(fnparams.clone())
             .then(
                 expr.clone()
@@ -329,8 +341,18 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 )
             })
             .labelled("macro definition");
-
-        function_s.or(macro_s).or(expr_parser())
+        let let_stmt = just(Token::Let)
+            .ignore_then(lvar.clone())
+            .then_ignore(just(Token::Assign))
+            .then(expr.clone())
+            .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+            .then(stmt.clone().map(|e| Box::new(e)).or_not())
+            .map_with_span(|((ident, body), then), span| {
+                WithMeta(Expr::Let(ident, Box::new(body), then), span)
+            })
+            .boxed()
+            .labelled("let_stmt");
+        function_s.or(macro_s).or(let_stmt).or(expr_parser())
     });
     stmt
     // expr_parser().then_ignore(end())
@@ -341,7 +363,21 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
         .padded_by(comment_parser().repeated().ignored())
         .then_ignore(end())
 }
-
+pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
+    let WithMeta(_, ref span) = ast;
+    let res = Expr::Let(
+        TypedId {
+            ty: None,
+            id: GLOBAL_LABEL.to_string(),
+        },
+        Box::new(WithMeta(
+            Expr::Lambda(vec![], None, Box::new(ast.clone())),
+            span.clone(),
+        )),
+        None,
+    );
+    WithMeta(res, span.clone())
+}
 pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();

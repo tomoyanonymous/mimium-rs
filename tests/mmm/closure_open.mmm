@@ -1,0 +1,6 @@
+fn dsp(){
+    let x = probeln(9.0)
+    let f = | | { x - 5.0 }
+    f()
+}
+

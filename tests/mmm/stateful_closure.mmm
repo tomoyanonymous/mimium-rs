@@ -1,0 +1,13 @@
+fn mycount(rate){
+ self+ rate*0.1
+}
+
+fn hof(counter:()->(float)->float){
+  let c1 = counter();
+  let c2 = counter();
+ |x| {x + c1(1.0) + c2(2.0)}
+}
+let myfilter = hof(| |mycount)
+fn dsp(){
+  myfilter(20.0)
+}

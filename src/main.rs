@@ -1,11 +1,11 @@
 // pub mod wcalculus;
 use clap::Parser;
 
-use mimium_rs::ast_interpreter;
 use mimium_rs::compiler::{emit_ast, emit_bytecode};
+use mimium_rs::utils::error::ReportableError;
 use mimium_rs::utils::miniprint::MiniPrint;
 use mimium_rs::utils::{error::report, fileloader};
-use mimium_rs::{compiler::emit_mir, repl, runtime};
+use mimium_rs::{compiler::emit_mir, repl, runtime,compiler::mirgen::selfconvert};
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -23,14 +23,18 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let mut global_ctx = ast_interpreter::Context::new();
     match args.file {
         Some(file) => {
             let (content, fullpath) = fileloader::load(file.clone())?;
             if args.emit_ast {
                 println!("Filename: {}", fullpath.display());
+                let ast = emit_ast(&content.clone()).unwrap();
+                let expr2 = selfconvert::convert_self_top(ast).map_err(|e| {
+                    let eb: Box<dyn ReportableError> = Box::new(e);
+                    eb
+                }).unwrap();
                 match emit_ast(&content.clone()) {
-                    Ok(ast) => println!("{}", ast.0.simple_print()),
+                    Ok(ast) => println!("{}", expr2.0.pretty_print()),
                     Err(e) => {
                         report(&content, fullpath, &e);
                     }
@@ -53,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 println!("Filename: {}", fullpath.display());
-                match runtime::run_source_test(&content.clone()) {
+                match runtime::run_source_test(&content.clone(),10) {
                     Ok(v) => {
                         println!("Filename: {}", fullpath.display());
                         println!("Value:\n{:?}", v);

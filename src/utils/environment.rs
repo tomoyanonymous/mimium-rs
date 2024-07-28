@@ -9,15 +9,13 @@ pub struct Error(String);
 #[derive(Clone, Debug, PartialEq)]
 pub enum LookupRes<T: Clone> {
     Local(T),
-    UpValue(T),
+    UpValue(usize, T),
     Global(T),
     None,
 }
 impl<T: Clone> Environment<T> {
     pub fn new() -> Self {
-        let mut res = Self(EnvInner::new());
-        res.extend();
-        res
+        Self(EnvInner::new())
     }
     pub fn is_global(&self) -> bool {
         self.0.len() <= 1
@@ -33,26 +31,26 @@ impl<T: Clone> Environment<T> {
         self.0.front_mut().unwrap().append(binds);
     }
 
-    pub fn lookup(&self, name: &String) -> Option<&T> {
-        self.0
-            .iter()
-            .find(|vec| vec.iter().find(|(n, _)| n == name).is_some())
-            .map(|vec| vec.iter().find(|(n, _)| n == name).map(|(_, v)| v))
-            .flatten()
-    }
-    pub fn lookup_cls(&self, name: &String) -> LookupRes<&T> {
+    pub fn lookup_cls(&self, name: &str) -> LookupRes<&T> {
         match self
             .0
             .iter()
             .enumerate()
-            .find(|(level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
+            .find(|(_level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
             .map(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
             .flatten()
         {
             None => LookupRes::None,
+            Some((level, e)) if level >= self.0.len() - 1 => LookupRes::Global(e),
+            Some((0, e)) if self.0.len() <= 1 => LookupRes::Global(e),
             Some((0, e)) => LookupRes::Local(e),
-            Some((level, e)) if level == self.0.len() - 1 => LookupRes::Global(e),
-            Some((_level, e)) => LookupRes::UpValue(e),
+            Some((level, e)) => LookupRes::UpValue(level, e),
+        }
+    }
+    pub fn lookup(&self, name: &str) -> Option<&T> {
+        match self.lookup_cls(name) {
+            LookupRes::None => None,
+            LookupRes::Global(e) | LookupRes::Local(e) | LookupRes::UpValue(_, e) => Some(e),
         }
     }
 }

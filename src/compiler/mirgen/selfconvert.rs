@@ -9,6 +9,14 @@ use std::fmt;
 pub enum Error {
     NoParentSelf(Span),
 }
+
+type ConvertResult = Result<WithMeta<Expr>, WithMeta<Expr>>;
+fn get_content(e: ConvertResult) -> WithMeta<Expr> {
+    match e {
+        Ok(e) | Err(e) => e.clone(),
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -25,42 +33,7 @@ impl ReportableError for Error {
     }
 }
 
-fn convert_literal(e: Literal) -> bool {
-    match e {
-        Literal::SelfLit => true,
-        _ => false,
-    }
-}
 
-fn try_find_self(e: Expr) -> bool {
-    match e {
-        Expr::Literal(l) => convert_literal(l),
-        Expr::Let(_id, body, then) => {
-            try_find_self(body.0) || then.map_or(false, |e| try_find_self(e.0))
-        }
-        Expr::LetRec(_id, body, then) => {
-            //todo: detect self in recursive function in same stage
-            try_find_self(body.0) || then.map_or(false, |e| try_find_self(e.0))
-        }
-        Expr::Lambda(_ids, _, _body) => {
-            // convert_self(body)
-            false
-        }
-        Expr::Proj(body, _idx) => try_find_self(body.0),
-        Expr::Block(body) => body.map_or(false, |b| try_find_self(b.0)),
-        Expr::Apply(fun, callee) => {
-            try_find_self(fun.0) || callee.into_iter().any(|v| try_find_self(v.0))
-        }
-        Expr::Tuple(vec) => vec.into_iter().any(|v| try_find_self(v.0)),
-        Expr::If(cond, then, opt_else) => {
-            try_find_self(cond.0)
-                || try_find_self(then.0)
-                || opt_else.map_or(false, |e| try_find_self(e.0))
-        }
-        Expr::Feed(_x, _body) => panic!("feed should not be shown in self_conversion process"),
-        _ => false,
-    }
-}
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FeedId {
     Global,
@@ -78,60 +51,129 @@ fn get_feedvar_name(fid: i64) -> String {
     //todo:need to assign true unique name
     format!("feed_id{}", fid)
 }
-fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<WithMeta<Expr>, Error> {
-    let cls = |e: WithMeta<Expr>| -> Result<WithMeta<Expr>, Error> { convert_self(e, feedctx) };
-    let opt_cls =
-        |opt_e: Option<Box<WithMeta<Expr>>>| -> Result<Option<Box<WithMeta<Expr>>>, Error> {
-            Ok(opt_e.map(|t| cls(*t)).transpose()?.map(|e| Box::new(e)))
-        };
+
+fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, Error> {
+    let cls = |e: WithMeta<Expr>| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
+    let opt_cls = |opt_e: Option<Box<WithMeta<Expr>>>| -> Result<Option<ConvertResult>, Error> {
+        Ok(opt_e.map(|t| cls(*t)).transpose()?)
+    };
     let WithMeta(e, span) = expr.clone();
-    let new_e_res = match e.clone() {
+    match e.clone() {
         Expr::Literal(Literal::SelfLit) => match feedctx {
             FeedId::Global => Err(Error::NoParentSelf(span.clone())),
-            FeedId::Local(i) => Ok(Expr::Var(get_feedvar_name(i), None)),
+            FeedId::Local(i) => Ok(ConvertResult::Err(WithMeta(
+                Expr::Var(get_feedvar_name(i), None),
+                span.clone(),
+            ))),
         },
-        Expr::Tuple(v) => Ok(Expr::Tuple(v.into_iter().map(|e| cls(e)).try_collect()?)),
+        Expr::Tuple(v) => {
+            let elems: Vec<ConvertResult> = v.into_iter().map(|e| cls(e)).try_collect()?;
+            let elems_mapped: Vec<WithMeta<Expr>> =
+                elems.iter().map(|e| get_content(e.clone())).collect();
+            if elems.iter().find(|e| e.is_err()).is_some() {
+                Ok(ConvertResult::Err(WithMeta(
+                    Expr::Tuple(elems_mapped),
+                    span,
+                )))
+            } else {
+                Ok(ConvertResult::Ok(WithMeta(Expr::Tuple(elems_mapped), span)))
+            }
+        }
 
-        Expr::Proj(e, idx) => Ok(Expr::Proj(Box::new(cls(*e)?), idx)),
-        Expr::Let(id, body, then) => Ok(Expr::Let(id, Box::new(cls(*body)?), opt_cls(then)?)),
-        Expr::LetRec(id, body, then) => Ok(Expr::LetRec(id, Box::new(cls(*body)?), opt_cls(then)?)),
+        Expr::Proj(e, idx) => {
+            let elem = cls(*e)?;
+            Ok(elem.map(|e| (WithMeta(Expr::Proj(Box::new(e), idx), span))))
+        }
+        Expr::Let(id, body, then) => {
+            let body = cls(*body)?;
+            let then = opt_cls(then)?;
+            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
+                Ok(ConvertResult::Ok(WithMeta(
+                    Expr::Let(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
+                    span,
+                )))
+            } else {
+                Ok(ConvertResult::Err(expr.clone()))
+            }
+        }
+        Expr::LetRec(id, body, then) => {
+            let body = cls(*body)?;
+            let then = opt_cls(then)?;
+            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
+                Ok(ConvertResult::Ok(WithMeta(
+                    Expr::LetRec(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
+                    span,
+                )))
+            } else {
+                Ok(ConvertResult::Err(expr.clone()))
+            }
+        }
 
         Expr::Lambda(params, r_type, body) => {
             let nfctx = get_new_feedid(feedctx);
-            let feedid = get_feedvar_name(nfctx);
-            if try_find_self(body.clone().0) {
-                let nbody = convert_self(*body, FeedId::Local(nfctx))?;
-                // the conversion must be lambda(x).feed(self).e , not feed(self).lambda(x).e
-                Ok(Expr::Lambda(
-                    params,
-                    r_type,
-                    WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone()).into(),
-                ))
+            let nbody = match convert_self(*body, FeedId::Local(nfctx))? {
+                ConvertResult::Err(nbody) => {
+                    let feedid = get_feedvar_name(nfctx);
+                    WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone())
+                }
+                ConvertResult::Ok(nbody) => nbody.clone(),
+            };
+            Ok(ConvertResult::Ok(WithMeta(
+                Expr::Lambda(params, r_type, Box::new(nbody)),
+                span.clone(),
+            )))
+        }
+        Expr::Apply(fun, callee) => {
+            let fun = cls(*fun)?;
+            let elems: Vec<ConvertResult> = callee.into_iter().map(|e| cls(e)).try_collect()?;
+            let elems_mapped: Vec<WithMeta<Expr>> =
+                elems.iter().map(|e| get_content(e.clone())).collect();
+            let content = WithMeta(Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped), span);
+            if fun.is_ok() && elems.iter().find(|e| e.is_err()).is_none() {
+                Ok(ConvertResult::Ok(content))
             } else {
-                Ok(e.clone())
+                Ok(ConvertResult::Err(content))
             }
         }
-        Expr::Apply(fun, callee) => Ok(Expr::Apply(
-            Box::new(cls(*fun)?),
-            callee.into_iter().map(|e| cls(e)).try_collect()?,
-        )),
-        Expr::If(cond, then, opt_else) => Ok(Expr::If(
-            Box::new(cls(*cond)?),
-            Box::new(cls(*then)?),
-            opt_cls(opt_else)?,
-        )),
-        Expr::Block(body) => Ok(Expr::Block(opt_cls(body)?)),
+        Expr::If(cond, then, opt_else) => {
+            let cond = cls(*cond)?;
+            let then = cls(*then)?;
+            let opt_else = opt_cls(opt_else)?;
+            match (cond, then, opt_else.transpose()) {
+                (Ok(c), Ok(t), Ok(e)) => Ok(ConvertResult::Ok(WithMeta(
+                    Expr::If(Box::new(c), Box::new(t), e.map(|e| Box::new(e))),
+                    span,
+                ))),
+                (c, t, e) => {
+                    let e = match e {
+                        Ok(e) => e.map(|e| Box::new(e)),
+                        Err(e) => Some(Box::new(e)),
+                    };
+                    Ok(ConvertResult::Err(WithMeta(
+                        Expr::If(Box::new(get_content(c)), Box::new(get_content(t)), e),
+                        span,
+                    )))
+                }
+            }
+        }
+        Expr::Block(body) => {
+            if let Some(body) = body {
+                Ok(cls(*body)?.map(|e| WithMeta(Expr::Block(Some(Box::new(e))), span)))
+            } else {
+                Ok(ConvertResult::Ok(WithMeta(Expr::Block(None), span)))
+            }
+        }
         Expr::Feed(_, _) => panic!(
             "Feed should not be shown before conversion at {}..{}",
             span.start, span.end
         ),
-        _ => Ok(e.clone()),
-    };
-    new_e_res.map(|e| WithMeta(e, span))
+        _ => Ok(ConvertResult::Ok(expr.clone())),
+    }
 }
 
 pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
-    convert_self(expr, FeedId::Global)
+    let res = convert_self(expr, FeedId::Global)?;
+    Ok(get_content(res))
 }
 
 #[cfg(test)]
@@ -166,7 +208,8 @@ mod test {
             ),
             0..1,
         );
-        let WithMeta(res, _) = convert_self(src, FeedId::Global).unwrap();
+        let WithMeta(res, _) = convert_self_top(src).unwrap();
+
         let ans = Expr::Let(
             TypedId {
                 ty: None,

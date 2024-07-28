@@ -1,20 +1,13 @@
-use super::{Instruction, RawVal, Reg};
+use super::{Instruction, RawVal};
 use crate::mir;
 use crate::types::Type;
-use std::cell::RefCell;
-use std::rc::Rc;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum UpIndex {
-    Local(usize),   // index of local variables in upper functions
-    Upvalue(usize), // index of upvalues in upper functions
-}
+pub use mir::OpenUpValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FuncProto {
     pub nparam: usize,
     pub nret: usize,
-    pub upindexes: Vec<UpIndex>,
+    pub upindexes: Vec<OpenUpValue>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
     // feedvalues are mapped in this vector
@@ -55,21 +48,12 @@ impl From<&mir::Function> for FuncProto {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum UpValue {
-    Open(Reg),
-    Closed(RawVal),
-}
-pub(crate) struct Closure {
-    pub fn_proto_pos: usize, //position of function prototype in global_ftable
-    pub upvalues: Vec<Rc<RefCell<UpValue>>>,
-}
-
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
     pub global_fn_table: Vec<(String, FuncProto)>,
     pub ext_fun_table: Vec<(String, Type)>,
     pub ext_cls_table: Vec<(String, Type)>,
+    pub global_vals: Vec<RawVal>,
 }
 impl Program {
     pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
@@ -93,7 +77,18 @@ impl std::fmt::Display for Program {
                 let _ = write!(f, "  {}\n", inst);
             }
         }
-        let _ = write!(f, "ext_fun:\n{:?}\n", self.ext_fun_table);
-        write!(f, "ext_cls:\n{:?}", self.ext_cls_table)
+        let _ = write!(
+            f,
+            "ext_fun:\n{:?}\n",
+            self.ext_fun_table
+                .iter()
+                .fold("".to_string(), |s, (f, _)| if s.is_empty() {
+                    format!("{f}")
+                } else {
+                    format!("{s}, {f}")
+                })
+        );
+        let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
+        write!(f, "globals:\n{:?}", self.global_vals)
     }
 }

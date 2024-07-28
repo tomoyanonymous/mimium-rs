@@ -1,15 +1,107 @@
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc, sync::Mutex};
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+pub mod builtin;
 pub mod bytecode;
 pub mod program;
 use bytecode::*;
-use program::Closure;
-pub use program::{FuncProto, Program, UpIndex, UpValue};
 
+use program::OpenUpValue;
+pub use program::{FuncProto, Program};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
 pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
+
+#[derive(Debug, Default, PartialEq)]
+struct StateStorage {
+    pos: usize,
+    data: Vec<f64>,
+}
+impl StateStorage {
+    fn resize(&mut self, size: usize) {
+        self.data.resize(size, 0.0)
+    }
+    fn get(&self) -> f64 {
+        self.data[self.pos]
+    }
+    fn get_mut(&mut self) -> &mut f64 {
+        unsafe { self.data.get_unchecked_mut(self.pos) }
+    }
+    fn shift_pos(&mut self, offset: i16) {
+        self.pos = (self.pos as i64 + offset as i64) as usize;
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ClosureIdx(pub u64);
+
+#[derive(Clone, Default)]
+struct StateStorageStack(Vec<ClosureIdx>);
+
+impl StateStorageStack {
+    pub fn push(&mut self, i: ClosureIdx) {
+        self.0.push(i)
+    }
+    pub fn pop(&mut self) {
+        let _ = self.0.pop();
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UpValue {
+    Open(OpenUpValue),
+    Closed(Rc<RefCell<RawVal>>),
+}
+impl From<OpenUpValue> for UpValue {
+    fn from(value: OpenUpValue) -> Self {
+        Self::Open(value)
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+//closure object dynamically allocated
+pub(crate) struct Closure {
+    pub fn_proto_pos: usize, //position of function prototype in global_ftable
+    pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
+    pub upvalues: Vec<UpValue>,
+    state_storage: StateStorage,
+}
+impl Closure {
+    pub fn new(program: &Program, base_ptr: u64, fn_i: usize) -> Self {
+        let fnproto = &program.global_fn_table[fn_i].1;
+        let upvalues = fnproto
+            .upindexes
+            .iter()
+            .map(|i| UpValue::Open(*i))
+            .collect::<Vec<_>>();
+        let mut state_storage = StateStorage::default();
+        state_storage.resize(fnproto.state_size as usize);
+        Self {
+            fn_proto_pos: fn_i,
+            upvalues,
+            base_ptr,
+            state_storage,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RawValType {
+    Float,
+    Int,
+    UInt,
+}
+impl Default for RawValType {
+    fn default() -> Self {
+        RawValType::Int
+    }
+}
 
 pub struct Machine {
     stack: Vec<RawVal>,
@@ -19,19 +111,53 @@ pub struct Machine {
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(String, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
-    internal_states: Vec<f64>,
-    state_idx: usize,
+    global_states: StateStorage,
+    states_stack: StateStorageStack,
+    global_vals: Vec<RawVal>,
+    debug_stacktype: Vec<RawValType>,
 }
 
 macro_rules! binop {
     ($op:tt,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
         $self.set_stack($dst as i64, Self::to_value::<$t>(
             Self::get_as::<$t>($self.get_stack($src1 as i64))
         $op Self::get_as::<$t>($self.get_stack($src2 as i64))))
+    }
+    };
+}
+macro_rules! binop_bool {
+    ($op:tt, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
+        let bres:bool =
+            Self::get_as::<f64>($self.get_stack($src1 as i64))
+        $op Self::get_as::<f64>($self.get_stack($src2 as i64));
+        let fres = if bres{
+            1.0f64
+        }else{
+            0.0f64
+        };
+        $self.set_stack($dst as i64,Self::to_value::<f64>(fres))
+    }
+    };
+}
+macro_rules! binop_bool_compose {//for and&or
+    ($op:tt, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+        {
+        $self.set_stacktype($dst as i64, RawValType::Float);
+        let bres:bool =
+            Self::get_as::<f64>($self.get_stack($src1 as i64))>0.0
+        $op Self::get_as::<f64>($self.get_stack($src2 as i64))>0.0;
+        let fres = if bres{ 1.0f64 }else{ 0.0f64 };
+        $self.set_stack($dst as i64,Self::to_value::<f64>(fres))
+    }
     };
 }
 macro_rules! binopmethod {
-    ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {
+    ($op:ident,$t:ty, $dst:expr,$src1:expr,$src2:expr,$self:ident) => {{
+        $self.set_stacktype($dst as i64, RawValType::Float);
         $self.set_stack(
             $dst as i64,
             Self::to_value::<$t>(
@@ -39,7 +165,7 @@ macro_rules! binopmethod {
                     .$op(Self::get_as::<$t>($self.get_stack($src2 as i64))),
             ),
         )
-    };
+    }};
 }
 macro_rules! uniop {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {
@@ -47,6 +173,13 @@ macro_rules! uniop {
             Self::to_value::<$t>(
             $op Self::get_as::<$t>($self.get_stack($src as i64))))
     };
+}
+macro_rules! uniop_bool {
+    ($op:tt, $dst:expr,$src:expr,$self:ident) => {{
+        let bres: bool = $op(Self::get_as::<f64>($self.get_stack($src as i64)) > 0.0);
+        let fres = if bres { 1.0f64 } else { 0.0f64 };
+        $self.set_stack($dst as i64, Self::to_value::<f64>(fres))
+    }};
 }
 macro_rules! uniopmethod {
     ($op:tt,$t:ty, $dst:expr,$src:expr,$self:ident) => {{
@@ -57,36 +190,38 @@ macro_rules! uniopmethod {
     }};
 }
 
-fn set_vec(vec: &mut Vec<RawVal>, i: usize, value: RawVal) {
+fn set_vec<T>(vec: &mut Vec<T>, i: usize, value: T)
+where
+    T: Clone + std::default::Default,
+{
     match i.cmp(&vec.len()) {
         Ordering::Less => vec[i] = value,
         Ordering::Equal => vec.push(value),
         Ordering::Greater => {
-            vec.resize(i, 0u64);
+            vec.resize(i, T::default());
             vec.push(value);
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FeedState {
-    pub feed: Option<RawVal>,
-    pub delays: Vec<Vec<RawVal>>, //vector of ring buffer
-    pub calltree: Vec<FeedState>,
-}
-
 impl Machine {
     pub fn new() -> Self {
+        let ext_fun_table = builtin::BUILTIN_FNS
+            .iter()
+            .map(|(name, f, _t)| (name.to_string(), *f))
+            .collect::<Vec<_>>();
         Self {
             stack: vec![],
             base_pointer: 0,
             closures: vec![],
-            ext_fun_table: vec![],
+            ext_fun_table,
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
-            internal_states: vec![],
-            state_idx: 0,
+            global_states: Default::default(),
+            states_stack: Default::default(),
+            global_vals: vec![],
+            debug_stacktype: vec![RawValType::Int; 255],
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -100,16 +235,40 @@ impl Machine {
             v,
         );
     }
+    fn set_stacktype(&mut self, offset: i64, t: RawValType) {
+        set_vec(
+            &mut self.debug_stacktype,
+            (self.base_pointer as i64 + offset) as usize,
+            t,
+        );
+    }
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
     }
-    fn return_general(
-        &mut self,
-        iret: Reg,
-        nret: Reg,
-        local_upvalues: &mut Vec<Rc<RefCell<UpValue>>>,
-    ) -> &[u64] {
-        self.close_upvalues(local_upvalues);
+    fn get_upvalue_offset(upper_base: usize, offset: OpenUpValue) -> usize {
+        upper_base + offset.0
+    }
+    pub fn get_open_upvalue(&self, upper_base: usize, offset: OpenUpValue) -> RawVal {
+        println!("upper base:{}, upvalue:{}", upper_base, offset.0);
+        let abs_pos = Self::get_upvalue_offset(upper_base, offset);
+        self.stack[abs_pos]
+    }
+
+    fn get_current_state(&mut self) -> &mut StateStorage {
+        if self.states_stack.0.is_empty() {
+            &mut self.global_states
+        } else {
+            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked().0 as usize };
+            &mut self.closures[idx].state_storage
+        }
+    }
+    fn get_local_closure(&self, clsidx: ClosureIdx) -> &Closure {
+        &self.closures[clsidx.0 as usize]
+    }
+    fn get_local_closure_mut(&mut self, clsidx: ClosureIdx) -> &mut Closure {
+        &mut self.closures[clsidx.0 as usize]
+    }
+    fn return_general(&mut self, iret: Reg, nret: Reg) -> &[u64] {
         let base = self.base_pointer as usize;
         let iret_abs = base + iret as usize;
         self.stack
@@ -125,37 +284,63 @@ impl Machine {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
     pub(crate) fn to_value<T>(v: T) -> RawVal {
+        assert_eq!(std::mem::size_of::<T>(), 8);
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
-    fn call_function<F>(&mut self, func_pos: u8, _nargs: u8, nret_req: u8, mut action: F)
+    fn call_function<F>(
+        &mut self,
+        func_pos: u8,
+        _nargs: u8,
+        nret_req: u8,
+        mut action: F,
+    ) -> ReturnCode
     where
         F: FnMut(&mut Self) -> ReturnCode,
     {
         let offset = (func_pos + 1) as u64;
 
         self.base_pointer += offset;
-        let nret = action(self) as u8;
+        let nret = action(self);
 
-        if nret_req > nret {
+        if nret_req > nret as u8 {
             panic!("invalid number of return value required.");
         }
         // shrink stack so as to match with number of return values
         self.stack
             .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
+        nret
     }
-    fn close_upvalues(&self, broker: &mut Vec<Rc<RefCell<UpValue>>>) {
-        for v in broker.iter_mut() {
-            let mut v = v.borrow_mut();
-            if let UpValue::Open(i) = *v {
-                *v = UpValue::Closed(self.get_stack(i.into()));
-            }
+    fn close_upvalues(&mut self, _iret: Reg, _nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
+        //todo! drop local closure which wont escape from local
+
+        for (_base_ptr_cls, clsidx) in local_closures.iter() {
+            let cls = self.get_local_closure(*clsidx);
+
+            let newupvls = cls
+                .upvalues
+                .iter()
+                .map(|upv| {
+                    if let UpValue::Open(i) = upv {
+                        let ov = self.get_open_upvalue(self.base_pointer as usize, *i);
+                        UpValue::Closed(Rc::new(RefCell::new(ov)))
+                    } else {
+                        upv.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            self.get_local_closure_mut(*clsidx).upvalues = newupvls;
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(&mut self, func_i: usize, prog: &Program, cls_i: Option<usize>) -> ReturnCode {
+    pub fn execute(
+        &mut self,
+        func_i: usize,
+        prog: &Program,
+        cls_i: Option<ClosureIdx>,
+    ) -> ReturnCode {
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_upvalues = Vec::<Rc<RefCell<UpValue>>>::new();
+        let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
         let mut pcounter = 0;
         if cfg!(test) {
             println!("{:?}", func);
@@ -167,14 +352,18 @@ impl Machine {
                     if i == self.base_pointer as usize {
                         print!("!");
                     }
-                    print!("{:?}", self.stack[i]);
+                    match self.debug_stacktype[i] {
+                        RawValType::Float => print!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
+                        RawValType::Int => print!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
+                        RawValType::UInt => print!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
+                    }
                     if i < self.stack.len() - 1 {
                         print!(", ");
                     }
                 }
                 println!("]");
             }
-
+            let mut increment = 1;
             match func.bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
                     self.set_stack(dst as i64, self.get_stack(src as i64));
@@ -184,13 +373,14 @@ impl Machine {
                 }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
-                    let cls_i = Self::get_as::<usize>(addr);
-                    let cls = &self.closures[cls_i];
+                    let cls_i = Self::get_as::<ClosureIdx>(addr);
+                    let cls = &self.closures[cls_i.0 as usize];
                     let pos_of_f = cls.fn_proto_pos;
-
+                    self.states_stack.push(cls_i);
                     self.call_function(func, nargs, nret_req, move |machine| {
                         machine.execute(pos_of_f, prog, Some(cls_i))
                     });
+                    self.states_stack.pop();
                 }
                 Instruction::Call(func, nargs, nret_req) => {
                     let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
@@ -201,7 +391,13 @@ impl Machine {
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
                     let f = self.ext_fun_table[ext_fn_idx].1;
-                    self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    let nret = self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    // return
+                    let base = self.base_pointer as usize;
+                    let iret = base + func as usize + 1;
+                    self.stack
+                        .copy_within(iret..(iret + nret as usize), base + func as usize);
+                    self.stack.truncate(base + func as usize + nret as usize);
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
                     // todo: load closure index via constant for the case of more than 255 closures in program
@@ -220,52 +416,32 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    let (_name, f_proto) = &prog.global_fn_table[fn_proto_pos];
-
-                    let inner_upvalues: Vec<Rc<RefCell<UpValue>>> = f_proto
-                        .upindexes
-                        .iter()
-                        .map(|u_i| {
-                            match u_i {
-                                UpIndex::Local(i) => {
-                                    let res = Rc::new(RefCell::new(UpValue::Open(*i as u8)));
-                                    local_upvalues.push(res.clone());
-                                    res
-                                }
-                                UpIndex::Upvalue(u_i) => {
-                                    let up_i = cls_i.unwrap();
-                                    let upvalues = &self.closures[up_i].upvalues;
-                                    //clone
-                                    Rc::clone(&upvalues[*u_i])
-                                }
-                            }
-                        })
-                        .collect();
-
-                    //todo! garbage collection
-                    self.closures.push(Closure {
-                        fn_proto_pos,
-                        upvalues: inner_upvalues,
-                    });
-
-                    let vaddr = self.closures.len() - 1;
+                    self.closures
+                        .push(Closure::new(prog, self.base_pointer, fn_proto_pos));
+                    let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
+                    local_closures.push((dst as usize, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Return0 => {
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    let _ = self.return_general(iret, nret, &mut local_upvalues);
+                    self.close_upvalues(iret, nret, &local_closures);
+                    let _ = self.return_general(iret, nret);
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index) => {
                     let rawv = {
                         let up_i = cls_i.unwrap();
-                        let upvalues = &self.closures[up_i].upvalues;
-                        let rv: &UpValue = &upvalues[index as usize].borrow();
+                        let cls = &self.closures[up_i.0 as usize];
+                        let upvalues = &cls.upvalues;
+                        let rv: &UpValue = &upvalues[index as usize];
                         match rv {
-                            UpValue::Open(i) => self.get_stack(*i as i64),
-                            UpValue::Closed(rawval) => *rawval,
+                            UpValue::Open(i) => {
+                                let upper_base = cls.base_ptr as usize;
+                                self.get_open_upvalue(upper_base, *i)
+                            }
+                            UpValue::Closed(rawval) => *rawval.borrow(),
                         }
                     };
                     self.set_stack(dst as i64, rawv);
@@ -273,124 +449,69 @@ impl Machine {
                 Instruction::SetUpValue(index, src) => {
                     let v = self.get_stack(src as i64);
                     let up_i = cls_i.unwrap();
-                    let upvalues = &self.closures[up_i].upvalues;
-                    let res = {
-                        let rv: &mut UpValue = &mut upvalues[index as usize].borrow_mut();
-                        match rv {
-                            UpValue::Open(i) => Some(*i),
-                            UpValue::Closed(i) => {
-                                *i = v;
-                                // *rv = UpValue::Closed(v);
-                                None
-                            }
+                    let cls = &self.closures[up_i.0 as usize];
+                    let upper_base = cls.base_ptr as usize;
+                    let upvalues = &cls.upvalues;
+                    let rv: &UpValue = &upvalues[index as usize];
+                    match rv {
+                        UpValue::Open(OpenUpValue(i)) => {
+                            self.stack[upper_base + i] = v;
                         }
-                    };
-                    if let Some(i) = res {
-                        self.set_stack(i as i64, v);
+                        UpValue::Closed(i) => {
+                            let mut uv = i.borrow_mut();
+                            *uv = v;
+                        }
                     }
+                }
+                Instruction::GetGlobal(dst, gid) => {
+                    self.set_stack(dst as i64, self.global_vals[gid as usize])
+                }
+                Instruction::SetGlobal(gid, src) => {
+                    self.global_vals[gid as usize] = self.get_stack(src as i64);
                 }
                 // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
-                    pcounter = (pcounter as isize + offset as isize) as usize;
+                    // -1 is for the offset in last increment
+                    increment = offset;
                 }
                 Instruction::JmpIfNeg(cond, offset) => {
                     let cond_v = self.get_stack(cond as i64);
-                    if Self::get_as::<bool>(cond_v) {
-                        pcounter = (pcounter as isize + offset as isize) as usize;
+                    if Self::get_as::<f64>(cond_v) <= 0.0 {
+                        increment = offset;
                     }
                 }
-                Instruction::AddF(dst, src1, src2) => {
-                    binop!(+,f64,dst,src1,src2,self)
-                }
-                Instruction::SubF(dst, src1, src2) => {
-                    binop!(-,f64,dst,src1,src2,self)
-                }
-                Instruction::MulF(dst, src1, src2) => {
-                    binop!(*,f64,dst,src1,src2,self)
-                }
-                Instruction::DivF(dst, src1, src2) => {
-                    binop!(/,f64,dst,src1,src2,self)
-                }
-                Instruction::ModF(dst, src1, src2) => {
-                    binop!(%,f64,dst,src1,src2,self)
-                }
-                Instruction::NegF(dst, src) => {
-                    uniop!(-,f64,dst,src,self)
-                }
-                Instruction::AbsF(dst, src) => {
-                    uniopmethod!(abs, f64, dst, src, self)
-                }
-                Instruction::SqrtF(dst, src) => {
-                    uniopmethod!(sqrt, f64, dst, src, self)
-                }
-                Instruction::SinF(dst, src) => {
-                    uniopmethod!(sin, f64, dst, src, self)
-                }
-                Instruction::CosF(dst, src) => {
-                    uniopmethod!(cos, f64, dst, src, self)
-                }
-
+                Instruction::AddF(dst, src1, src2) => binop!(+,f64,dst,src1,src2,self),
+                Instruction::SubF(dst, src1, src2) => binop!(-,f64,dst,src1,src2,self),
+                Instruction::MulF(dst, src1, src2) => binop!(*,f64,dst,src1,src2,self),
+                Instruction::DivF(dst, src1, src2) => binop!(/,f64,dst,src1,src2,self),
+                Instruction::ModF(dst, src1, src2) => binop!(%,f64,dst,src1,src2,self),
+                Instruction::NegF(dst, src) => uniop!(-,f64,dst,src,self),
+                Instruction::AbsF(dst, src) => uniopmethod!(abs, f64, dst, src, self),
+                Instruction::SqrtF(dst, src) => uniopmethod!(sqrt, f64, dst, src, self),
+                Instruction::SinF(dst, src) => uniopmethod!(sin, f64, dst, src, self),
+                Instruction::CosF(dst, src) => uniopmethod!(cos, f64, dst, src, self),
                 Instruction::PowF(dst, src1, src2) => {
                     binopmethod!(powf, f64, dst, src1, src2, self)
                 }
-                Instruction::LogF(dst, src1, src2) => {
-                    binopmethod!(log, f64, dst, src1, src2, self)
-                }
-                Instruction::AddI(dst, src1, src2) => {
-                    binop!(+,i64,dst,src1,src2,self)
-                }
-                Instruction::SubI(dst, src1, src2) => {
-                    binop!(-,i64,dst,src1,src2,self)
-                }
-                Instruction::MulI(dst, src1, src2) => {
-                    binop!(*,i64,dst,src1,src2,self)
-                }
-                Instruction::DivI(dst, src1, src2) => {
-                    binop!(/,i64,dst,src1,src2,self)
-                }
-                Instruction::ModI(dst, src1, src2) => {
-                    binop!(%,i64,dst,src1,src2,self)
-                }
-                Instruction::NegI(dst, src) => {
-                    uniop!(-,i64,dst,src,self)
-                }
-                Instruction::AbsI(dst, src) => {
-                    uniopmethod!(abs, i64, dst, src, self)
-                }
-                Instruction::PowI(dst, lhs, rhs) => {
-                    binop!(^,i64,dst,lhs,rhs,self)
-                }
-                Instruction::LogI(_,_,_) => {
-                    //?
-                    todo!();
-                }
-                Instruction::Not(dst, src) => {
-                    uniop!(!, bool, dst, src, self)
-                }
-                Instruction::Eq(dst, src1, src2) => {
-                    binop!(==,bool,dst,src1,src2,self)
-                }
-                Instruction::Ne(dst, src1, src2) => {
-                    binop!(!=,bool,dst,src1,src2,self)
-                }
-                Instruction::Gt(dst, src1, src2) => {
-                    binop!(>,bool,dst,src1,src2,self)
-                }
-                Instruction::Ge(dst, src1, src2) => {
-                    binop!(>=,bool,dst,src1,src2,self)
-                }
-                Instruction::Lt(dst, src1, src2) => {
-                    binop!(<,bool,dst,src1,src2,self)
-                }
-                Instruction::Le(dst, src1, src2) => {
-                    binop!(<=,bool,dst,src1,src2,self)
-                }
-                Instruction::And(dst, src1, src2) => {
-                    binop!(&&,bool,dst,src1,src2,self)
-                }
-                Instruction::Or(dst, src1, src2) => {
-                    binop!(||,bool,dst,src1,src2,self)
-                }
+                Instruction::LogF(dst, src1, src2) => binopmethod!(log, f64, dst, src1, src2, self),
+                Instruction::AddI(dst, src1, src2) => binop!(+,i64,dst,src1,src2,self),
+                Instruction::SubI(dst, src1, src2) => binop!(-,i64,dst,src1,src2,self),
+                Instruction::MulI(dst, src1, src2) => binop!(*,i64,dst,src1,src2,self),
+                Instruction::DivI(dst, src1, src2) => binop!(/,i64,dst,src1,src2,self),
+                Instruction::ModI(dst, src1, src2) => binop!(%,i64,dst,src1,src2,self),
+                Instruction::NegI(dst, src) => uniop!(-,i64,dst,src,self),
+                Instruction::AbsI(dst, src) => uniopmethod!(abs, i64, dst, src, self),
+                Instruction::PowI(dst, lhs, rhs) => binop!(^,i64,dst,lhs,rhs,self),
+                Instruction::LogI(_, _, _) => todo!(),
+                Instruction::Not(dst, src) => uniop_bool!(!, dst, src, self),
+                Instruction::Eq(dst, src1, src2) => binop_bool!(==,dst,src1,src2,self),
+                Instruction::Ne(dst, src1, src2) => binop_bool!(!=,dst,src1,src2,self),
+                Instruction::Gt(dst, src1, src2) => binop_bool!(>,dst,src1,src2,self),
+                Instruction::Ge(dst, src1, src2) => binop_bool!(>=,dst,src1,src2,self),
+                Instruction::Lt(dst, src1, src2) => binop_bool!(<,dst,src1,src2,self),
+                Instruction::Le(dst, src1, src2) => binop_bool!(<=,dst,src1,src2,self),
+                Instruction::And(dst, src1, src2) => binop_bool_compose!(&&,dst,src1,src2,self),
+                Instruction::Or(dst, src1, src2) => binop_bool_compose!(||,dst,src1,src2,self),
                 Instruction::CastFtoI(dst, src) => self.set_stack(
                     dst as i64,
                     Self::to_value::<i64>(Self::get_as::<f64>(self.get_stack(src as i64)) as i64),
@@ -404,18 +525,20 @@ impl Machine {
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
                 Instruction::GetState(dst) => {
-                    let v = self.internal_states[self.state_idx];
+                    let v = self.get_current_state().get();
                     self.set_stack(dst as i64, Self::to_value(v));
                 }
                 Instruction::SetState(src) => {
                     let v = self.get_stack(src as i64);
-                    self.internal_states[self.state_idx] = Self::get_as::<f64>(v)
+                    let ptr = self.get_current_state().get_mut();
+                    *ptr = Self::get_as::<f64>(v)
                 }
-                Instruction::ShiftStatePos(v) => {
-                    self.state_idx = (self.state_idx as i64 + v as i64) as usize;
+                Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
+                Instruction::Dummy => {
+                    unreachable!()
                 }
             }
-            pcounter += 1;
+            pcounter = (pcounter as i64 + increment as i64) as usize;
         }
     }
     pub fn install_extern_fn(&mut self, name: String, f: ExtFunType) {
@@ -426,6 +549,7 @@ impl Machine {
     }
     pub fn link_functions(&mut self, prog: &Program) {
         //link external functions
+        self.global_vals = prog.global_vals.clone();
         prog.ext_fun_table
             .iter()
             .enumerate()
@@ -464,21 +588,25 @@ impl Machine {
             .enumerate()
             .find(|(_i, (name, _))| name == entry)
         {
-            self.internal_states.resize(func.state_size as usize, 0.0);
-            // 0 is always base pointer to the main function
-            if self.stack.len() > 0 {
-                self.stack[0] = 0;
+            if !func.bytecodes.is_empty() {
+                self.global_states.resize(func.state_size as usize);
+                // 0 is always base pointer to the main function
+                if self.stack.len() > 0 {
+                    self.stack[0] = 0;
+                }
+                self.base_pointer = 1;
+                self.execute(i, &prog, None)
+            } else {
+                0
             }
-            self.base_pointer = 1;
-            self.execute(i, &prog, None)
         } else {
             -1
         }
     }
     pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
         //internal function table 0 is always mimium_main
-        self.internal_states
-            .resize(prog.global_fn_table[0].1.state_size as usize, 0.0);
+        self.global_states
+            .resize(prog.global_fn_table[0].1.state_size as usize);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
         self.execute(0, &prog, None)

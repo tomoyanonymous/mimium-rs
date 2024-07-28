@@ -1,13 +1,13 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::types::Type;
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Label(pub String);
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Global(Label, Type);
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct Global(VPtr);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Argument(pub Label, pub Type);
@@ -15,20 +15,15 @@ pub struct Argument(pub Label, pub Type);
 pub type VReg = u64;
 #[derive(Debug, PartialEq)]
 pub enum Value {
-    Global(Global),
+    Global(VPtr),
     Argument(usize, Arc<Argument>), //index,
     // holds SSA index(position in infinite registers)
     Register(VReg),
     State(VPtr),
-    // immidiate mode floating point value
-    Float(f64),
-    Integer(i64),
-    Bool(bool),
     // idx of the function in the program, size of internal state
     Function(usize, u64),
-    ExtFunction(Label),
-    Closure(Arc<Function>),
-    FixPoint,
+    ExtFunction(Label,Type),
+    FixPoint(usize),//function id
     //internal state
     None, //??
 }
@@ -41,29 +36,37 @@ pub enum Instruction {
     Integer(i64),
     //constant float
     Float(f64),
-    // allocate appropreate memory size depending on the type and return its pointer address
+    // allocate memory from stack depending on the size
     Alloc(Type),
-    // load value from the pointer type
+    // load value to register from the pointer type
     Load(VPtr),
     // store value to pointer
     Store(VPtr, VPtr),
     // Tuple(Vec<Value>),
     // Proj(Value, u64),
     // call function , arguments
-    Call(Arc<Value>, Vec<VPtr>),
+    Call(VPtr, Vec<VPtr>),
+    CallCls(VPtr, Vec<VPtr>),
+    GetGlobal(VPtr),
+    SetGlobal(VPtr,VPtr),
     // make closure with upindexes
-    Closure(Arc<Function>),
-    //function offset  and localvar offset?
-    GetUpValue(u64, u64),
-    SetUpValue(u64, u64),
+    Closure(VPtr),
+    //label to funcproto  and localvar offset?
+    GetUpValue(u64),
+    SetUpValue(u64),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
     //load internal state to register(destination)
     GetState,
 
-    //jump label
-    JmpIf(VPtr, Label, Label),
+    //condition,  basic block index for then else statement
+    JmpIf(VPtr, u64, u64),
+    // basic block index (for return statement)
+    Jmp(i16),
+    //merge
+    Phi(VPtr, VPtr),
+
     Return(VPtr),
     //value to update state
     ReturnFeed(VPtr),
@@ -95,8 +98,8 @@ pub enum Instruction {
     LogI(VPtr, VPtr),
     // primitive Operations for bool
     Not(VPtr),
-    Eq(VPtr),
-    Ne(VPtr),
+    Eq(VPtr,VPtr),
+    Ne(VPtr,VPtr),
     Gt(VPtr, VPtr),
     Ge(VPtr, VPtr),
     Lt(VPtr, VPtr),
@@ -124,31 +127,36 @@ pub struct Local {
     pub depth: usize,
     pub is_captured: bool,
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OpenUpValue(pub usize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
-    // pub locals: Vec<Local>,
-    pub upindexes: Vec<UpIndex>,
-    // pub upperfn: Option<Arc<Self>>,
+    pub upindexes: Vec<Arc<Value>>,
+    pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[VPtr]) -> Self {
+    pub fn new(name: &str, args: &[VPtr], upperfn_i: Option<usize>) -> Self {
         Self {
             label: Label(name.to_string()),
             args: args.to_vec(),
             upindexes: vec![],
+            upperfn_i,
             body: vec![Block::default()],
             state_size: 0,
         }
+    }
+    pub fn add_new_basicblock(&mut self) -> usize {
+        self.body.push(Block(vec![]));
+        self.body.len() - 1
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
-    pub globals: Vec<Global>,
 }
