@@ -29,7 +29,7 @@ impl VRegister {
         self.0.fill(None);
     }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>) -> Reg {
-        println!(
+        log::trace!(
             "alloc reg:{v} {},{}",
             tostring_helper(self.0.as_slice()),
             self.1
@@ -47,14 +47,14 @@ impl VRegister {
             .unwrap()
             + self.1;
         self.0[pos] = Some(v.clone());
-        println!(
+        log::trace!(
             "add  reg:{v} to {pos} {}",
             tostring_helper(self.0.as_slice()),
         );
         pos as Reg
     }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        println!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
+        log::trace!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == *v,
@@ -73,7 +73,7 @@ impl VRegister {
     }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
-        println!("findkeep reg:{v} {}", tostring_helper(self.0.as_slice()),);
+        log::trace!("findkeep reg:{v} {}", tostring_helper(self.0.as_slice()),);
         self.0
             .iter()
             .position(|v1| match v1 {
@@ -83,7 +83,7 @@ impl VRegister {
             .map(|pos| pos as Reg)
     }
     pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        println!("findup reg:{v} {}", tostring_helper(self.0.as_slice()),);
+        log::trace!("findup reg:{v} {}", tostring_helper(self.0.as_slice()),);
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
             Some(v1_c) => *v1_c == v,
@@ -508,7 +508,7 @@ impl ByteCodeGenerator {
         mirfunc: &mir::Function,
         fidx: usize,
     ) -> (String, vm::FuncProto) {
-        // println!("generating function {}", mirfunc.label.0);
+        // log::trace!("generating function {}", mirfunc.label.0);
         let mut func = vm::FuncProto::from(mirfunc);
         self.vregister.0.push(VRegister::default());
         for a in mirfunc.args.iter() {
@@ -575,7 +575,7 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
         let mut res_bytecodes = vec![];
         for (i, inst) in f.bytecodes.iter().enumerate() {
             if remove_idx.contains(&i) {
-                // println!("removed redundunt mov")
+                // log::trace!("removed redundunt mov")
             } else if let Some(inst) = removeconst_idx.get(&i) {
                 res_bytecodes.push(*inst);
             } else if let Some(inst) = reduce_idx.get(&i) {

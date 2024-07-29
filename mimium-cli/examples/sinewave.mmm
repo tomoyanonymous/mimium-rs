@@ -1,0 +1,12 @@
+let pi = 3.14159265359
+let sr = 44100.0
+fn phasor(freq){
+  (self + freq/sr)%1.0
+}
+fn osc(freq){
+  sin(phasor(freq)*pi*2.0)
+}
+
+fn dsp(){
+  osc(440.0 +osc(0.1)*1000.0)
+}

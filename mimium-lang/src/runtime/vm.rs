@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+use log;
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
@@ -249,7 +250,7 @@ impl Machine {
         upper_base + offset.0
     }
     pub fn get_open_upvalue(&self, upper_base: usize, offset: OpenUpValue) -> RawVal {
-        println!("upper base:{}, upvalue:{}", upper_base, offset.0);
+        log::trace!("upper base:{}, upvalue:{}", upper_base, offset.0);
         let abs_pos = Self::get_upvalue_offset(upper_base, offset);
         self.stack[abs_pos]
     }
@@ -280,10 +281,10 @@ impl Machine {
         res_slice
     }
 
-    pub(crate) fn get_as<T>(v: RawVal) -> T {
+    pub fn get_as<T>(v: RawVal) -> T {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
-    pub(crate) fn to_value<T>(v: T) -> RawVal {
+    pub fn to_value<T>(v: T) -> RawVal {
         assert_eq!(std::mem::size_of::<T>(), 8);
         unsafe { std::mem::transmute_copy::<T, RawVal>(&v) }
     }
@@ -342,27 +343,29 @@ impl Machine {
         let (_fname, func) = &prog.global_fn_table[func_i];
         let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
         let mut pcounter = 0;
-        if cfg!(test) {
-            println!("{:?}", func);
-        }
+        // if cfg!(test) {
+        //     log::trace!("{:?}", func);
+        // }
         loop {
-            if cfg!(debug_assertions) || cfg!(test) {
-                print!("{: <20} {}", func.bytecodes[pcounter], ": [");
-                for i in 0..self.stack.len() {
-                    if i == self.base_pointer as usize {
-                        print!("!");
-                    }
-                    match self.debug_stacktype[i] {
-                        RawValType::Float => print!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
-                        RawValType::Int => print!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
-                        RawValType::UInt => print!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
-                    }
-                    if i < self.stack.len() - 1 {
-                        print!(", ");
-                    }
-                }
-                println!("]");
-            }
+            // if cfg!(debug_assertions) || cfg!(test) ||log::max_level()>=log::Level::Trace{
+            //     let mut line = String::new();
+            //     line += &format!("{: <20} {}", func.bytecodes[pcounter], ": [");
+            //     for i in 0..self.stack.len() {
+            //         if i == self.base_pointer as usize {
+            //             line+="!";
+            //         }
+            //         line += &match self.debug_stacktype[i] {
+            //             RawValType::Float => format!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
+            //             RawValType::Int => format!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
+            //             RawValType::UInt => format!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
+            //         };
+            //         if i < self.stack.len() - 1 {
+            //             line+=",";
+            //         }
+            //     }
+            //     line+="]";
+            //     log::trace!("{line}");
+            // }
             let mut increment = 1;
             match func.bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
@@ -581,24 +584,23 @@ impl Machine {
                 };
             });
     }
-    pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
-        if let Some((i, (_name, func))) = prog
-            .global_fn_table
-            .iter()
-            .enumerate()
-            .find(|(_i, (name, _))| name == entry)
-        {
-            if !func.bytecodes.is_empty() {
-                self.global_states.resize(func.state_size as usize);
-                // 0 is always base pointer to the main function
-                if self.stack.len() > 0 {
-                    self.stack[0] = 0;
-                }
-                self.base_pointer = 1;
-                self.execute(i, &prog, None)
-            } else {
-                0
+    pub fn execute_idx(&mut self, prog: &Program, idx: usize) -> ReturnCode {
+        let (_name, func) = &prog.global_fn_table[idx];
+        if !func.bytecodes.is_empty() {
+            self.global_states.resize(func.state_size as usize);
+            // 0 is always base pointer to the main function
+            if self.stack.len() > 0 {
+                self.stack[0] = 0;
             }
+            self.base_pointer = 1;
+            self.execute(idx, &prog, None)
+        } else {
+            0
+        }
+    }
+    pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
+        if let Some(idx) = prog.get_fun_index(entry) {
+            self.execute_idx(prog, idx)
         } else {
             -1
         }

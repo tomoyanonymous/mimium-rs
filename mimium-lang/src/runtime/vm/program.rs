@@ -56,11 +56,14 @@ pub struct Program {
     pub global_vals: Vec<RawVal>,
 }
 impl Program {
-    pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
+    pub fn get_fun_index(&self, name: &str) -> Option<usize> {
         self.global_fn_table
             .iter()
-            .find(|(label, _f)| label.as_str() == "dsp")
-            .map(|(_, f)| f)
+            .position(|(label, _f)| label.as_str() == name)
+    }
+    pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
+        self.get_fun_index("dsp")
+            .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
     }
 }
 

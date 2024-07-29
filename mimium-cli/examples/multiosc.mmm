@@ -1,0 +1,25 @@
+let pi = 3.14159265359
+let sr = 44100.0
+fn phasor(freq){
+  (self + freq/sr)%1.0
+}
+fn osc(freq){
+  sin(phasor(freq)*pi*2.0)
+}
+fn amosc(freq,rate){
+  osc(freq + osc(rate)*100.0)
+}
+
+fn replicate(n:float,gen:()->(float,float)->float){
+    if (n>0.0){
+        let c = replicate(n - 1.0,gen)
+        let g = gen()
+        |x,rate| {g(x,rate) + c(x+100.0,rate+0.5)}
+    }else{
+        |x,rate| { 0.0 }
+    }
+}
+let mycounter = replicate(7.0,| |amosc);
+fn dsp(){
+    mycounter(500.0,0.5)*0.1
+}
