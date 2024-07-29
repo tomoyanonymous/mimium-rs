@@ -3,7 +3,6 @@ pub(crate) const SUB: &'static str = "sub";
 pub(crate) const MULT: &'static str = "mult";
 pub(crate) const DIV: &'static str = "div";
 pub(crate) const EQ: &'static str = "eq";
-pub(crate) const NEQ: &'static str = "neq";
 pub(crate) const NE: &'static str = "ne";
 pub(crate) const LE: &'static str = "le";
 pub(crate) const LT: &'static str = "lt";
