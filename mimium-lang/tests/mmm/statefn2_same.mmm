@@ -1,0 +1,7 @@
+fn counter(inc:float){
+  inc+self
+}
+
+fn dsp(){
+  counter(1.0)+counter(2.0)+counter(3.0)
+}

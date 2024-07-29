@@ -1,0 +1,7 @@
+fn loopcounter(){
+    (self+1.0) % 5.0
+}
+
+fn dsp(){
+    loopcounter()
+}

@@ -1,0 +1,6 @@
+fn test(hoge){
+    hoge+1.0
+}
+fn dsp(){
+    test(0)
+}

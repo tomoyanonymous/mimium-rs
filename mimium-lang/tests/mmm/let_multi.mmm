@@ -1,0 +1,9 @@
+// referring multiple file
+fn test(){
+    let n = 1.0
+    n + n + 1.0
+}
+
+fn dsp(){
+    test()
+}

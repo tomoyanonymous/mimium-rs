@@ -1,0 +1,11 @@
+//answer 2
+fn dsp(){
+    let x = 5.0
+    let f = | | { 
+        let y = 3.0
+        let ff = | |{ x-y}
+         ff()
+        }
+    f()
+}
+

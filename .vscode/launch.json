@@ -27,59 +27,40 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'mimium-rs'",
+            "name": "Debug executable 'mimium-CLI'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=mimium-rs",
-                    "--package=mimium-rs",
+                    "--bin=mimium-cli",
+                    "--package=mimium-cli",
                 ],
                 "filter": {
-                    "name": "mimium-rs",
+                    "name": "mimium-cli",
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["mimium-cli/examples/sinewave.mmm"],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug bc emitter 'mimium-rs'",
+            "name": "Debug bc emitter 'mimium-cli'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=mimium-rs",
-                    "--package=mimium-rs",
+                    "--bin=mimium-cli",
+                    "--package=mimium-cli",
                 ],
                 "filter": {
-                    "name": "mimium-rs",
+                    "name": "mimium-cli",
                     "kind": "bin"
                 }
             },
             "args": ["tests/mmm/mir_counter.mmm"],
             "cwd": "${workspaceFolder}"
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug test in 'mimium-hir-interpreter'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--lib",
-                    "--package=mimium-hir-interpreter",
-                    "--no-run",
-                    // "test/mmm/hello.mmm"
-                ],
-                // "filter": {
-                //     "name": "mimium-hir-interpreter",
-                //     "kind": "lib"
-                // }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}",
-        },
+
         {
             "type": "lldb",
             "request": "launch",
@@ -89,7 +70,7 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=mimium-rs",
+                    "--bin=mimium-lang",
                 ],
                 "filter": {
                     // "name": "mimium-rs",
