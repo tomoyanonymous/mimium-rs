@@ -108,8 +108,9 @@ impl NativeAudioReceiver {
         {
             match (h_ichannels, self.dsp_ichannels) {
                 (i1, i2) if i1 == i2 => {
-                    buf[0] = ic[0] as f64;
-                    buf[1] = ic[0] as f64;
+                    for i in 0..i1 {
+                        buf[i] = ic[i] as f64;
+                    }
                 }
                 (2, 1) => {
                     buf[0] = ic[0] as f64; //copy lch
