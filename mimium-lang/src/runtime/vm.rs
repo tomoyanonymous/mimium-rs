@@ -1,3 +1,4 @@
+use log;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -5,7 +6,6 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
-use log;
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
@@ -226,7 +226,10 @@ impl Machine {
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
-        self.stack[(self.base_pointer + offset as u64) as usize]
+        unsafe {
+            *self.stack
+                .get_unchecked((self.base_pointer + offset as u64) as usize)
+        }
     }
 
     fn set_stack(&mut self, offset: i64, v: RawVal) {
@@ -237,11 +240,11 @@ impl Machine {
         );
     }
     fn set_stacktype(&mut self, offset: i64, t: RawValType) {
-        set_vec(
-            &mut self.debug_stacktype,
-            (self.base_pointer as i64 + offset) as usize,
-            t,
-        );
+        // set_vec(
+        //     &mut self.debug_stacktype,
+        //     (self.base_pointer as i64 + offset) as usize,
+        //     t,
+        // );
     }
     pub fn get_top(&self) -> &RawVal {
         self.stack.last().unwrap()
