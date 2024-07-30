@@ -1,40 +1,75 @@
-# mimium-rs
+# mimium (v2)
 
-to be continued
+a programming language as an infrastructure for sound and music
+
+---
+
+mimium(MInimal-Musical-medIUM) is a programming language for sound and music.
+
+mimium is made to be an infrastructure for distributing music in a form of a source code, not only a tool for musicians and programmers.
+
+Its semantics are technically inspired from several modern programming languages for sound such as *[Faust](https://faust.grame.fr)* and *[Extempore](https://extemporelang.github.io/)*.. 
+
+A minimal example below generates a sinewave of 440Hz.
+
+```rust
+// minimal.mmm
+let twopi = 3.141595*2
+let sr = 48000
+fn dsp(){
+  sin(now * 440 * twopi / sr)
+}
+```
+*This repository is a mimium Version 2, all the code base is rewritten in Rust while the original was in C++, and Semantics of the language was re-designed. The code is still very under development.*
 
 ## Overview of the new compiler-pipeline
 
-- source code -> tokenizer -> parser -> AST(Multi-Stage W-calculus) ↓
-- Removing "self" -> Type Inference & Check -> Early-Stage Evaluation(Macro Expansion) -> HIR(Single-Stage W-calculus)↓
-- Closure Removal -> SSA Conversion -> MIR(Imperative)↓
-- Low-level Code Generation
-
+- Source code -> tokenizer -> parser -> AST ↓
+- Removing "self" -> Type Inference & SSA Conversion -> MIR(Imperative)
+- VM ByteCode Generation
 
 ## Roadmap
 
-- [ ] Basic Data Types
+- [x] Basic Data Types
   - [x] AST
-  - [x] HIR
-  - [ ] MIR
+  - [x] MIR
+  - [x] VM Instructions
+- [ ] Aggregate Types
+  - [ ] Tuple (Vector) types
 - [ ] Compilers
+  - [ ] Stateful Functions
+    - [x] Feedback with `self`
+    - [ ] Delay
   - [x] Parser
-  - [x] HIR Generation
-    - [x] Type Inference (need to test)
   - [ ] MIR Generation
-    - [ ] Multi-Stage Removal
-    - [ ] Closure Conversion
-    - [ ] Code Generation
-  - [ ] Code Generation 
+    - [x] Type Inference
+      - [ ] Generics 
+    - [x] Code Generation
+  - [x] VM Code Generation 
+  - [ ] Multi-Stage Computation
 - [ ] Runtime
-  - [ ] Audio Driver Backend
-    - [ ] CPAL implmentation
+  - [x] Audio Driver Backend
+    - [x] CPAL implmentation
   - [ ] Logical Scheduler
+  - [ ] Runtime value
+    - [ ] `now`
+    - [ ] `samplerate`
   - [ ] VM
-    - [ ] design
-      - [ ] closure upvalue implementation
+    - [x] Closure upvalue implementation
+    - [ ] Optmizations
+      - [ ] Use `SmallVec`
     - [ ] wasm implmentation
-- [ ] FrontEnd
-  - [x] HIR treewalk interpreter for test
 - [ ] Module System, Package Manager
 
-other todos: intergrated test script, migrating examples
+other todos:  migrating examples
+
+## [License](LICENSE.md)
+
+The source code is lisenced under [Mozilla Puclic License 2.0](LICENSE.md).
+
+## Acknowledgements
+
+This project is supported by all the contributers, [Sponsors](https://github.com/sponsors/tomoyanonymous), grants and scholarships as follows.
+
+- 2019 Exploratory IT Human Resources Project ([The MITOU Program](https://www.ipa.go.jp/jinzai/mitou/portal_index.html)) by IPA: INFORMATION-TECHNOLOGY PROMOTION AGENCY, Japan.
+- Kakehashi Foundation
