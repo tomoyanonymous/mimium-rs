@@ -39,6 +39,9 @@ pub enum Instruction {
     Return0,
     // value start position, Nrets
     Return(Reg, Reg),
+    //dst,src,time,idx 
+    Delay(Reg, Reg, Reg),
+    Mem(Reg, Reg),
 
     //jump label
     Jmp(Offset),
@@ -101,7 +104,12 @@ impl std::fmt::Display for Instruction {
             Instruction::Closure(dst, src) => {
                 write!(f, "{:<10} {} {}", "closure", dst, src)
             }
-
+            Instruction::Delay(dst, src, time) => {
+                write!(f, "{:<10} {} {} {}", "delay", dst, src, time)
+            }
+            Instruction::Mem(dst, src) => {
+                write!(f, "{:<10} {} {}", "mem", dst, src)
+            }
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),

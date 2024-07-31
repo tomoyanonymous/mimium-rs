@@ -71,6 +71,10 @@ pub enum Instruction {
     //value to update state
     ReturnFeed(VPtr),
 
+    Delay(u64,VPtr, VPtr),
+    Mem(VPtr),
+
+
     // Primitive Operations
     AddF(VPtr, VPtr),
     SubF(VPtr, VPtr),

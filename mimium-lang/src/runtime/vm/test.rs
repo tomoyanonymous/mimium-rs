@@ -54,8 +54,8 @@ fn closuretest() {
         upindexes: vec![OpenUpValue(1), OpenUpValue(2)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
-        feedmap: vec![],
         state_size: 0,
+        delay_sizes:vec![]
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -72,7 +72,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: inner_insts2,
         constants: vec![1u64, 2], // 1, position of inner in global table
-        feedmap: vec![],
+        delay_sizes:vec![],
         state_size: 0,
     };
     let main_inst = vec![
@@ -103,7 +103,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: main_inst,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
-        feedmap: vec![],
+        delay_sizes:vec![],
         state_size: 0,
     };
     let global_fn_table = vec![
@@ -142,7 +142,7 @@ fn rust_closure_test() {
         upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0u64, 4u64], //cls, int 4
-        feedmap: vec![],
+        delay_sizes:vec![],
         state_size: 0,
     };
     let fns = vec![main_f];

@@ -95,6 +95,7 @@ impl InferContext {
         ];
         let uniop_ty = function!(vec![numeric!()], numeric!());
         let uniop_names = vec![
+            intrinsics::MEM,
             intrinsics::SIN,
             intrinsics::COS,
             intrinsics::ABS,
@@ -108,6 +109,10 @@ impl InferContext {
             .iter()
             .map(|n| (n.to_string(), uniop_ty.clone()))
             .collect_into(&mut binds);
+        binds.push((
+            intrinsics::DELAY.to_string(),
+            function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
+        ));
         env.add_bind(&mut binds);
     }
     fn register_builtin(env: &mut Environment<Type>) {
