@@ -9,7 +9,9 @@ use std::{
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
+mod ringbuffer;
 use bytecode::*;
+use ringbuffer::Ringbuffer;
 
 use program::OpenUpValue;
 pub use program::{FuncProto, Program};
@@ -22,17 +24,23 @@ pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
 #[derive(Debug, Default, PartialEq)]
 struct StateStorage {
     pos: usize,
-    data: Vec<f64>,
+    rawdata: Vec<u64>,
+    delay_sizes: Vec<u64>,
+    delay_size_pos: usize,
 }
 impl StateStorage {
     fn resize(&mut self, size: usize) {
-        self.data.resize(size, 0.0)
+        self.rawdata.resize(size, 0)
     }
-    fn get(&self) -> f64 {
-        self.data[self.pos]
+    fn get_state(&self) -> RawVal {
+        unsafe { *self.rawdata.get_unchecked(self.pos) }
     }
-    fn get_mut(&mut self) -> &mut f64 {
-        unsafe { self.data.get_unchecked_mut(self.pos) }
+    fn get_state_mut(&mut self) -> &mut RawVal {
+        unsafe { self.rawdata.get_unchecked_mut(self.pos) }
+    }
+    fn get_as_ringbuffer(&mut self, size_in_samples: u64) -> Ringbuffer<'_> {
+        let data_head = unsafe { self.rawdata.as_mut_ptr().offset(self.pos as isize) };
+        Ringbuffer::new(data_head, size_in_samples)
     }
     fn shift_pos(&mut self, offset: i16) {
         self.pos = (self.pos as i64 + offset as i64) as usize;
@@ -114,6 +122,7 @@ pub struct Machine {
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
+    delaysizes_pos_stack: Vec<usize>,
     global_vals: Vec<RawVal>,
     debug_stacktype: Vec<RawValType>,
 }
@@ -221,13 +230,15 @@ impl Machine {
             cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
+            delaysizes_pos_stack: vec![0],
             global_vals: vec![],
             debug_stacktype: vec![RawValType::Int; 255],
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
         unsafe {
-            *self.stack
+            *self
+                .stack
                 .get_unchecked((self.base_pointer + offset as u64) as usize)
         }
     }
@@ -302,7 +313,7 @@ impl Machine {
         F: FnMut(&mut Self) -> ReturnCode,
     {
         let offset = (func_pos + 1) as u64;
-
+        self.delaysizes_pos_stack.push(0);
         self.base_pointer += offset;
         let nret = action(self);
 
@@ -313,6 +324,7 @@ impl Machine {
         self.stack
             .truncate((self.base_pointer as i64 + nret_req as i64) as usize);
         self.base_pointer -= offset;
+        self.delaysizes_pos_stack.pop();
         nret
     }
     fn close_upvalues(&mut self, _iret: Reg, _nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
@@ -531,15 +543,35 @@ impl Machine {
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
                 Instruction::GetState(dst) => {
-                    let v = self.get_current_state().get();
+                    let v = self.get_current_state().get_state();
                     self.set_stack(dst as i64, Self::to_value(v));
                 }
                 Instruction::SetState(src) => {
                     let v = self.get_stack(src as i64);
-                    let ptr = self.get_current_state().get_mut();
-                    *ptr = Self::get_as::<f64>(v)
+                    let ptr = self.get_current_state().get_state_mut();
+                    *ptr = v
                 }
                 Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
+                Instruction::Delay(dst, src, time) => {
+                    let i = self.get_stack(src as i64);
+                    let t = self.get_stack(time as i64);
+                    let delaysize_i =
+                        unsafe { self.delaysizes_pos_stack.last().unwrap_unchecked() };
+
+                    let size_in_samples = unsafe { func.delay_sizes.get_unchecked(*delaysize_i) };
+                    let mut ringbuf = self.get_current_state().get_as_ringbuffer(*size_in_samples);
+
+                    let res = ringbuf.process(i, t);
+                    self.set_stack(dst as i64, res);
+                }
+                Instruction::Mem(dst, src) => {
+                    let s = self.get_stack(src as i64);
+                    let ptr = self.get_current_state().get_state_mut();
+                    let v = Self::to_value(*ptr);
+                    self.set_stack(dst as i64, v);
+                    let ptr = self.get_current_state().get_state_mut();
+                    *ptr = s;
+                }
                 Instruction::Dummy => {
                     unreachable!()
                 }

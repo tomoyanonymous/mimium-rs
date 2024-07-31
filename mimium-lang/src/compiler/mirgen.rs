@@ -17,11 +17,14 @@ use crate::ast::{Expr, Literal};
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
 
+const DELAY_ADDITIONAL_OFFSET: u64 = 3;
+
 #[derive(Debug, Default)]
 struct ContextData {
     pub func_i: usize,
     pub current_bb: usize,
     pub state_offset: u64,
+    pub push_sum: u64,
 }
 #[derive(Debug)]
 pub struct Context {
@@ -66,7 +69,49 @@ impl Context {
         let i = self.get_ctxdata().func_i;
         &mut self.program.functions[i]
     }
-    fn make_intrinsics(&mut self, label: &String, args: Vec<VPtr>) -> Option<VPtr> {
+    fn make_delay(
+        &mut self,
+        f: &VPtr,
+        args: &[WithMeta<Expr>],
+    ) -> Result<Option<VPtr>, CompileError> {
+        match (f.as_ref(), args) {
+            (
+                Value::ExtFunction(Label(name), _ty),
+                [WithMeta(Expr::Literal(Literal::Float(max)), _span), src, time],
+            ) if name.as_str() == "delay" => {
+                let max_time = max.parse::<f64>().unwrap();
+                let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
+                self.get_current_fn().state_size += shift_size as u64;
+                let coffset = self.get_ctxdata().state_offset;
+                if coffset > 0 {
+                    self.get_current_basicblock()
+                        .0
+                        .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
+                    self.get_ctxdata().push_sum += coffset;
+                }
+                let args = self.eval_args(&[src.clone(), time.clone()])?;
+                let (args, _types): (Vec<VPtr>, Vec<Type>) = args.into_iter().unzip();
+                let res = Ok(Some(self.push_inst(Instruction::Delay(
+                    max_time as u64,
+                    args[0].clone(),
+                    args[1].clone(),
+                ))));
+                res
+            }
+            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), src, time])
+                if name.as_str() == "delay" =>
+            {
+                Err(CompileError(CompileErrorKind::UnboundedDelay, span.clone()))
+            }
+
+            _ => Ok(None),
+        }
+    }
+    fn make_intrinsics(
+        &mut self,
+        label: &String,
+        args: Vec<VPtr>,
+    ) -> Result<Option<VPtr>, CompileError> {
         let inst = match (label.as_str(), args.len()) {
             (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
             (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
@@ -87,10 +132,13 @@ impl Context {
             (intrinsics::NE, 2) => Instruction::Ne(args[0].clone(), args[1].clone()),
             (intrinsics::AND, 2) => Instruction::And(args[0].clone(), args[1].clone()),
             (intrinsics::OR, 2) => Instruction::Or(args[0].clone(), args[1].clone()),
-
-            _ => return None,
+            (intrinsics::MEM, 1) => {
+                self.get_current_fn().state_size += 1;
+                Instruction::Mem(args[0].clone())
+            }
+            _ => return Ok(None),
         };
-        Some(self.push_inst(inst))
+        Ok(Some(self.push_inst(inst)))
     }
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
         let bbid = self.get_ctxdata().current_bb;
@@ -113,10 +161,6 @@ impl Context {
         self.get_current_basicblock().0.push((res.clone(), inst));
         res
     }
-    // fn push_upindex(&mut self, _v: mir::UpIndex) {
-    //     // let fnproto = self.get_current_fn().unwrap();
-    //     // fnproto.upindexes.push(v)
-    // }
     fn add_bind(&mut self, bind: (String, VPtr)) {
         self.valenv.add_bind(&mut vec![bind]);
     }
@@ -154,6 +198,7 @@ impl Context {
             func_i: c_idx,
             current_bb: 0,
             state_offset: 0,
+            push_sum: 0,
         });
         self.data_i += 1;
         //do action
@@ -230,17 +275,36 @@ impl Context {
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
-        if self.get_ctxdata().state_offset > 0 {
-            self.get_current_basicblock()
-                .0
-                .push((Arc::new(Value::None), Instruction::PushStateOffset(1)));
+        let coffset =  self.get_ctxdata().state_offset;
+        if coffset > 0 {
+            self.get_current_basicblock().0.push((
+                Arc::new(Value::None),
+                Instruction::PushStateOffset(coffset),
+            ));
+            self.get_ctxdata().push_sum += coffset;
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args));
         if statesize > 0 {
-            self.get_ctxdata().state_offset += 1;
+            self.get_ctxdata().state_offset += statesize;
         }
         res
+    }
+    fn eval_args(&mut self, args: &[WithMeta<Expr>]) -> Result<Vec<(VPtr, Type)>, CompileError> {
+        args.iter()
+            .map(|a_meta| -> Result<_, CompileError> {
+                let (v, t) = self.eval_expr(a_meta)?;
+                let res = match v.as_ref() {
+                    // for the higher order function, make closure regardless it is global function
+                    Value::Function(idx, _) => {
+                        let f = self.push_inst(Instruction::Uinteger(*idx as u64));
+                        self.push_inst(Instruction::Closure(f))
+                    }
+                    _ => v.clone(),
+                };
+                Ok((res, t))
+            })
+            .try_collect::<Vec<_>>()
     }
     pub fn eval_expr(&mut self, e_meta: &WithMeta<Expr>) -> Result<(VPtr, Type), CompileError> {
         let WithMeta(e, span) = e_meta;
@@ -262,90 +326,73 @@ impl Context {
             Expr::Tuple(_) => todo!(),
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
-                // skip type inference for now.
-                // let ftype = infer_type(func, &mut self.typeenv).map_err(|typing::Error(e, span)| {
-                //     CompileError(CompileErrorKind::TypingFailure(e), span)
-                // })?;
-                // let nret = if let Type::Primitive(PType::Unit) = ftype {
-                //     0
-                // } else {
-                //     1
-                // };
                 let (f, ft) = self.eval_expr(f)?;
-                let atvvec = args
-                    .iter()
-                    .map(|a_meta| -> Result<_, CompileError> {
-                        let (v, t) = self.eval_expr(a_meta)?;
-                        let res = match v.as_ref() {
-                            // for the higher order function, make closure regardless it is global function
-                            Value::Function(idx, _) => {
-                                let f = self.push_inst(Instruction::Uinteger(*idx as u64));
-                                self.push_inst(Instruction::Closure(f))
-                            }
-                            _ => v.clone(),
-                        };
-                        Ok((res, t))
-                    })
-                    .try_collect::<Vec<_>>()?;
-                let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
-                let rt = self.typeenv.gen_intermediate_type();
-                let ftype = self
-                    .typeenv
-                    .unify_types(ft, Type::Function(atvec, Box::new(rt), None))?;
-                let rt = if let Type::Function(_, box rt, _) = ftype {
-                    Ok(rt.clone())
+                let del = self.make_delay(&f, args)?;
+                if let Some(d) = del {
+                    Ok((d, Type::Primitive(PType::Numeric)))
                 } else {
-                    Err(CompileError(
-                        CompileErrorKind::TypingFailure(typing::ErrorKind::NonFunction(
-                            ftype.clone(),
-                        )),
-                        span.clone(),
-                    ))
-                }?;
-                let res = match f.as_ref() {
-                    Value::Global(v) => match v.as_ref() {
-                        Value::Function(idx, statesize) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs)
-                        }
+                    let atvvec = self.eval_args(args.as_slice())?;
+                    let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
+                    let rt = self.typeenv.gen_intermediate_type();
+                    let ftype = self
+                        .typeenv
+                        .unify_types(ft, Type::Function(atvec, Box::new(rt), None))?;
+                    let rt = if let Type::Function(_, box rt, _) = ftype {
+                        Ok(rt.clone())
+                    } else {
+                        Err(CompileError(
+                            CompileErrorKind::TypingFailure(typing::ErrorKind::NonFunction(
+                                ftype.clone(),
+                            )),
+                            span.clone(),
+                        ))
+                    }?;
+                    let res = match f.as_ref() {
+                        Value::Global(v) => match v.as_ref() {
+                            Value::Function(idx, statesize) => {
+                                self.emit_fncall(*idx as u64, *statesize, a_regs)
+                            }
+                            Value::Register(_) => {
+                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
+                            }
+                            Value::FixPoint(fnid) => {
+                                let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
+                                let cls = self.push_inst(Instruction::Closure(clspos));
+                                self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                            }
+                            _ => {
+                                panic!("calling non-function global value")
+                            }
+                        },
                         Value::Register(_) => {
-                            self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
+                            //closure
+                            //do not increment state size for closure
+                            let res =
+                                self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
+                            res
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
                             self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
                         }
-                        _ => {
-                            panic!("calling non-function global value")
-                        }
-                    },
-                    Value::Register(_) => {
-                        //closure
-                        //do not increment state size for closure
-                        let res = self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
-                        res
-                    }
-                    Value::FixPoint(fnid) => {
-                        let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                        let cls = self.push_inst(Instruction::Closure(clspos));
-                        self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
-                    }
 
-                    Value::Function(idx, statesize) => {
-                        self.emit_fncall(*idx as u64, *statesize, a_regs)
-                    }
-                    Value::ExtFunction(label, _ty) => {
-                        if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone()) {
-                            res
-                        } else {
-                            self.push_inst(Instruction::Call(f.clone(), a_regs.clone()))
+                        Value::Function(idx, statesize) => {
+                            self.emit_fncall(*idx as u64, *statesize, a_regs)
                         }
-                    }
-                    // Value::ExternalClosure(i) => todo!(),
-                    Value::None => unreachable!(),
-                    _ => todo!(),
-                };
-                Ok((res, rt))
+                        Value::ExtFunction(label, _ty) => {
+                            if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
+                                res
+                            } else {
+                                self.push_inst(Instruction::Call(f.clone(), a_regs.clone()))
+                            }
+                        }
+                        // Value::ExternalClosure(i) => todo!(),
+                        Value::None => unreachable!(),
+                        _ => todo!(),
+                    };
+                    Ok((res, rt))
+                }
             }
             Expr::Lambda(ids, rett, body) => {
                 let binds = ids
@@ -381,10 +428,11 @@ impl Context {
                             let child = ctx.program.functions.get_mut(c_idx).unwrap();
                             child.state_size
                         };
-                        if ctx.get_ctxdata().state_offset > 1 && state_size > 0 {
+                        let push_sum = ctx.get_ctxdata().push_sum;
+                        if push_sum > 0 {
                             ctx.get_current_basicblock().0.push((
                                 Arc::new(mir::Value::None),
-                                Instruction::PopStateOffset(state_size - 1),
+                                Instruction::PopStateOffset(push_sum),
                             )); //todo:offset size
                         }
                         match (res.as_ref(), res_type.clone()) {
@@ -424,6 +472,9 @@ impl Context {
             }
             Expr::Feed(id, expr) => {
                 let res = self.push_inst(Instruction::GetState);
+
+                self.get_ctxdata().state_offset += 1;
+
                 self.add_bind((id.clone(), res.clone()));
                 let tf = {
                     let tf = self.typeenv.gen_intermediate_type();
@@ -585,6 +636,7 @@ impl Context {
 #[derive(Clone, Debug)]
 pub enum CompileErrorKind {
     TypingFailure(typing::ErrorKind),
+    UnboundedDelay,
     TooManyConstants,
     VariableNotFound(String),
 }
@@ -596,6 +648,10 @@ impl std::fmt::Display for CompileError {
         let CompileError(kind, _span) = self;
         match kind {
             CompileErrorKind::TypingFailure(k) => write!(f, "{k}"),
+            CompileErrorKind::UnboundedDelay => {
+                write!(f, "Maximium delay time needs to be a number literal.")
+            }
+
             CompileErrorKind::TooManyConstants => write!(f, "too many constants."),
             CompileErrorKind::VariableNotFound(s) => write!(f, "Variable {s} not found."),
         }

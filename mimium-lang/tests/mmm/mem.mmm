@@ -1,0 +1,6 @@
+fn memtest(input){
+    mem(input)
+}
+fn dsp(){
+    memtest(1.0) + memtest(2.0)
+}

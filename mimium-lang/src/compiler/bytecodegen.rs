@@ -475,6 +475,19 @@ impl ByteCodeGenerator {
                 bytecodes_dst.push(VmInstruction::SetState(new));
                 Some(VmInstruction::Return(old, 1))
             }
+            mir::Instruction::Delay(max, src, time) => {
+                let s = self.vregister.find(src).unwrap();
+                let t = self.vregister.find(time).unwrap();
+
+                let dst = self.vregister.add_newvalue(&dst);
+                funcproto.delay_sizes.push(*max as u64);
+                Some(VmInstruction::Delay(dst, s, t))
+            }
+            mir::Instruction::Mem(src) => {
+                let s = self.vregister.find(src).unwrap();
+                let dst = self.vregister.add_newvalue(&dst);
+                Some(VmInstruction::Mem(dst, s))
+            }
             mir::Instruction::AddF(v1, v2) => self.emit_binop2(VmInstruction::AddF, &dst, v1, v2),
             mir::Instruction::SubF(v1, v2) => self.emit_binop2(VmInstruction::SubF, &dst, v1, v2),
             mir::Instruction::MulF(v1, v2) => self.emit_binop2(VmInstruction::MulF, &dst, v1, v2),

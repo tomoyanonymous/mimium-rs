@@ -7,19 +7,20 @@ fn osc(freq){
   sin(phasor(freq)*pi*2.0)
 }
 fn amosc(freq,rate){
-  osc(freq + osc(rate)*100.0)
+  osc(freq + osc(rate)*4000.0)
 }
 
 fn replicate(n:float,gen:()->(float,float)->float){
     if (n>0.0){
         let c = replicate(n - 1.0,gen)
         let g = gen()
-        |x,rate| {g(x,rate) + c(x+100.0,rate+0.5)}
+        |x,rate| {g(x,rate) + c(x+100.0,rate+0.1)}
     }else{
         |x,rate| { 0.0 }
     }
 }
-let mycounter = replicate(7.0,| |amosc);
+let n = 80.0
+let mycounter = replicate(n,| |amosc);
 fn dsp(){
-    mycounter(500.0,0.5)*0.1
+    mycounter(4000.0,0.5) / n
 }

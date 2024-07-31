@@ -11,8 +11,8 @@ pub struct FuncProto {
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
     // feedvalues are mapped in this vector
-    pub feedmap: Vec<usize>,
     pub state_size: u64,
+    pub delay_sizes:Vec<u64>,
 }
 impl FuncProto {
     pub fn new(nparam: usize, nret: usize) -> Self {
@@ -22,8 +22,8 @@ impl FuncProto {
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
-            feedmap: vec![],
             state_size: 0,
+            delay_sizes: vec![],
         }
     }
     pub fn add_new_constant(&mut self, cval: RawVal) -> usize {
@@ -42,8 +42,8 @@ impl From<&mir::Function> for FuncProto {
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
-            feedmap: vec![],
             state_size: value.state_size,
+            delay_sizes: vec![],
         }
     }
 }
