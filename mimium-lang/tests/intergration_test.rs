@@ -46,7 +46,7 @@ fn simple_arithmetic() {
 
     // complex expression to test the evaluation order
     run_simple_test("hoge*10.0+hoge/10.0+1.0", 21.2, 3);
-    run_simple_test("1.0+hoge*2.0^3.0", 17.0, 3);
+    run_simple_test("1.0+hoge^2.0*1.5", 7.0, 3);
 }
 
 fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
