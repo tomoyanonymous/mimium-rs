@@ -86,7 +86,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "@" => Token::At,
         "let" => Token::Let,
         "if" => Token::If,
-        "then" => Token::Then,
         "else" => Token::Else,
         // "true" => Token::Bool(true),
         // "false" => Token::Bool(false),
