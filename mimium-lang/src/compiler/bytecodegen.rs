@@ -493,6 +493,7 @@ impl ByteCodeGenerator {
             mir::Instruction::MulF(v1, v2) => self.emit_binop2(VmInstruction::MulF, &dst, v1, v2),
             mir::Instruction::DivF(v1, v2) => self.emit_binop2(VmInstruction::DivF, &dst, v1, v2),
             mir::Instruction::ModF(v1, v2) => self.emit_binop2(VmInstruction::ModF, &dst, v1, v2),
+            mir::Instruction::PowF(v1, v2) => self.emit_binop2(VmInstruction::PowF, &dst, v1, v2),
             mir::Instruction::SinF(v1) => self.emit_binop1(VmInstruction::SinF, &dst, v1),
             mir::Instruction::CosF(v1) => self.emit_binop1(VmInstruction::CosF, &dst, v1),
             mir::Instruction::AbsF(v1) => self.emit_binop1(VmInstruction::AbsF, &dst, v1),
