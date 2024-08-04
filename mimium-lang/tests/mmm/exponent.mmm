@@ -1,0 +1,6 @@
+fn test(hoge){
+    1.0+hoge^2.0*1.5
+}
+fn dsp(){
+    test(2.0)
+}

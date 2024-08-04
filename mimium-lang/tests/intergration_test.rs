@@ -28,7 +28,12 @@ fn adder() {
     let ans = vec![1.0, 1.0, 1.0];
     assert_eq!(res, ans);
 }
-
+#[test]
+fn exponent() {
+    let res = run_file_test("exponent.mmm", 3).unwrap();
+    let ans = vec![7.0, 7.0, 7.0];
+    assert_eq!(res, ans);
+}
 #[test]
 fn recursion() {
     let res = run_file_test("recursion.mmm", 1).unwrap();
