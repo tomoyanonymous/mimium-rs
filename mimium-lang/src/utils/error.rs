@@ -14,8 +14,11 @@ pub trait ReportableError: std::error::Error {
     }
 }
 
-pub fn report(src: &String, srcpath: path::PathBuf, errs: &Vec<Box<dyn ReportableError>>) {
-    let path = srcpath.to_str().unwrap_or_default();
+pub fn report<T>(src: &String, srcpath: T, errs: &Vec<Box<dyn ReportableError>>)
+where
+    T: AsRef<path::Path>,
+{
+    let path = srcpath.as_ref().to_str().unwrap_or_default();
     for e in errs {
         let span = e.get_span();
         // let a_span = (src.source(), span);
