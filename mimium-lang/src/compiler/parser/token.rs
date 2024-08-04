@@ -74,7 +74,6 @@ pub enum Token {
     Arrow,    // ->
 
     If,
-    Then,
     Else,
 
     Return,
@@ -169,7 +168,6 @@ impl fmt::Display for Token {
             Token::Arrow => write!(f, "->"),
 
             Token::If => write!(f, "if"),
-            Token::Then => write!(f, "then"),
             Token::Else => write!(f, "else"),
 
             Token::Return => write!(f, "return"),
