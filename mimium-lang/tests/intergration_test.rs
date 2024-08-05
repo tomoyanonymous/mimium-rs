@@ -1,10 +1,53 @@
 extern crate mimium_lang;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use mimium_lang::{
     runtime::run_source_test,
     utils::{error::report, fileloader},
 };
+
+fn run_simple_test(expr: &str, expect: f64, times: u64) {
+    let src = format!(
+        "fn test(hoge){{
+    {expr}
+}}
+fn dsp(){{
+    test(2.0)
+}}"
+    );
+    let res = run_source_test(&src, times);
+    match res {
+        Ok(res) => {
+            let ans = [expect].repeat(times as usize);
+            assert_eq!(res, ans, "expr: {expr}");
+        }
+        Err(errs) => {
+            report(&src, Path::new("(from template)"), &errs);
+            panic!("invalid syntax");
+        }
+    }
+}
+
+#[test]
+fn simple_arithmetic() {
+    // unary
+    run_simple_test("1.0", 1.0, 3);
+    run_simple_test("-1.0", -1.0, 3);
+    // TODO
+    // run_simple_test("-hoge", -2.0, 3);
+
+    // binary
+    run_simple_test("hoge+1.0", 3.0, 3);
+    // TODO
+    // run_simple_test("hoge-1.0", 1.0, 3);
+    run_simple_test("hoge*3.0", 6.0, 3);
+    run_simple_test("hoge/2.0", 1.0, 3);
+    run_simple_test("hoge^3.0", 8.0, 3);
+
+    // complex expression to test the evaluation order
+    run_simple_test("hoge*10.0+hoge/10.0+1.0", 21.2, 3);
+    run_simple_test("1.0+hoge^2.0*1.5", 7.0, 3);
+}
 
 fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
@@ -22,18 +65,6 @@ fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     }
 }
 
-#[test]
-fn adder() {
-    let res = run_file_test("adder.mmm", 3).unwrap();
-    let ans = vec![1.0, 1.0, 1.0];
-    assert_eq!(res, ans);
-}
-#[test]
-fn exponent() {
-    let res = run_file_test("exponent.mmm", 3).unwrap();
-    let ans = vec![7.0, 7.0, 7.0];
-    assert_eq!(res, ans);
-}
 #[test]
 fn recursion() {
     let res = run_file_test("recursion.mmm", 1).unwrap();
