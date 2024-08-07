@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev, ci]
+  push:
+    branches: [main, dev, ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo_test:
+    name: "cargo test (OS: ${{ matrix.config.os }}, toolchain: ${{ matrix.config.toolchain }}"
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { os: ubuntu-latest,  toolchain: 'stable'  }
+          - { os: ubuntu-latest,  toolchain: 'nightly' }
+          # - { os: macOS-latest,   toolchain: 'stable'  }
+          # - { os: windows-latest, toolchain: 'stable'  }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.config.toolchain }}
+
+      - run: cargo test
