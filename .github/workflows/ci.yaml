@@ -35,6 +35,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update -y
-          sudo apt install -y libasound2-dev
+          sudo apt install -y libasound2-dev libjack-jackd2-dev libjack-jackd2-0
       
       - run: cargo test
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@clippy
+      - run: cargo clippy --tests
+        continue-on-error: true
