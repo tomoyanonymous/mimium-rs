@@ -31,4 +31,10 @@ jobs:
         with:
           toolchain: ${{ matrix.config.toolchain }}
 
+      - name: Install system requirements for Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update -y
+          sudo apt install -y libasound2-dev
+      
       - run: cargo test
