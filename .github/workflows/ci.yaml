@@ -12,16 +12,16 @@ permissions:
 
 jobs:
   cargo_test:
-    name: "cargo test (OS: ${{ matrix.config.os }}, toolchain: ${{ matrix.config.toolchain }}"
+    name: "cargo test (OS: ${{ matrix.config.os }}"
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
         config:
-          - { os: ubuntu-latest,  toolchain: 'stable'  }
-          - { os: ubuntu-latest,  toolchain: 'nightly' }
-          # - { os: macOS-latest,   toolchain: 'stable'  }
-          # - { os: windows-latest, toolchain: 'stable'  }
+          - { os: ubuntu-latest }
+          - { os: ubuntu-latest }
+          # - { os: macOS-latest }
+          # - { os: windows-latest }
 
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.config.toolchain }}
+          toolchain: nightly
 
       - name: Install system requirements for Linux
         if: runner.os == 'Linux'
