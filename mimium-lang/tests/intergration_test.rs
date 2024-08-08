@@ -33,13 +33,11 @@ fn simple_arithmetic() {
     // unary
     run_simple_test("1.0", 1.0, 3);
     run_simple_test("-1.0", -1.0, 3);
-    // TODO
-    // run_simple_test("-hoge", -2.0, 3);
+    run_simple_test("-hoge", -2.0, 3);
 
     // binary
     run_simple_test("hoge+1.0", 3.0, 3);
-    // TODO
-    // run_simple_test("hoge-1.0", 1.0, 3);
+    run_simple_test("hoge-1.0", 1.0, 3);
     run_simple_test("hoge*3.0", 6.0, 3);
     run_simple_test("hoge/2.0", 1.0, 3);
     run_simple_test("hoge^3.0", 8.0, 3);
