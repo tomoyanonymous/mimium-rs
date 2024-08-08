@@ -36,8 +36,7 @@ fn simple_arithmetic() {
     run_simple_test("- -1.0", 1.0, 3);
     run_simple_test("-hoge", -2.0, 3);
     run_simple_test("-(-hoge)", 2.0, 3);
-    // TODO
-    // run_simple_test("-cos(0.0)", -1.0, 3);
+    run_simple_test("-cos(0.0)", -1.0, 3);
 
     // binary
     run_simple_test("hoge+1.0", 3.0, 3);
