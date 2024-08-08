@@ -276,12 +276,12 @@ impl Context {
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
-        let coffset = self.get_ctxdata().state_offset;
-        if coffset > 0 {
-            self.get_current_basicblock()
-                .0
-                .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
-            self.get_ctxdata().push_sum += coffset;
+        if self.get_ctxdata().state_offset > 0 {
+            self.get_current_basicblock().0.push((
+                Arc::new(Value::None),
+                Instruction::PushStateOffset(statesize),
+            ));
+            self.get_ctxdata().push_sum += statesize;
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args));
