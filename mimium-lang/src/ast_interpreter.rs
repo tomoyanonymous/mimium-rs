@@ -90,7 +90,6 @@ const EXTERN_ENV: [&str; 28] = [
 ];
 
 fn lookup_extern_env(name: &str) -> Option<&str> {
-    println!("{name}");
     let filtered = EXTERN_ENV
         .into_iter()
         .filter(|n| *n == name)
