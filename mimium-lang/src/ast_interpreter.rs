@@ -83,10 +83,10 @@ impl Context {
     }
 }
 
-const EXTERN_ENV: [&str; 27] = [
-    "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2", "sin", "cos",
-    "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log", "print",
-    "println",
+const EXTERN_ENV: [&str; 28] = [
+    "neg", "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2", "sin",
+    "cos", "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log",
+    "print", "println",
 ];
 
 fn lookup_extern_env(name: &str) -> Option<&str> {

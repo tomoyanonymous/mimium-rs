@@ -113,6 +113,7 @@ impl Context {
         args: Vec<VPtr>,
     ) -> Result<Option<VPtr>, CompileError> {
         let inst = match (label.as_str(), args.len()) {
+            (intrinsics::NEG, 1) => Instruction::NegF(args[0].clone()),
             (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
             (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
             (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),

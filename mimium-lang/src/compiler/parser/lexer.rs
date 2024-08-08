@@ -21,20 +21,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // A parser for numbers
     let int = text::int(10).map(|s: String| Token::Int(s.parse().unwrap()));
 
-    let float = just('-')
-        .or_not()
-        .then(
-            text::int(10)
-                .then(just('.'))
-                .then(text::digits(10).or_not()),
-        )
-        .map(|(optsign, ((s, c), opt_n))| {
-            let mut st = s + &c.to_string() + &opt_n.unwrap_or("".to_string());
-            if let Some(_) = optsign {
-                st = "-".to_string() + &st
-            };
-            Token::Float(st)
-        });
+    let float = text::int(10)
+        .then(just('.'))
+        .then(text::digits(10).or_not())
+        .map(|((s, _dot), opt_n)| Token::Float(format!("{}.{}", s, opt_n.unwrap_or_default())));
 
     // A parser for strings
     let str_ = just('"')
