@@ -19,7 +19,6 @@ jobs:
       matrix:
         config:
           - { os: ubuntu-latest }
-          - { os: ubuntu-latest }
           # - { os: macOS-latest }
           # - { os: windows-latest }
 
