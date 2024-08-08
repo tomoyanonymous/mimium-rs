@@ -20,6 +20,9 @@ fn b_to_i(b: bool) -> i64 {
 mod intrinsic {
     pub mod integer {
         use super::super::b_to_i;
+        pub fn neg(x: i64) -> i64 {
+            -x
+        }
         pub fn not(x: i64) -> i64 {
             if x <= 0 {
                 1
@@ -86,6 +89,9 @@ mod intrinsic {
         }
         pub fn cos(x: f64) -> f64 {
             x.cos()
+        }
+        pub fn neg(x: f64) -> f64 {
+            -x
         }
         pub fn not(x: f64) -> f64 {
             if x <= 0.0 {
@@ -222,8 +228,9 @@ macro_rules! f2_f {
     };
 }
 
-pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 47]> = LazyCell::new(|| {
+pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 49]> = LazyCell::new(|| {
     [
+        i_i!(neg),
         i_i!(not),
         i_i!(abs),
         i2_i!(add),
@@ -252,6 +259,7 @@ pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 47]> = LazyCell::new(|| {
         ),
         f_f!(sin),
         f_f!(cos),
+        f_f!(neg),
         f_f!(not),
         f_f!(round),
         f_f!(floor),
@@ -302,6 +310,7 @@ pub fn eval_float1(name: &str, x: f64) -> Option<f64> {
     match name {
         "sin" => Some(x.sin()),
         "cos" => Some(x.cos()),
+        "neg" => Some(-x),
         "not" => Some(if x == 0.0 { 1.0 } else { 0.0 }),
         "round" => Some(x.round()),
         "floor" => Some(x.floor()),
@@ -337,6 +346,7 @@ pub fn eval_float2(name: &str, x: f64, y: f64) -> Option<f64> {
 
 pub fn eval_int1(name: &str, x: i64) -> Option<i64> {
     match name {
+        "neg" => Some(-x),
         "not" => Some(if x == 0 { 1 } else { 0 }),
         "abs" => Some(x.abs()),
         _ => None,

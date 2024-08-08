@@ -113,6 +113,7 @@ impl Context {
         args: Vec<VPtr>,
     ) -> Result<Option<VPtr>, CompileError> {
         let inst = match (label.as_str(), args.len()) {
+            (intrinsics::NEG, 1) => Instruction::NegF(args[0].clone()),
             (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
             (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
             (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
@@ -275,12 +276,11 @@ impl Context {
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
-        let coffset =  self.get_ctxdata().state_offset;
+        let coffset = self.get_ctxdata().state_offset;
         if coffset > 0 {
-            self.get_current_basicblock().0.push((
-                Arc::new(Value::None),
-                Instruction::PushStateOffset(coffset),
-            ));
+            self.get_current_basicblock()
+                .0
+                .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
             self.get_ctxdata().push_sum += coffset;
         }
 

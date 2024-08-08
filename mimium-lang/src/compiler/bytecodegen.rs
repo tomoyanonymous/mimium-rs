@@ -488,6 +488,7 @@ impl ByteCodeGenerator {
                 let dst = self.vregister.add_newvalue(&dst);
                 Some(VmInstruction::Mem(dst, s))
             }
+            mir::Instruction::NegF(v1) => self.emit_binop1(VmInstruction::NegF, &dst, v1),
             mir::Instruction::AddF(v1, v2) => self.emit_binop2(VmInstruction::AddF, &dst, v1, v2),
             mir::Instruction::SubF(v1, v2) => self.emit_binop2(VmInstruction::SubF, &dst, v1, v2),
             mir::Instruction::MulF(v1, v2) => self.emit_binop2(VmInstruction::MulF, &dst, v1, v2),
