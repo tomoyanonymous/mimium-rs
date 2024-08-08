@@ -117,6 +117,24 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .boxed()
                 .labelled("atoms");
 
+            let unary = select! { Token::Op(Op::Minus) => {} }
+                .repeated()
+                .then(atom)
+                .foldr(|_op, rhs| {
+                    let rhs_start = rhs.1.start;
+                    let op_start = rhs_start - 1;
+                    let span_end = rhs.1.end;
+                    let neg_op = Box::new(WithMeta(
+                        Expr::Var("neg".to_string(), None),
+                        op_start..rhs_start,
+                    ));
+                    WithMeta(
+                        Expr::Apply(neg_op, vec![WithMeta(rhs.0, rhs.1)]),
+                        op_start..span_end,
+                    )
+                })
+                .labelled("unary");
+
             let items = expr
                 .clone()
                 .separated_by(just(Token::Comma))
@@ -134,7 +152,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     f.1.start..args.1.end,
                 )
             };
-            let apply = atom.then(parenitems).foldl(folder).labelled("apply");
+            let apply = unary.then(parenitems).foldl(folder).labelled("apply");
 
             let op_cls = |x: WithMeta<_>, y: WithMeta<_>, op: Op, opspan: Span| {
                 WithMeta(
