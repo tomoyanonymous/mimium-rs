@@ -108,12 +108,24 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 })
                 .labelled("macroexpand");
 
+            let tuple = expr
+                .clone()
+                .separated_by(just(Token::Comma))
+                // TODO: for simplicity allow tuples with more than 2 elements
+                // (length-1 tuple is special in that the trailing comma is mandatory)
+                .at_least(2)
+                .allow_trailing()
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+                .map_with_span(|e, s| WithMeta(Expr::Tuple(e), s))
+                .labelled("tuple");
+
             let atom = val
                 .or(lambda)
                 .or(macro_expand)
                 .or(let_e)
                 .map_with_span(|e, s| WithMeta(e, s))
                 .or(parenexpr)
+                .or(tuple)
                 .boxed()
                 .labelled("atoms");
 
