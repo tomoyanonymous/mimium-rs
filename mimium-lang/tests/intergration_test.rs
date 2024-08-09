@@ -67,6 +67,13 @@ fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 }
 
 #[test]
+fn parser_firstbreak(){
+    let res = run_file_test("parser_firstbreak.mmm", 1).unwrap();
+    let ans = vec![0.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn recursion() {
     let res = run_file_test("recursion.mmm", 1).unwrap();
     let ans = vec![5.0];
