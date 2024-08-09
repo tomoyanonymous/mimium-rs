@@ -2,4 +2,4 @@
 //Note that you can't use vec![] macro for initialization.
 
 use smallvec::SmallVec;
-pub(super) type Vec<T> = SmallVec::<[T;10]>;
+pub(super) type Vec<T> = SmallVec::<[T;4]>;
