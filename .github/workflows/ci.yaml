@@ -29,11 +29,20 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
-
       - name: Install system requirements for Linux
         if: runner.os == 'Linux'
         run: |
           sudo apt update -y
           sudo apt install -y libasound2-dev
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
       - run: cargo test
