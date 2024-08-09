@@ -278,8 +278,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     expr_group
 }
 fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
-    select! {Token::Comment(Comment::SingleLine(_))=>(),
-    Token::Comment(Comment::MultiLine(_))=>()}
+    select! {Token::Comment(Comment::SingleLine(t))=>(),
+    Token::Comment(Comment::MultiLine(t))=>()}
 }
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
@@ -377,8 +377,9 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 }
 
 fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
+    let ignored =comment_parser().or(just(Token::LineBreak).ignored()).or(just(Token::SemiColon).ignored());
     func_parser()
-        .padded_by(comment_parser().repeated().ignored())
+        .padded_by(ignored.repeated())
         .then_ignore(end())
 }
 pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
