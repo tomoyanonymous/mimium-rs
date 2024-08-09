@@ -2,7 +2,8 @@ use super::{Instruction, RawVal};
 use crate::mir;
 use crate::types::Type;
 pub use mir::OpenUpValue;
-
+use super::smallvec as smallvec_internal;
+use smallvec_internal::*;
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FuncProto {
     pub nparam: usize,
@@ -14,16 +15,17 @@ pub struct FuncProto {
     pub state_size: u64,
     pub delay_sizes:Vec<u64>,
 }
+pub(crate) type InstVec = Vec<Instruction>;
 impl FuncProto {
     pub fn new(nparam: usize, nret: usize) -> Self {
         Self {
             nparam,
             nret,
-            upindexes: vec![],
-            bytecodes: vec![],
-            constants: vec![],
+            upindexes: Default::default(),
+            bytecodes: Default::default(),
+            constants: Default::default(),
             state_size: 0,
-            delay_sizes: vec![],
+            delay_sizes: Default::default(),
         }
     }
     pub fn add_new_constant(&mut self, cval: RawVal) -> usize {
@@ -39,11 +41,11 @@ impl From<&mir::Function> for FuncProto {
         Self {
             nparam: value.args.len().into(),
             nret: 1,
-            upindexes: vec![],
-            bytecodes: vec![],
-            constants: vec![],
+            upindexes: Default::default(),
+            bytecodes: Default::default(),
+            constants: Default::default(),
             state_size: value.state_size,
-            delay_sizes: vec![],
+            delay_sizes: Default::default(),
         }
     }
 }
