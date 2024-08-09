@@ -51,11 +51,11 @@ fn closuretest() {
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![OpenUpValue(1), OpenUpValue(2)],
-        bytecodes: inner_insts,
-        constants: vec![], //no constants in the inner function
+        upindexes: Vec::from_slice(&[OpenUpValue(1), OpenUpValue(2)]),
+        bytecodes: inner_insts.into(),
+        constants: Default::default(), //no constants in the inner function
         state_size: 0,
-        delay_sizes:vec![]
+        delay_sizes: Default::default(),
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -69,10 +69,10 @@ fn closuretest() {
     let makecounter_f = FuncProto {
         nparam: 2,
         nret: 1,
-        upindexes: vec![],
-        bytecodes: inner_insts2,
-        constants: vec![1u64, 2], // 1, position of inner in global table
-        delay_sizes:vec![],
+        upindexes: Default::default(),
+        bytecodes: inner_insts2.into(),
+        constants:Vec::from_slice(&[1u64, 2]), // 1, position of inner in global table
+        delay_sizes: Default::default(),
         state_size: 0,
     };
     let main_inst = vec![
@@ -100,25 +100,25 @@ fn closuretest() {
     let main_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
-        bytecodes: main_inst,
-        constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
-        delay_sizes:vec![],
+        upindexes: Default::default(),
+        bytecodes: main_inst.into(),
+        constants: Vec::from_slice(&[13u64, 7u64, 1, 0]), //13,7, makecounter, print_f
+        delay_sizes: Default::default(),
         state_size: 0,
     };
     let global_fn_table = vec![
         ("main".to_string(), main_f),
         ("makecounter".to_string(), makecounter_f),
         ("inner".to_string(), inner_f),
-    ];
+    ].into();
     let mut machine = Machine::new();
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("probe".to_string(), function!(vec![numeric!()], numeric!()))],
-        ext_cls_table: vec![],
-        global_vals: vec![],
+        ext_fun_table: Vec::from_elem(("probe".to_string(), function!(vec![numeric!()], numeric!())),1),
+        ext_cls_table: Default::default(),
+        global_vals: Default::default(),
     };
     // let mut feedstate = FeedState::default();
     let res = machine.execute_main(&prog);
@@ -130,23 +130,23 @@ fn rust_closure_test() {
     //fn main()->int{
     // return rust_closure(4)
     //}
-    let inner_insts = vec![
+    let inner_insts = Vec::from_slice(&[
         Instruction::MoveConst(0, 0),     //load closure
         Instruction::MoveConst(1, 1),     //load const int 4
         Instruction::CallExtCls(0, 1, 1), //call closure, 7 should be set at reg 0
         Instruction::Return0,             // return single value at 1
-    ];
+    ]);
     let main_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
+        upindexes: Default::default(),
         bytecodes: inner_insts,
-        constants: vec![0u64, 4u64], //cls, int 4
-        delay_sizes:vec![],
+        constants: Vec::from_slice(&[0u64, 4u64]), //cls, int 4
+        delay_sizes: Default::default(),
         state_size: 0,
     };
-    let fns = vec![main_f];
-    let fnames = vec!["main".to_string()];
+    let fns = Vec::from_elem(main_f,1);
+    let fnames = Vec::from_elem("main".to_string(),1);
     let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
     // let mut count = 0;
     let cls = Arc::new(Mutex::new(|m: &mut Machine| {
@@ -161,10 +161,10 @@ fn rust_closure_test() {
     machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     machine.install_extern_cls("rustclosure".to_string(), cls.clone());
     let prog = Program {
-        global_fn_table:global_fn_table.to_vec(),
-        ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
-        ext_cls_table: vec![("rustclosure".to_string(), Type::Unknown)],
-        global_vals: vec![],
+        global_fn_table,
+        ext_fun_table: Vec::from_elem(("lib_printi".to_string(), Type::Unknown), 1),
+        ext_cls_table: Vec::from_elem(("rustclosure".to_string(), Type::Unknown), 1),
+        global_vals: Default::default(),
     };
     // let mut feedstate = FeedState::default();
     let res = machine.execute_main(&prog);

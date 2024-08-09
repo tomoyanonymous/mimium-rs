@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::mir::{self, Mir};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
-use crate::runtime::vm::{self};
+use crate::runtime::vm::{self, program::InstVec};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
@@ -208,7 +208,7 @@ impl ByteCodeGenerator {
     }
     fn prepare_function(
         &mut self,
-        bytecodes_dst: &mut Vec<VmInstruction>,
+        bytecodes_dst: &mut InstVec,
         faddress: Reg,
         args: &[Arc<mir::Value>],
     ) -> Reg {
@@ -237,7 +237,7 @@ impl ByteCodeGenerator {
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
-        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+        bytecodes_dst: Option<&mut InstVec>,
         fidx: usize,
         mirfunc: &mir::Function,
         dst: Arc<mir::Value>,
@@ -295,7 +295,7 @@ impl ByteCodeGenerator {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(v).unwrap();
                         let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                            bytecodes_dst.unwrap_or_else(|| &mut funcproto.bytecodes);
                         let fadd = self.prepare_function(bytecodes_dst, faddress, args);
                         let dst = self.get_destination(dst);
 
@@ -319,7 +319,7 @@ impl ByteCodeGenerator {
                         let fi = funcproto.add_new_constant(idx as u64);
                         let dst = self.get_destination(dst);
                         let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                            bytecodes_dst.unwrap_or_else(|| &mut funcproto.bytecodes);
                         let fadd = self.prepare_function(bytecodes_dst, dst, args);
                         bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
                         bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, 1));
@@ -341,7 +341,7 @@ impl ByteCodeGenerator {
                     mir::Value::Register(_address) => {
                         let faddress = self.vregister.find(f).unwrap();
                         let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                            bytecodes_dst.unwrap_or_else(|| &mut funcproto.bytecodes);
                         let fadd = self.prepare_function(bytecodes_dst, faddress, args);
                         bytecodes_dst.push(VmInstruction::CallCls(fadd, nargs, 1));
                         let dst = self.get_destination(dst);
@@ -400,8 +400,8 @@ impl ByteCodeGenerator {
 
             mir::Instruction::JmpIf(cond, tbb, ebb) => {
                 let c = self.vregister.find(cond).unwrap();
-                let mut then_bytecodes: Vec<VmInstruction> = vec![];
-                let mut else_bytecodes: Vec<VmInstruction> = vec![];
+                let mut then_bytecodes: InstVec = Default::default();
+                let mut else_bytecodes: InstVec = Default::default();
                 mirfunc.body[*tbb as usize]
                     .0
                     .iter()
@@ -469,7 +469,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::ReturnFeed(new) => {
                 let old = self.vregister.add_newvalue(&dst);
-                let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| &mut funcproto.bytecodes);
                 bytecodes_dst.push(VmInstruction::GetState(old));
                 let new = self.vregister.find(new).unwrap();
                 bytecodes_dst.push(VmInstruction::SetState(new));
@@ -587,7 +587,7 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
                 _ => {}
             }
         }
-        let mut res_bytecodes = vec![];
+        let mut res_bytecodes: InstVec = Default::default();
         for (i, inst) in f.bytecodes.iter().enumerate() {
             if remove_idx.contains(&i) {
                 // log::trace!("removed redundunt mov")
@@ -650,11 +650,11 @@ mod test {
         let mut main = vm::FuncProto::new(1, 1);
 
         main.constants.push(1);
-        main.bytecodes = vec![
+        main.bytecodes = InstVec::from_slice(&[
             VmInstruction::MoveConst(1, 0),
             VmInstruction::AddF(1, 0, 1),
             VmInstruction::Return(1, 1),
-        ];
+        ]);
         answer.global_fn_table.push(("test".to_string(), main));
         assert_eq!(res, answer);
     }
