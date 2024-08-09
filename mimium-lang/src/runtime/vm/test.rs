@@ -161,7 +161,7 @@ fn rust_closure_test() {
     machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     machine.install_extern_cls("rustclosure".to_string(), cls.clone());
     let prog = Program {
-        global_fn_table,
+        global_fn_table:global_fn_table.to_vec(),
         ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
         ext_cls_table: vec![("rustclosure".to_string(), Type::Unknown)],
         global_vals: vec![],

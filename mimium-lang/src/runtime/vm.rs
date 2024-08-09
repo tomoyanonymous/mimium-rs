@@ -6,10 +6,15 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
 mod ringbuffer;
+mod smallvec;
+use smallvec as smallvec_internal;
+use smallvec_internal::*;
+
 use bytecode::*;
 use ringbuffer::Ringbuffer;
 
@@ -221,18 +226,18 @@ impl Machine {
             .map(|(name, f, _t)| (name.to_string(), *f))
             .collect::<Vec<_>>();
         Self {
-            stack: vec![],
+            stack: Default::default(),
             base_pointer: 0,
-            closures: vec![],
+            closures: Default::default(),
             ext_fun_table,
-            ext_cls_table: vec![],
+            ext_cls_table: Default::default(),
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
-            delaysizes_pos_stack: vec![0],
-            global_vals: vec![],
-            debug_stacktype: vec![RawValType::Int; 255],
+            delaysizes_pos_stack: Vec::from_slice(&[0]),
+            global_vals: Default::default(),
+            debug_stacktype: Vec::from_elem(RawValType::Int, 255),
         }
     }
     fn get_stack(&self, offset: i64) -> RawVal {
@@ -356,7 +361,7 @@ impl Machine {
         cls_i: Option<ClosureIdx>,
     ) -> ReturnCode {
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
+        let mut local_closures: Vec<(usize, ClosureIdx)> = Default::default();
         let mut pcounter = 0;
         // if cfg!(test) {
         //     log::trace!("{:?}", func);
@@ -587,7 +592,7 @@ impl Machine {
     }
     pub fn link_functions(&mut self, prog: &Program) {
         //link external functions
-        self.global_vals = prog.global_vals.clone();
+        self.global_vals = prog.global_vals.clone().into();
         prog.ext_fun_table
             .iter()
             .enumerate()
