@@ -25,9 +25,10 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(|e| Type::Tuple(e))
+            .map(Type::Tuple)
             .boxed()
             .labelled("Tuple");
+
         // let _struct_t = todo!();
         let atom = primitive.or(tuple);
         let func = atom
@@ -111,9 +112,6 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let tuple = expr
                 .clone()
                 .separated_by(just(Token::Comma))
-                // TODO: for simplicity allow tuples with more than 2 elements
-                // (length-1 tuple is special in that the trailing comma is mandatory)
-                .at_least(2)
                 .allow_trailing()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                 .map_with_span(|e, s| WithMeta(Expr::Tuple(e), s))
@@ -389,7 +387,9 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
 }
 
 fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
-    let ignored =comment_parser().or(just(Token::LineBreak).ignored()).or(just(Token::SemiColon).ignored());
+    let ignored = comment_parser()
+        .or(just(Token::LineBreak).ignored())
+        .or(just(Token::SemiColon).ignored());
     func_parser()
         .padded_by(ignored.repeated())
         .then_ignore(end())
