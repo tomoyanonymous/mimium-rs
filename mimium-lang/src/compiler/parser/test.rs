@@ -241,6 +241,30 @@ fn test_macrodef() {
     );
     test_string!("macro hoge(input,gue){\n input\n}", ans);
 }
+
+#[test]
+fn test_tuple() {
+    let tuple_items = vec![
+        WithMeta(Expr::Literal(Literal::Float("1.0".to_string())), 1..4),
+        WithMeta(Expr::Literal(Literal::Float("2.0".to_string())), 6..9),
+    ];
+
+    let ans = WithMeta(Expr::Tuple(tuple_items.clone()), 0..10);
+    test_string!("(1.0, 2.0)", ans);
+
+    // with trailing comma
+    let ans = WithMeta(Expr::Tuple(tuple_items.clone()), 0..12);
+    test_string!("(1.0, 2.0, )", ans);
+
+    // trailing comma is mandatory for a single-element tuple
+    let ans = WithMeta(Expr::Tuple(vec![tuple_items[0].clone()]), 0..7);
+    test_string!("(1.0, )", ans);
+
+    // This is not a tuple
+    let ans = tuple_items[0].clone();
+    test_string!("(1.0)", ans);
+}
+
 #[test]
 #[should_panic]
 fn test_fail() {
