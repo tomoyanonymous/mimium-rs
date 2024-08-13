@@ -257,8 +257,9 @@ impl Machine {
         //     t,
         // );
     }
-    pub fn get_top(&self) -> &RawVal {
-        self.stack.last().unwrap()
+    pub fn get_top_n(&self, n: usize) -> &[RawVal] {
+        let len = self.stack.len();
+        &self.stack[(len - n)..]
     }
     fn get_upvalue_offset(upper_base: usize, offset: OpenUpValue) -> usize {
         upper_base + offset.0
@@ -297,6 +298,9 @@ impl Machine {
 
     pub fn get_as<T>(v: RawVal) -> T {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
+    }
+    pub fn get_as_array<T>(v: &[RawVal]) -> &[T] {
+        unsafe { std::mem::transmute_copy::<&[RawVal], &[T]>(&v) }
     }
     pub fn to_value<T>(v: T) -> RawVal {
         assert_eq!(std::mem::size_of::<T>(), 8);
@@ -361,6 +365,7 @@ impl Machine {
         // if cfg!(test) {
         //     log::trace!("{:?}", func);
         // }
+
         loop {
             // if cfg!(debug_assertions) || cfg!(test) ||log::max_level()>=log::Level::Trace{
             //     let mut line = String::new();

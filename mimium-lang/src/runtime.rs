@@ -42,7 +42,7 @@ pub fn run_bytecode_test(
 ) -> Result<f64, Vec<Box<dyn ReportableError>>> {
     let retcode = machine.execute_entry(bytecodes, "dsp");
     if retcode >= 0 {
-        Ok(vm::Machine::get_as::<f64>(*machine.get_top()))
+        Ok(vm::Machine::get_as::<f64>(machine.get_top_n(1)[0])) // pick a single value for simplicity
     } else {
         Err(vec![Box::new(Error(ErrorKind::Unknown, 0..0))])
     }

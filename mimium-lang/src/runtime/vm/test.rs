@@ -18,8 +18,8 @@ fn size_of_extern_func() {
 
 //single print function
 fn lib_printi(state: &mut Machine) -> i64 {
-    let v = state.get_top();
-    let i = Machine::get_as::<i64>(*v);
+    let v = state.get_top_n(1)[0];
+    let i = Machine::get_as::<i64>(v);
     println!("{}", i);
     return 1;
 }
@@ -55,7 +55,7 @@ fn closuretest() {
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         state_size: 0,
-        delay_sizes:vec![]
+        delay_sizes: vec![],
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -72,7 +72,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: inner_insts2,
         constants: vec![1u64, 2], // 1, position of inner in global table
-        delay_sizes:vec![],
+        delay_sizes: vec![],
         state_size: 0,
     };
     let main_inst = vec![
@@ -103,7 +103,7 @@ fn closuretest() {
         upindexes: vec![],
         bytecodes: main_inst,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
-        delay_sizes:vec![],
+        delay_sizes: vec![],
         state_size: 0,
     };
     let global_fn_table = vec![
@@ -142,7 +142,7 @@ fn rust_closure_test() {
         upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0u64, 4u64], //cls, int 4
-        delay_sizes:vec![],
+        delay_sizes: vec![],
         state_size: 0,
     };
     let fns = vec![main_f];
@@ -150,8 +150,8 @@ fn rust_closure_test() {
     let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
     // let mut count = 0;
     let cls = Arc::new(Mutex::new(|m: &mut Machine| {
-        let v = m.get_top();
-        let i = Machine::get_as::<u64>(*v) + 3;
+        let v = m.get_top_n(1)[0];
+        let i = Machine::get_as::<u64>(v) + 3;
         println!("Call from closure: {}", i);
         //?????
         m.set_stack(-1, Machine::to_value(i));

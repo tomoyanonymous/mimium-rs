@@ -32,15 +32,15 @@ struct NativeAudioData {
     dsp_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
-    count:u64
+    count: u64,
 }
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
     pub fn new(program: vm::Program, buffer: HeapCons<f64>) -> Self {
         let dsp_i = program.get_fun_index("dsp").expect("no dsp function found");
-        //todo! infer from program
-        let dsp_ochannels = 1;
+        let (_, dsp_func) = &program.global_fn_table[dsp_i];
+        let dsp_ochannels = dsp_func.nret;
 
         let vmdata = RuntimeData::new(program);
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
@@ -50,7 +50,7 @@ impl NativeAudioData {
             dsp_ochannels,
             buffer,
             localbuffer,
-            count:0
+            count: 0,
         }
     }
     pub fn process(&mut self, dst: &mut [f32], h_ochannels: usize) {
@@ -62,21 +62,23 @@ impl NativeAudioData {
             .zip(local.chunks(self.dsp_ochannels))
         {
             let _rc = self.vmdata.vm.execute_idx(&self.vmdata.program, self.dsp_i);
-            let res = vm::Machine::get_as::<f64>(*self.vmdata.vm.get_top());
+            let res =
+                vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
             // let phase = ((self.count as f64) *440f64 / 44100f64) % 1.0;
             // let res = (phase* std::f64::consts::PI *2.0).sin();
-            self.count+=1;  
+            self.count += 1;
             match (h_ochannels, self.dsp_ochannels) {
                 (i1, i2) if i1 == i2 => {
-                    o[0] = res as f32;
-                    o[1] = res as f32;
+                    for i in 0..i1 {
+                        o[i] = res[i] as f32;
+                    }
                 }
                 (2, 1) => {
-                    o[0] = res as f32;
-                    o[1] = res as f32;
+                    o[0] = res[0] as f32;
+                    o[1] = res[0] as f32;
                 }
                 (1, 2) => {
-                    o[0] = res as f32;
+                    o[0] = res[0] as f32;
                 }
                 (_, _) => {
                     todo!()
@@ -89,7 +91,7 @@ struct NativeAudioReceiver {
     dsp_ichannels: usize,
     localbuffer: Vec<f64>,
     buffer: HeapProd<f64>,
-    count:u64
+    count: u64,
 }
 unsafe impl Send for NativeAudioReceiver {}
 impl NativeAudioReceiver {
@@ -98,7 +100,7 @@ impl NativeAudioReceiver {
             dsp_ichannels,
             localbuffer: vec![0f64; 4096],
             buffer,
-            count:0
+            count: 0,
         }
     }
     pub fn receive_data(&mut self, data: &[f32], h_ichannels: usize) {
@@ -124,10 +126,10 @@ impl NativeAudioReceiver {
                 }
             }
         }
-        let local = & self.localbuffer.as_slice()[..data.len()];
+        let local = &self.localbuffer.as_slice()[..data.len()];
 
         self.buffer.push_slice(local);
-        self.count+=(data.len()/h_ichannels) as u64;
+        self.count += (data.len() / h_ichannels) as u64;
     }
 }
 impl NativeDriver {
