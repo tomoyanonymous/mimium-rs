@@ -1,5 +1,5 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use crate::types::Type;
+use crate::types::{Type, TypeSize};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 pub mod print;
@@ -22,8 +22,8 @@ pub enum Value {
     State(VPtr),
     // idx of the function in the program, size of internal state
     Function(usize, u64),
-    ExtFunction(Label,Type),
-    FixPoint(usize),//function id
+    ExtFunction(Label, Type),
+    FixPoint(usize), //function id
     //internal state
     None, //??
 }
@@ -48,7 +48,7 @@ pub enum Instruction {
     Call(VPtr, Vec<VPtr>),
     CallCls(VPtr, Vec<VPtr>),
     GetGlobal(VPtr),
-    SetGlobal(VPtr,VPtr),
+    SetGlobal(VPtr, VPtr),
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
@@ -67,13 +67,12 @@ pub enum Instruction {
     //merge
     Phi(VPtr, VPtr),
 
-    Return(VPtr),
+    Return(VPtr, TypeSize),
     //value to update state
-    ReturnFeed(VPtr),
+    ReturnFeed(VPtr, TypeSize),
 
-    Delay(u64,VPtr, VPtr),
+    Delay(u64, VPtr, VPtr),
     Mem(VPtr),
-
 
     // Primitive Operations
     AddF(VPtr, VPtr),
@@ -102,8 +101,8 @@ pub enum Instruction {
     LogI(VPtr, VPtr),
     // primitive Operations for bool
     Not(VPtr),
-    Eq(VPtr,VPtr),
-    Ne(VPtr,VPtr),
+    Eq(VPtr, VPtr),
+    Ne(VPtr, VPtr),
     Gt(VPtr, VPtr),
     Ge(VPtr, VPtr),
     Lt(VPtr, VPtr),
@@ -138,6 +137,7 @@ pub struct OpenUpValue(pub usize);
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
+    pub return_type: Option<Type>, // TODO: None is the state when the type is not inferred yet.
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
@@ -148,6 +148,7 @@ impl Function {
         Self {
             label: Label(name.to_string()),
             args: args.to_vec(),
+            return_type: None,
             upindexes: vec![],
             upperfn_i,
             body: vec![Block::default()],

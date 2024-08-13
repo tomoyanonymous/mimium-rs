@@ -1,3 +1,5 @@
+use crate::types::TypeSize;
+
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u16;
@@ -38,8 +40,8 @@ pub enum Instruction {
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
     // value start position, Nrets
-    Return(Reg, Reg),
-    //dst,src,time,idx 
+    Return(Reg, TypeSize),
+    //dst,src,time,idx
     Delay(Reg, Reg, Reg),
     Mem(Reg, Reg),
 
@@ -110,7 +112,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Mem(dst, src) => {
                 write!(f, "{:<10} {} {}", "mem", dst, src)
             }
-            Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
+            Instruction::Return(iret, _nret) => write!(f, "{:<10} {}", "ret", iret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
             Instruction::GetGlobal(dst, src) => write!(f, "{:<10} {} {}", "getglobal", dst, src),

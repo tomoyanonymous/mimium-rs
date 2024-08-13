@@ -12,7 +12,7 @@ impl std::fmt::Display for Mir {
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
             }
-            let _ = write!(f," state_size: {}",fun.state_size);
+            let _ = write!(f, " state_size: {}", fun.state_size);
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "\n  block {i}\n");
                 for (v, insts) in block.0.iter() {
@@ -88,8 +88,8 @@ impl std::fmt::Display for Instruction {
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
-            Instruction::Return(a) => write!(f, "ret {}", *a),
-            Instruction::ReturnFeed(v) => write!(f, "retfeed {}", *v),
+            Instruction::Return(a, _nret) => write!(f, "ret {}", *a),
+            Instruction::ReturnFeed(v, _nret) => write!(f, "retfeed {}", *v),
             Instruction::Delay(max, a, b) => write!(f, "delay {max} {} {}", *a, *b),
             Instruction::Mem(a) => write!(f, "mem {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

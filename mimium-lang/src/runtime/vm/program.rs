@@ -12,7 +12,7 @@ pub struct FuncProto {
     pub constants: Vec<RawVal>,
     // feedvalues are mapped in this vector
     pub state_size: u64,
-    pub delay_sizes:Vec<u64>,
+    pub delay_sizes: Vec<u64>,
 }
 impl FuncProto {
     pub fn new(nparam: usize, nret: usize) -> Self {
@@ -37,8 +37,11 @@ impl FuncProto {
 impl From<&mir::Function> for FuncProto {
     fn from(value: &mir::Function) -> Self {
         Self {
-            nparam: value.args.len().into(),
-            nret: 1,
+            nparam: value.args.len(),
+            nret: match &value.return_type {
+                Some(ty) => ty.size() as _,
+                None => 1, // TODO: what should we do when the type is not inferred yet?
+            },
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],

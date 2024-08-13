@@ -189,8 +189,8 @@ impl Context {
         let vbinds = binds.iter().map(|(_, a, _)| a.clone()).collect::<Vec<_>>();
         self.valenv.extend();
         self.valenv.add_bind(&mut abinds);
-        let label = self.get_ctxdata().func_i.clone();
-        let c_idx = self.make_new_function(&fname, vbinds.as_slice(), Some(label));
+        let label = self.get_ctxdata().func_i;
+        let c_idx = self.make_new_function(fname, vbinds.as_slice(), Some(label));
 
         self.typeenv.env.extend();
         self.typeenv.env.add_bind(&mut atbinds);
@@ -203,14 +203,18 @@ impl Context {
         });
         self.data_i += 1;
         //do action
-        let (fptr, rest) = action(self, c_idx)?;
+        let (fptr, ty) = action(self, c_idx)?;
+
+        // TODO
+        let f = self.program.functions.get_mut(c_idx).unwrap();
+        f.return_type = Some(ty.clone());
 
         //post action
         let _ = self.data.pop();
         self.data_i -= 1;
         self.valenv.to_outer();
         self.typeenv.env.to_outer();
-        Ok((c_idx, fptr, rest))
+        Ok((c_idx, fptr, ty))
     }
     fn lookup(&self, key: &str) -> LookupRes<VPtr> {
         match self.valenv.lookup_cls(key) {
@@ -323,7 +327,39 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
-            Expr::Tuple(_) => todo!(),
+            Expr::Tuple(items) => {
+                let len = items.len();
+                if len == 0 {
+                    panic!("0-length tuple is not supported");
+                }
+
+                let mut types = Vec::with_capacity(len);
+
+                // prepare the sequence of registers before pushing other inst
+                // TODO: type needs to be inferred before evaluation.
+                let dsts: Vec<_> = (0..len)
+                    .map(|_| self.push_inst(Instruction::Alloc(Type::Unknown)))
+                    .collect();
+
+                for i in 0..len {
+                    let (v, ty) = self.eval_expr(&items[i])?;
+
+                    self.push_inst(Instruction::Store(dsts[i].clone(), v));
+
+                    types.push(ty);
+                }
+
+                // validate if the types are all identical
+                // (TODO: allow different types in a tuple?)
+                let first_ty = &types[0];
+                if !types.iter().all(|x| x == first_ty) {
+                    todo!("Return error");
+                }
+
+                // pass only the head of the tuple, and the length can be known
+                // from the type information.
+                Ok((dsts[0].clone(), Type::Tuple(types)))
+            }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
                 let (f, ft) = self.eval_expr(f)?;
@@ -435,20 +471,22 @@ impl Context {
                                 Instruction::PopStateOffset(push_sum),
                             )); //todo:offset size
                         }
+                        let nret = res_type.size();
                         match (res.as_ref(), res_type.clone()) {
                             (_, Type::Primitive(PType::Unit) | Type::Unknown) => {
-                                let _ = ctx.push_inst(Instruction::Return(Arc::new(Value::None)));
+                                let _ =
+                                    ctx.push_inst(Instruction::Return(Arc::new(Value::None), nret));
                             }
-                            (Value::State(v), _) => {
-                                let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone()));
+                            (Value::State(v), ty) => {
+                                let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), nret));
                             }
                             (Value::Function(i, _), _) => {
                                 let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                                 let cls = ctx.push_inst(Instruction::Closure(idx));
-                                let _ = ctx.push_inst(Instruction::Return(cls));
+                                let _ = ctx.push_inst(Instruction::Return(cls, nret));
                             }
                             (_, _) => {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone()));
+                                let _ = ctx.push_inst(Instruction::Return(res.clone(), nret));
                             }
                         };
 
