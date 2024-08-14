@@ -36,13 +36,14 @@ impl ReportableError for Error {
     }
 }
 
-pub fn run_bytecode_test(
-    machine: &mut vm::Machine,
-    bytecodes: &vm::Program,
-) -> Result<f64, Vec<Box<dyn ReportableError>>> {
+pub fn run_bytecode_test<'a>(
+    machine: &'a mut vm::Machine,
+    bytecodes: &'a vm::Program,
+    n: usize,
+) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
     let retcode = machine.execute_entry(bytecodes, "dsp");
     if retcode >= 0 {
-        Ok(vm::Machine::get_as::<f64>(machine.get_top_n(1)[0])) // pick a single value for simplicity
+        Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
     } else {
         Err(vec![Box::new(Error(ErrorKind::Unknown, 0..0))])
     }
@@ -51,20 +52,27 @@ pub fn run_bytecode_test(
 pub fn run_bytecode_test_multiple(
     bytecodes: &vm::Program,
     times: u64,
+    stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut machine = vm::Machine::new();
-    let mut ret = vec![];
     machine.link_functions(bytecodes);
     let _retcode = machine.execute_entry(bytecodes, "_mimium_global");
+    let n = if stereo { 2 } else { 1 };
+    let mut ret = Vec::with_capacity(times as usize * n);
     for i in 0..times {
-        let res = run_bytecode_test(&mut machine, bytecodes)?;
-        ret.push(res);
-        println!("time:{}, res: {}", i, res)
+        let res = run_bytecode_test(&mut machine, bytecodes, n)?;
+        ret.extend_from_slice(res);
+        println!("time:{}, res: {:?}", i, res)
     }
     Ok(ret)
 }
 
-pub fn run_source_test(src: &str, times: u64) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
+// if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
+pub fn run_source_test(
+    src: &str,
+    times: u64,
+    stereo: bool,
+) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
-    run_bytecode_test_multiple(&bytecode, times)
+    run_bytecode_test_multiple(&bytecode, times, stereo)
 }

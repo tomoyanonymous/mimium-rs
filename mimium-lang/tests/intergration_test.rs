@@ -15,7 +15,7 @@ fn dsp(){{
     test(2.0)
 }}"
     );
-    let res = run_source_test(&src, times);
+    let res = run_source_test(&src, times, false);
     match res {
         Ok(res) => {
             let ans = [expect].repeat(times as usize);
@@ -50,13 +50,13 @@ fn simple_arithmetic() {
     run_simple_test("1.0+hoge^2.0*1.5", 7.0, 3);
 }
 
-fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
         .iter()
         .collect();
     println!("{}", file.to_str().unwrap());
     let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
-    let res = run_source_test(&src, times);
+    let res = run_source_test(&src, times, stereo);
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -66,56 +66,64 @@ fn run_file_test(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     }
 }
 
+fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+    run_file_test(path, times, false)
+}
+
+fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+    run_file_test(path, times, true)
+}
+
 #[test]
-fn parser_firstbreak(){
-    let res = run_file_test("parser_firstbreak.mmm", 1).unwrap();
+fn parser_firstbreak() {
+    let res = run_file_test_mono("parser_firstbreak.mmm", 1).unwrap();
     let ans = vec![0.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn recursion() {
-    let res = run_file_test("recursion.mmm", 1).unwrap();
+    let res = run_file_test_mono("recursion.mmm", 1).unwrap();
     let ans = vec![5.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn counter() {
-    let res = run_file_test("counter.mmm", 10).unwrap();
+    let res = run_file_test_mono("counter.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn statefn() {
-    let res = run_file_test("statefn.mmm", 10).unwrap();
+    let res = run_file_test_mono("statefn.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn statefn2_same() {
-    let res = run_file_test("statefn2_same.mmm", 3).unwrap();
+    let res = run_file_test_mono("statefn2_same.mmm", 3).unwrap();
     let ans = vec![0.0, 6.0, 12.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn statefn2() {
-    let res = run_file_test("statefn2.mmm", 3).unwrap();
+    let res = run_file_test_mono("statefn2.mmm", 3).unwrap();
     let ans = vec![0.0, 8.0, 16.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn loopcounter() {
-    let res = run_file_test("loopcounter.mmm", 10).unwrap();
+    let res = run_file_test_mono("loopcounter.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 0.0, 1.0, 2.0, 3.0, 4.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn primitive_sin() {
-    let res = run_file_test("primitive_sin.mmm", 1).unwrap();
+    let res = run_file_test_mono("primitive_sin.mmm", 1).unwrap();
     let ans = vec![0.0];
     let r = (res[0] - ans[0]).abs() < std::f64::EPSILON;
     assert!(r);
@@ -123,7 +131,7 @@ fn primitive_sin() {
 
 #[test]
 fn sinewave() {
-    let res = run_file_test("sinwave.mmm", 10).unwrap();
+    let res = run_file_test_mono("sinwave.mmm", 10).unwrap();
     let ans = vec![
         0.0,
         0.021408545756451732,
@@ -141,55 +149,55 @@ fn sinewave() {
 
 #[test]
 fn ifblock() {
-    let res = run_file_test("if.mmm", 1).unwrap();
+    let res = run_file_test_mono("if.mmm", 1).unwrap();
     let ans = vec![4120.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn letmulti() {
-    let res = run_file_test("let_multi.mmm", 1).unwrap();
+    let res = run_file_test_mono("let_multi.mmm", 1).unwrap();
     let ans = vec![3.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_open() {
-    let res = run_file_test("closure_open.mmm", 1).unwrap();
+    let res = run_file_test_mono("closure_open.mmm", 1).unwrap();
     let ans = vec![4.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_open_3nested() {
-    let res = run_file_test("closure_open_3nested.mmm", 1).unwrap();
+    let res = run_file_test_mono("closure_open_3nested.mmm", 1).unwrap();
     let ans = vec![2.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn closure_open_inline() {
-    let res = run_file_test("closure_open_inline.mmm", 1).unwrap();
+    let res = run_file_test_mono("closure_open_inline.mmm", 1).unwrap();
     let ans = vec![2.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_closed() {
-    let res = run_file_test("closure_closed.mmm", 1).unwrap();
+    let res = run_file_test_mono("closure_closed.mmm", 1).unwrap();
     let ans = vec![-6.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_argument() {
-    let res = run_file_test("closure_argument.mmm", 1).unwrap();
+    let res = run_file_test_mono("closure_argument.mmm", 1).unwrap();
     let ans = vec![24.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn stateful_closure() {
-    let res = run_file_test("stateful_closure.mmm", 10).unwrap();
+    let res = run_file_test_mono("stateful_closure.mmm", 10).unwrap();
     let ans = vec![
         20.0,
         20.3,
@@ -207,7 +215,7 @@ fn stateful_closure() {
 
 #[test]
 fn hof_state() {
-    let res = run_file_test("hof_state.mmm", 10).unwrap();
+    let res = run_file_test_mono("hof_state.mmm", 10).unwrap();
     let ans = vec![
         0.0,
         0.6000000000000001,
