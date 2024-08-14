@@ -394,6 +394,14 @@ impl Machine {
                 Instruction::MoveConst(dst, pos) => {
                     self.set_stack(dst as i64, func.constants[pos as usize]);
                 }
+                Instruction::MoveRange(dst, src, n) => {
+                    for offset in 0..n {
+                        self.set_stack(
+                            (dst + offset) as i64,
+                            self.get_stack((src + offset) as i64),
+                        );
+                    }
+                }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
                     let cls_i = Self::get_as::<ClosureIdx>(addr);

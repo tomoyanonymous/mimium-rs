@@ -304,7 +304,11 @@ impl ByteCodeGenerator {
                             //reset register for args
                             let _ = self.vregister.find(a);
                         }
-                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
+                        match (dst != fadd, nret) {
+                            (false, _) => None,
+                            (true, 1) => Some(VmInstruction::Move(dst, fadd)),
+                            (true, n) => Some(VmInstruction::MoveRange(dst, fadd, *n)),
+                        }
                     }
                     mir::Value::Function(_idx, _state_size, _nret) => {
                         unreachable!();
@@ -322,16 +326,17 @@ impl ByteCodeGenerator {
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let fadd = self.prepare_function(bytecodes_dst, dst, args);
                         bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
-                        bytecodes_dst.push(VmInstruction::CallExtFun(
-                            fadd as Reg,
-                            nargs,
-                            ty.size(),
-                        ));
+                        let nret = ty.size();
+                        bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, nret));
                         for a in args {
                             //reset register for args
                             let _ = self.vregister.find(a);
                         }
-                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
+                        match (dst != fadd, nret) {
+                            (false, _) => None,
+                            (true, 1) => Some(VmInstruction::Move(dst, fadd)),
+                            (true, n) => Some(VmInstruction::MoveRange(dst, fadd, n)),
+                        }
                     }
                     mir::Value::FixPoint(_) => {
                         unreachable!("fixpoint should be called with callcls.")
