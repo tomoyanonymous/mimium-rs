@@ -386,7 +386,7 @@ impl Context {
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
                             Value::Function(idx, statesize, nret) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, *nret)
+                                self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
                             }
                             Value::Register(_) => {
                                 self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
@@ -414,7 +414,7 @@ impl Context {
                         }
 
                         Value::Function(idx, statesize, nret) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs, *nret)
+                            self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
                         }
                         Value::ExtFunction(label, _ty) => {
                             if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
@@ -491,7 +491,7 @@ impl Context {
                             }
                         };
 
-                        let f = Arc::new(Value::Function(c_idx, state_size, nret));
+                        let f = Arc::new(Value::Function(c_idx, state_size, res_type.clone()));
                         Ok((f, res_type))
                     })?;
                 let child = self.program.functions.get_mut(c_idx).unwrap();

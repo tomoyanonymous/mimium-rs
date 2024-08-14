@@ -21,7 +21,7 @@ pub enum Value {
     Register(VReg),
     State(VPtr),
     // idx of the function in the program, size of internal state, and nret
-    Function(usize, u64, TypeSize),
+    Function(usize, u64, Type),
     ExtFunction(Label, Type),
     FixPoint(usize), //function id
     //internal state
