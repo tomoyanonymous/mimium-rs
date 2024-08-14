@@ -205,7 +205,7 @@ impl Context {
         //do action
         let (fptr, ty) = action(self, c_idx)?;
 
-        // TODO
+        // TODO: ideally, type should be infered before the actual action
         let f = self.program.functions.get_mut(c_idx).unwrap();
         f.return_type = Some(ty.clone());
 
@@ -488,7 +488,7 @@ impl Context {
                                 let _ =
                                     ctx.push_inst(Instruction::Return(Arc::new(Value::None), nret));
                             }
-                            (Value::State(v), ty) => {
+                            (Value::State(v), _) => {
                                 let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), nret));
                             }
                             (Value::Function(i, _, _), _) => {

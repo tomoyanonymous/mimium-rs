@@ -20,7 +20,7 @@ pub enum Value {
     // holds SSA index(position in infinite registers)
     Register(VReg),
     State(VPtr),
-    // idx of the function in the program, size of internal state, and nret
+    // idx of the function in the program, size of internal state, return type
     Function(usize, u64, Type),
     ExtFunction(Label, Type),
     FixPoint(usize), //function id
@@ -44,7 +44,7 @@ pub enum Instruction {
     Store(VPtr, VPtr),
     // Tuple(Vec<Value>),
     // Proj(Value, u64),
-    // call function , arguments
+    // call function , arguments, nret
     Call(VPtr, Vec<VPtr>, TypeSize),
     CallCls(VPtr, Vec<VPtr>),
     GetGlobal(VPtr),
