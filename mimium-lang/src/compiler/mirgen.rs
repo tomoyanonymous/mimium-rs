@@ -416,12 +416,15 @@ impl Context {
                         Value::Function(idx, statesize, nret) => {
                             self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
                         }
-                        Value::ExtFunction(label, _ty) => {
+                        Value::ExtFunction(label, ty) => {
                             if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
                                 res
                             } else {
-                                let nret = 1; // TODO
-                                self.push_inst(Instruction::Call(f.clone(), a_regs.clone(), nret))
+                                self.push_inst(Instruction::Call(
+                                    f.clone(),
+                                    a_regs.clone(),
+                                    ty.size(),
+                                ))
                             }
                         }
                         // Value::ExternalClosure(i) => todo!(),
