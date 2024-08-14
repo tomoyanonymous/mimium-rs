@@ -3,5 +3,5 @@ fn to_stereo(x:float) -> (float,float) {
 }
 
 fn dsp() {
-    to_stereo(1.0)
+  to_stereo(1.0)
 }
