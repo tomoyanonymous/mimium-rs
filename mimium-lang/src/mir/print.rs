@@ -46,7 +46,7 @@ impl std::fmt::Display for Value {
             Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
-            Value::Function(id, _statesize) => write!(f, "function {id}"),
+            Value::Function(id, _statesize, nret) => write!(f, "function {id} (nret: {nret})"),
             Value::ExtFunction(label, t) => write!(f, "extfun {label} {t}"),
             Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
@@ -64,15 +64,15 @@ impl std::fmt::Display for Instruction {
             Instruction::Alloc(t) => write!(f, "alloc {t}"),
             Instruction::Load(src) => write!(f, "load {src}"),
             Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
-            Instruction::Call(fptr, args) => {
+            Instruction::Call(fptr, args, _nret) => {
                 write!(f, "call {} [{}]", *fptr, format_vec!(args))
             }
             Instruction::CallCls(cls, args) => {
                 write!(f, "callcls {} [{}]", *cls, format_vec!(args))
             }
             Instruction::Closure(fun) => {
-                if let Value::Function(idx, _) = fun.as_ref() {
-                    write!(f, "closure {idx}")
+                if let Value::Function(idx, _, nret) = fun.as_ref() {
+                    write!(f, "closure {idx} (nret: {nret})")
                 } else {
                     write!(f, "closure {}", *fun)
                 }

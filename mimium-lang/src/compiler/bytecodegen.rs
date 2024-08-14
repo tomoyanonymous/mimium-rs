@@ -289,7 +289,7 @@ impl ByteCodeGenerator {
                 let idx = self.get_or_insert_global(v.clone());
                 Some(VmInstruction::SetGlobal(idx, s))
             }
-            mir::Instruction::Call(v, args) => {
+            mir::Instruction::Call(v, args, nret) => {
                 let nargs = args.len() as u8;
                 match v.as_ref() {
                     mir::Value::Register(_address) => {
@@ -299,15 +299,14 @@ impl ByteCodeGenerator {
                         let fadd = self.prepare_function(bytecodes_dst, faddress, args);
                         let dst = self.get_destination(dst);
 
-                        let nret = 1; // TODO
-                        bytecodes_dst.push(VmInstruction::Call(fadd, nargs, nret));
+                        bytecodes_dst.push(VmInstruction::Call(fadd, nargs, *nret));
                         for a in args {
                             //reset register for args
                             let _ = self.vregister.find(a);
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::Function(_idx, _state_size) => {
+                    mir::Value::Function(_idx, _state_size, _nret) => {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(label, ty) => {
@@ -352,7 +351,7 @@ impl ByteCodeGenerator {
                         }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
-                    mir::Value::Function(_idx, _state_size) => {
+                    mir::Value::Function(_idx, _state_size, _nret) => {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(_idx, _) => {
