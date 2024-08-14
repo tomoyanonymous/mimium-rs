@@ -322,7 +322,11 @@ impl ByteCodeGenerator {
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let fadd = self.prepare_function(bytecodes_dst, dst, args);
                         bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
-                        bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, 1));
+                        bytecodes_dst.push(VmInstruction::CallExtFun(
+                            fadd as Reg,
+                            nargs,
+                            ty.size(),
+                        ));
                         for a in args {
                             //reset register for args
                             let _ = self.vregister.find(a);
