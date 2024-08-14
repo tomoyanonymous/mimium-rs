@@ -335,8 +335,16 @@ impl Context {
 
                 let mut types = Vec::with_capacity(len);
 
-                // prepare the sequence of registers before pushing other inst
-                // TODO: type needs to be inferred before evaluation.
+                // TODO: we have two unresolved problems.
+                //
+                // 1. Probably, Alloc should be able to prepare a sequence of
+                //    registers depending on the type. But, since currently
+                //    gen_new_register() is called in push_inst(), we need to
+                //    call Alloc multiple times to get multiple registers.
+                // 2. While the type can be known only after the expr is
+                //    evaluated, this instruction must be inserted before
+                //    eval_expr() to make sure there's a destination for each
+                //    value. Ideally, type should be inferred beforehand.
                 let dsts: Vec<_> = (0..len)
                     .map(|_| self.push_inst(Instruction::Alloc(Type::Unknown)))
                     .collect();
@@ -349,12 +357,11 @@ impl Context {
                     types.push(ty);
                 }
 
-                // validate if the types are all identical
-                // (TODO: allow different types in a tuple?)
-                let first_ty = &types[0];
-                if !types.iter().all(|x| x == first_ty) {
-                    todo!("Return error");
-                }
+                // TODO: validate if the types are all identical?
+                // let first_ty = &types[0];
+                // if !types.iter().all(|x| x == first_ty) {
+                //     todo!("Return error");
+                // }
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
