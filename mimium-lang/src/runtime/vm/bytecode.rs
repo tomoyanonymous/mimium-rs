@@ -112,7 +112,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Mem(dst, src) => {
                 write!(f, "{:<10} {} {}", "mem", dst, src)
             }
-            Instruction::Return(iret, _nret) => write!(f, "{:<10} {}", "ret", iret),
+            Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
             Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
             Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
             Instruction::GetGlobal(dst, src) => write!(f, "{:<10} {} {}", "getglobal", dst, src),
