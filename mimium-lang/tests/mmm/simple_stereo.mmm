@@ -1,0 +1,7 @@
+fn to_stereo(x:float) -> (float,float) {
+  (x, x * 2.0)
+}
+
+fn dsp() {
+    to_stereo(1.0)
+}

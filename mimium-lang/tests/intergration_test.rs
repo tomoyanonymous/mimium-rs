@@ -230,3 +230,10 @@ fn hof_state() {
     ];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn simple_stereo() {
+    let res = run_file_test_stereo("simple_stereo.mmm", 3).unwrap();
+    let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
+    assert_eq!(res, ans);
+}
