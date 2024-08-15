@@ -40,6 +40,36 @@ fn test_let() {
     test_string!("let goge = 36\n goge", ans);
 }
 #[test]
+fn test_lettuple() {
+    let ans = WithMeta(
+        Expr::Let(
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Tuple(vec![
+                        Pattern::Single("a".into()),
+                        Pattern::Single("b".into()),
+                    ]),
+                    ty: None,
+                },
+                4..9,
+            ),
+            Box::new(WithMeta(
+                Expr::Tuple(vec![
+                    WithMeta(Expr::Literal(Literal::Int(36)), 13..15),
+                    WithMeta(Expr::Literal(Literal::Int(89)), 16..18),
+                ]),
+                12..19,
+            )),
+            Some(Box::new(WithMeta(
+                Expr::Var("hoge".to_string(), None),
+                21..25,
+            ))),
+        ),
+        0..25,
+    );
+    test_string!("let (a,b) = (36,89)\n hoge", ans);
+}
+#[test]
 fn test_if() {
     let ans = WithMeta(
         Expr::If(
