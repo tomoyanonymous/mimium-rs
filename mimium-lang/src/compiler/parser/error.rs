@@ -35,7 +35,7 @@ where
     fn get_span(&self) -> Span {
         self.0.span()
     }
-    fn get_message(&self) -> String {
+    fn get_message(&self, color: Color) -> String {
         match self.0.reason() {
             chumsky::error::SimpleReason::Unexpected
             | chumsky::error::SimpleReason::Unclosed { .. } => {
@@ -47,7 +47,7 @@ where
                         "unexpected end of input"
                     },
                     if let Some(label) = self.0.label() {
-                        format!(" while parsing {}", label.fg(Color::Green))
+                        format!(" while parsing {}", label.fg(color))
                     } else {
                         " something else".to_string()
                     },
@@ -68,14 +68,14 @@ where
             chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
         }
     }
-    fn get_label(&self) -> String {
+    fn get_label(&self, color: Color) -> String {
         match self.0.reason() {
             chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
             _ => format!(
                 "Unexpected {}",
                 self.0
                     .found()
-                    .map(|c| format!("token {}", c.fg(Color::Red)))
+                    .map(|c| format!("token {}", c.fg(color)))
                     .unwrap_or_else(|| "end of input".to_string())
             ),
         }
