@@ -1,6 +1,6 @@
 pub mod builder;
 
-pub use crate::types::TypedId;
+use crate::pattern::{Id, TypedId};
 use crate::types::*;
 use crate::utils::metadata::WithMeta;
 use crate::utils::miniprint::MiniPrint;

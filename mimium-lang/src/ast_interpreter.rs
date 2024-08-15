@@ -3,9 +3,10 @@ use crate::{
     compiler::Error as CompileError,
     compiler::ErrorKind,
     integer, numeric,
+    pattern::TypedId,
     runtime::builtin_fn,
     string_t,
-    types::{PType, Type, TypedId},
+    types::{PType, Type},
     unit,
     utils::{
         environment::Environment,

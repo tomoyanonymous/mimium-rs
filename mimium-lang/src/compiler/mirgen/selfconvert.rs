@@ -178,7 +178,7 @@ pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
 
 #[cfg(test)]
 mod test {
-    use crate::ast::TypedId;
+    use crate::pattern::TypedId;
 
     use super::*;
 

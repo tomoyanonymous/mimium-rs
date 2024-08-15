@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::*;
+use crate::pattern::TypedId;
 use crate::utils;
 use std::path::PathBuf;
 

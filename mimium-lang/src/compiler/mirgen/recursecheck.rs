@@ -82,7 +82,8 @@ mod test {
 
     use crate::{
         app,
-        ast::{Expr, Literal, TypedId},
+        ast::{Expr, Literal},
+        pattern::TypedId,
         ifexpr, lambda, let_, letrec, number, var,
     };
 

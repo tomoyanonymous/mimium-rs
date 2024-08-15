@@ -32,13 +32,6 @@ pub enum Type {
 // currently, this refers to the number of registers
 pub type TypeSize = u8;
 
-pub type Id = String;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TypedId {
-    pub ty: Option<Type>,
-    pub id: Id,
-}
 
 impl Type {
     pub fn is_primitive(&self) -> bool {
@@ -133,14 +126,7 @@ impl fmt::Display for Type {
     }
 }
 
-impl MiniPrint for TypedId {
-    fn simple_print(&self) -> String {
-        match &self.ty {
-            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
-            None => self.id.clone(),
-        }
-    }
-}
+
 
 pub mod builder;
 
