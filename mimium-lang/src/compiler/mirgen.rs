@@ -1,5 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
+use crate::pattern::TypedId;
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -537,8 +538,10 @@ impl Context {
                 self.get_current_fn().state_size += 1;
                 Ok((Arc::new(Value::State(retv)), t))
             }
-            Expr::Let(id, body, then) => {
-                self.fn_label = Some(id.id.clone());
+            Expr::Let(WithMeta(pat,_s), body, then) => {
+                let tid = TypedId::try_from(pat.clone()).unwrap();
+                let id = tid.id.clone();
+                self.fn_label = Some(tid.id.clone());
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
@@ -547,7 +550,7 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(body)?;
                 //todo:need to boolean and insert cast
-                let idt = match id.ty.as_ref() {
+                let idt = match tid.ty.as_ref() {
                     Some(Type::Function(atypes, box rty, s)) => {
                         self.typeenv.convert_unknown_function(atypes, rty, s)
                     }
@@ -558,7 +561,7 @@ impl Context {
 
                 self.typeenv
                     .env
-                    .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                    .add_bind(&[(id.clone(), t.clone())]);
                 self.fn_label = None;
 
                 match (
@@ -570,7 +573,7 @@ impl Context {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
                         let _greg =
                             self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone()));
-                        self.add_bind((id.id.clone(), gv));
+                        self.add_bind((id.clone(), gv));
                         self.eval_expr(then_e)
                     }
                     (false, false, Some(then_e)) => {
@@ -580,11 +583,11 @@ impl Context {
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
 
-                        self.add_bind((id.id.clone(), alloc_res));
+                        self.add_bind((id.clone(), alloc_res));
                         self.eval_expr(then_e)
                     }
                     (_, _, Some(then_e)) => {
-                        self.add_bind((id.id.clone(), bodyv));
+                        self.add_bind((id.clone(), bodyv));
                         self.eval_expr(then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),

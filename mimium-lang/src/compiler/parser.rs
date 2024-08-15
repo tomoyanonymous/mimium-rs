@@ -1,9 +1,10 @@
 use crate::ast::*;
-use crate::types::{PType, Type, TypedId};
+use crate::pattern::{Pattern, TypedId, TypedPattern};
+use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
-use chumsky::prelude::*;
-use chumsky::Parser;
+use chumsky::{prelude::*, Parser};
+// use chumsky::Parser;
 mod token;
 use token::{Comment, Op, Token};
 mod error;
@@ -40,9 +41,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .boxed()
             .labelled("function");
 
-        // .map_with_span(|e, s| WithMeta(e, s))
-
-        func.or(atom).boxed()
+        func.or(atom).boxed().labelled("Type")
     })
 }
 
@@ -55,18 +54,39 @@ fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         Token::SelfLit => Expr::Literal(Literal::SelfLit),
         Token::Now => Expr::Literal(Literal::Now),
     }
-    // .map_with_span(|e, s| WithMeta(e, s))
     .labelled("value")
 }
-fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
-    select! { Token::Ident(s) => s }
+fn with_type_annotation<P, O>(
+    parser: P,
+) -> impl Parser<Token, (O, Option<Type>), Error = Simple<Token>> + Clone
+where
+    P: Parser<Token, O, Error = Simple<Token>> + Clone,
+{
+    parser
         .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-        .map(|(id, t)| TypedId { id: id, ty: t })
+        .map(|(id, t)| (id, t))
+}
+fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
+    with_type_annotation(select! { Token::Ident(s) => s })
+        .map(|(s, t)| TypedId { id: s, ty: t })
         .labelled("lvar")
+}
+fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple<Token>> + Clone {
+    let pat = recursive(|pat| {
+        pat.clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+            .map(|ptns| Pattern::Tuple(ptns))
+            .or(select! { Token::Ident(s) => Pattern::Single(s) })
+            .labelled("Pattern")
+    });
+    with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
 }
 
 fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser();
+    let pattern = pattern_parser();
     let val = val_parser();
     let expr_group = recursive(|expr_group| {
         let expr = recursive(|expr| {
@@ -75,7 +95,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                 .labelled("paren_expr");
             let let_e = just(Token::Let)
-                .ignore_then(lvar.clone())
+                .ignore_then(pattern.clone())
                 .then_ignore(just(Token::Assign))
                 .then(expr.clone())
                 .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
@@ -83,6 +103,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .map(|((ident, body), then)| Expr::Let(ident, Box::new(body), then))
                 .boxed()
                 .labelled("let");
+
             let lambda = lvar
                 .clone()
                 .map_with_span(|id, span| WithMeta::<TypedId>(id, span))
@@ -288,8 +309,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     expr_group
 }
 fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
-    select! {Token::Comment(Comment::SingleLine(t))=>(),
-    Token::Comment(Comment::MultiLine(t))=>()}
+    select! {Token::Comment(Comment::SingleLine(_t))=>(),
+    Token::Comment(Comment::MultiLine(_t))=>()}
 }
 fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
@@ -370,7 +391,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             })
             .labelled("macro definition");
         let let_stmt = just(Token::Let)
-            .ignore_then(lvar.clone())
+            .ignore_then(pattern_parser().clone())
             .then_ignore(just(Token::Assign))
             .then(expr.clone())
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
@@ -397,10 +418,10 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
 pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
     let WithMeta(_, ref span) = ast;
     let res = Expr::Let(
-        TypedId {
+        WithMeta(TypedPattern {
+            pat: Pattern::Single(GLOBAL_LABEL.to_string()),
             ty: None,
-            id: GLOBAL_LABEL.to_string(),
-        },
+        },span.clone()),
         Box::new(WithMeta(
             Expr::Lambda(vec![], None, Box::new(ast.clone())),
             span.clone(),

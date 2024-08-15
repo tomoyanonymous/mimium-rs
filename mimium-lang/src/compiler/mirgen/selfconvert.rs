@@ -33,7 +33,6 @@ impl ReportableError for Error {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FeedId {
     Global,
@@ -128,7 +127,10 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             let elems: Vec<ConvertResult> = callee.into_iter().map(|e| cls(e)).try_collect()?;
             let elems_mapped: Vec<WithMeta<Expr>> =
                 elems.iter().map(|e| get_content(e.clone())).collect();
-            let content = WithMeta(Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped), span);
+            let content = WithMeta(
+                Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped),
+                span,
+            );
             if fun.is_ok() && elems.iter().find(|e| e.is_err()).is_none() {
                 Ok(ConvertResult::Ok(content))
             } else {
@@ -178,7 +180,7 @@ pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
 
 #[cfg(test)]
 mod test {
-    use crate::pattern::TypedId;
+    use crate::pattern::{Pattern, TypedId, TypedPattern};
 
     use super::*;
 
@@ -186,10 +188,13 @@ mod test {
     pub fn test_selfconvert() {
         let src = WithMeta(
             Expr::Let(
-                TypedId {
-                    id: "lowpass".to_string(),
-                    ty: None,
-                },
+                WithMeta(
+                    TypedPattern {
+                        pat: Pattern::Single("lowpass".to_string()),
+                        ty: None,
+                    },
+                    0..1,
+                ),
                 Box::new(WithMeta::<_>(
                     Expr::Lambda(
                         vec![WithMeta::<_>(
@@ -211,10 +216,13 @@ mod test {
         let WithMeta(res, _) = convert_self_top(src).unwrap();
 
         let ans = Expr::Let(
-            TypedId {
-                ty: None,
-                id: "lowpass".to_string(),
-            },
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Single("lowpass".to_string()),
+                    ty: None,
+                },
+                0..1,
+            ),
             Box::new(WithMeta::<_>(
                 Expr::Lambda(
                     vec![WithMeta::<_>(

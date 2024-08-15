@@ -1,5 +1,6 @@
 use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
+use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
 use crate::utils::{
@@ -240,6 +241,15 @@ impl InferContext {
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
         }
     }
+    pub fn bind_pattern(&mut self, t: &Type, pat:&Pattern){
+        match pat{
+            Pattern::Single(id) => {
+                self.env.add_bind(&[(id.clone(), t.clone())]);
+            },
+            Pattern::Tuple(_) => todo!(),
+        }
+        
+    }
 }
 
 pub fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
@@ -322,19 +332,19 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             ctx.env.to_outer();
             Ok(Type::Function(ptypes, Box::new(bty), None))
         }
-        Expr::Let(id, body, then) => {
+        Expr::Let(WithMeta(tpat, _), body, then) => {
             let c = ctx;
             let bodyt = infer_type(body, c)?;
-            let idt = match id.ty.as_ref() {
+            let idt = match tpat.ty.as_ref() {
                 Some(Type::Function(atypes, box rty, s)) => {
                     c.convert_unknown_function(atypes, rty, s)
                 }
                 Some(t) => t.clone(),
                 None => c.gen_intermediate_type(),
             };
-
+            
             let bodyt_u = c.unify_types(idt, bodyt)?;
-            c.env.add_bind(&mut vec![(id.clone().id, bodyt_u)]);
+            c.bind_pattern( &bodyt_u,&tpat.pat);
             let res = match then {
                 Some(e) => infer_type(e, c),
                 None => Ok(Type::Primitive(PType::Unit)),

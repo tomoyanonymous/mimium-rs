@@ -26,9 +26,9 @@ impl<T: Clone> Environment<T> {
     pub fn to_outer(&mut self) {
         let _ = self.0.pop_front();
     }
-    pub fn add_bind(&mut self, binds: &mut Vec<(String, T)>) {
+    pub fn add_bind(&mut self, binds: & [(String, T)]) {
         assert!(self.0.len() > 0);
-        self.0.front_mut().unwrap().append(binds);
+        self.0.front_mut().unwrap().extend_from_slice(binds);
     }
 
     pub fn lookup_cls(&self, name: &str) -> LookupRes<&T> {

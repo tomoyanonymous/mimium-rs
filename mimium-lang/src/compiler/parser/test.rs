@@ -22,10 +22,13 @@ macro_rules! test_string {
 fn test_let() {
     let ans = WithMeta(
         Expr::Let(
-            TypedId {
-                id: "goge".to_string(),
-                ty: None,
-            },
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Single("goge".to_string()),
+                    ty: None,
+                },
+                4..8,
+            ),
             Box::new(WithMeta(Expr::Literal(Literal::Int(36)), 11..13)),
             Some(Box::new(WithMeta(
                 Expr::Var("goge".to_string(), None),
@@ -76,10 +79,13 @@ fn test_block() {
     let ans = WithMeta(
         Expr::Block(Some(Box::new(WithMeta(
             Expr::Let(
-                TypedId {
-                    ty: None,
-                    id: "hoge".to_string(),
-                },
+                WithMeta(
+                    TypedPattern {
+                        pat: Pattern::Single("hoge".to_string()),
+                        ty: None,
+                    },
+                    5..9,
+                ),
                 Box::new(WithMeta(Expr::Literal(Literal::Int(100)), 12..15)),
                 Some(Box::new(WithMeta(
                     Expr::Var("hoge".to_string(), None),
