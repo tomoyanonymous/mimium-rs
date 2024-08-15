@@ -12,7 +12,7 @@ impl std::fmt::Display for Mir {
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
             }
-            let _ = write!(f," state_size: {}",fun.state_size);
+            let _ = write!(f, " state_size: {}", fun.state_size);
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "\n  block {i}\n");
                 for (v, insts) in block.0.iter() {
@@ -46,7 +46,7 @@ impl std::fmt::Display for Value {
             Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
-            Value::Function(id, _statesize) => write!(f, "function {id}"),
+            Value::Function(id, _statesize, nret) => write!(f, "function {id} (nret: {nret})"),
             Value::ExtFunction(label, t) => write!(f, "extfun {label} {t}"),
             Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
@@ -64,15 +64,15 @@ impl std::fmt::Display for Instruction {
             Instruction::Alloc(t) => write!(f, "alloc {t}"),
             Instruction::Load(src) => write!(f, "load {src}"),
             Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
-            Instruction::Call(fptr, args) => {
+            Instruction::Call(fptr, args, _nret) => {
                 write!(f, "call {} [{}]", *fptr, format_vec!(args))
             }
             Instruction::CallCls(cls, args) => {
                 write!(f, "callcls {} [{}]", *cls, format_vec!(args))
             }
             Instruction::Closure(fun) => {
-                if let Value::Function(idx, _) = fun.as_ref() {
-                    write!(f, "closure {idx}")
+                if let Value::Function(idx, _, nret) = fun.as_ref() {
+                    write!(f, "closure {idx} (nret: {nret})")
                 } else {
                     write!(f, "closure {}", *fun)
                 }
@@ -88,8 +88,8 @@ impl std::fmt::Display for Instruction {
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
-            Instruction::Return(a) => write!(f, "ret {}", *a),
-            Instruction::ReturnFeed(v) => write!(f, "retfeed {}", *v),
+            Instruction::Return(a, _nret) => write!(f, "ret {}", *a),
+            Instruction::ReturnFeed(v, _nret) => write!(f, "retfeed {}", *v),
             Instruction::Delay(max, a, b) => write!(f, "delay {max} {} {}", *a, *b),
             Instruction::Mem(a) => write!(f, "mem {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

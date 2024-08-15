@@ -1,3 +1,5 @@
+use crate::types::TypeSize;
+
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u16;
@@ -9,6 +11,8 @@ pub enum Instruction {
     // Destination / Source
     Move(Reg, Reg),
     MoveConst(Reg, ConstPos),
+    // Move the range of registers (e.g. tuple)
+    MoveRange(Reg, Reg, u8),
     // call internal function
     // Function Address,Nargs,Nret
     Call(Reg, u8, u8),
@@ -38,8 +42,8 @@ pub enum Instruction {
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
     // value start position, Nrets
-    Return(Reg, Reg),
-    //dst,src,time,idx 
+    Return(Reg, TypeSize),
+    //dst,src,time,idx
     Delay(Reg, Reg, Reg),
     Mem(Reg, Reg),
 
@@ -100,6 +104,17 @@ impl std::fmt::Display for Instruction {
             Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
+            Instruction::MoveRange(dst, src, n) => {
+                write!(
+                    f,
+                    "{:<10} {}-{} {}-{}",
+                    "mov",
+                    dst,
+                    dst + n - 1,
+                    src,
+                    src + n - 1
+                )
+            }
 
             Instruction::Closure(dst, src) => {
                 write!(f, "{:<10} {} {}", "closure", dst, src)

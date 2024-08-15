@@ -29,6 +29,9 @@ pub enum Type {
     Unknown,
 }
 
+// currently, this refers to the number of registers
+pub type TypeSize = u8;
+
 pub type Id = String;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +79,20 @@ impl Type {
         F: Fn(Self, Self) -> R,
     {
         todo!()
+    }
+
+    pub fn size(&self) -> TypeSize {
+        match self {
+            Type::Primitive(_) => 1,
+            Type::Array(_ty) => todo!(),
+            Type::Tuple(types) => types.len() as _,
+            Type::Struct(types) => types.len() as _,
+            Type::Function(_, _, _) => 1,
+            Type::Ref(_) => 1,
+            Type::Code(_) => todo!(),
+            Type::Intermediate(_) => 1, // TODO
+            Type::Unknown => todo!(),
+        }
     }
 }
 impl fmt::Display for PType {
