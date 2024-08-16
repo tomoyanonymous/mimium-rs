@@ -60,9 +60,10 @@ fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
     Token::Comment(Comment::MultiLine(_))=>()}
 }
 
-#[allow(clippy::type_complexity)]
-fn eol() -> Or<Just<Token, Token, Simple<Token>>, Just<Token, Token, Simple<Token>>> {
-    just(Token::LineBreak).or(just(Token::SemiColon))
+fn eol() -> impl Parser<Token, Token, Error = Simple<Token>> + Clone {
+    just(Token::LineBreak)
+        .or(just(Token::SemiColon))
+        .or(just(Token::EndOfInput))
 }
 
 fn stmt_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
@@ -136,6 +137,7 @@ fn non_block_expr_parser<'a>(
         .or(tuple_expr_parser(expr.clone()))
         .or(lambda_expr_parser(expr.clone()))
         .or(macro_expand_expr_parser(expr.clone()))
+        .or(if_expr_parser(expr.clone()))
         .boxed()
         .labelled("atom");
 
@@ -221,8 +223,7 @@ fn block_expr_parser<'a>(
 
     // TODO?: Semantically, this should be { stmt* expr eol? } | { expr eol? } | {}
     //        But, using expr instead of stmt makes this simple and just works.
-    let bracketed_block = expr
-        .clone()
+    expr.clone()
         .separated_by(eol())
         .delimited_by(blockstart, blockend)
         .map_with_span(|e, s| {
@@ -238,25 +239,7 @@ fn block_expr_parser<'a>(
                 }),
             }
         })
-        .labelled("bracket");
-
-    let if_block = just(Token::If)
-        .ignore_then(
-            expr.clone()
-                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
-        )
-        .then(bracketed_block.clone())
-        .then(
-            just(Token::Else)
-                .ignore_then(bracketed_block.clone().map(Box::new))
-                .or_not(),
-        )
-        .map_with_span(|((cond, then), opt_else), s| {
-            WithMeta(Expr::If(cond.into(), then.into(), opt_else), s)
-        })
-        .labelled("if");
-
-    bracketed_block.or(if_block)
+        .labelled("block")
 }
 
 fn literal_expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
@@ -332,6 +315,26 @@ fn macro_expand_expr_parser<'a>(
             )
         })
         .labelled("macroexpand")
+}
+
+fn if_expr_parser<'a>(
+    expr: impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone + 'a,
+) -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone + 'a {
+    just(Token::If)
+        .ignore_then(
+            expr.clone()
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+        )
+        .then(expr.clone())
+        .then(
+            just(Token::Else)
+                .ignore_then(expr.clone().map(Box::new))
+                .or_not(),
+        )
+        .map_with_span(|((cond, then), opt_else), s| {
+            WithMeta(Expr::If(cond.into(), then.into(), opt_else), s)
+        })
+        .labelled("if")
 }
 
 fn expr_stmt_parser<'a>(
@@ -478,7 +481,10 @@ pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>>
         .iter()
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
-    if let Some(t) = tokens {
+    if let Some(mut t) = tokens {
+        // TODO: can this be inserted by lexer...?
+        t.push((Token::EndOfInput, len..len));
+
         let (ast, parse_errs) =
             parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         ast.ok_or_else(|| {

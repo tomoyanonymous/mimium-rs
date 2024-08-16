@@ -107,7 +107,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map(|_s| Token::LineBreak);
     // A single token can be one of the above
     let token = comment_parser()
-        .map(|c| Token::Comment(c))
+        .map(Token::Comment)
         .or(float)
         .or(int)
         .or(str_)
