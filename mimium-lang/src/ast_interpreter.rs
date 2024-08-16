@@ -359,6 +359,13 @@ pub fn eval_ast(
                     .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
             }
         }
+        ast::Expr::ExprStmt(e, then) => {
+            eval_ast(e, ctx)?;
+            match then {
+                Some(t) => eval_ast(t, ctx),
+                None => Ok(Value::Primitive(PValue::Unit)),
+            }
+        }
         ast::Expr::Bracket(_) => todo!(),
         ast::Expr::Escape(_) => todo!(),
         ast::Expr::Error => panic!("Some Error happend in previous stages"),

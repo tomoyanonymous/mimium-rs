@@ -673,6 +673,14 @@ impl Context {
                 let res = self.push_inst(Instruction::Phi(t, e));
                 Ok((res, thent))
             }
+            Expr::ExprStmt(body, then) => {
+                self.eval_expr(body)?;
+                if let Some(then_e) = then {
+                    self.eval_expr(then_e)
+                } else {
+                    Ok((Arc::new(Value::None), unit!()))
+                }
+            }
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
             Expr::Error => todo!(),

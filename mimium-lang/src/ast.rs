@@ -44,6 +44,8 @@ pub enum Expr {
     Bracket(Box<WithMeta<Self>>),
     Escape(Box<WithMeta<Self>>),
 
+    ExprStmt(Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
+
     Error,
 }
 
@@ -130,6 +132,11 @@ impl MiniPrint for Expr {
                 cond.0.simple_print(),
                 then.0.simple_print(),
                 optelse.as_ref().map_or("".into(), |e| e.0.simple_print())
+            ),
+            Expr::ExprStmt(body, then) => format!(
+                "({} {})",
+                body.0.simple_print(),
+                then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
