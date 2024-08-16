@@ -431,3 +431,75 @@ pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>>
         Err(errs)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn print_without_span<O>(tokens: &[(Token, O)]) {
+        print!("\nTokens: [");
+        for (t, _) in tokens {
+            print!("{t:?}, ");
+        }
+        println!("]");
+    }
+
+    #[test]
+    fn test_stmt_parser() {
+        let cases = [
+            // literal
+            "1.0\n",
+            "1\n",
+            // r#""foo""#,
+            // symbol
+            "foo\n",
+            "self\n",
+            "now\n",
+            // grouped expr
+            "(1.0)\n",
+            // tuple expr
+            "(1.0, )\n",
+            // call
+            "foo()\n",
+            "foo(1.0, 2.0)\n",
+            "foo()()()\n",
+            // unary and binary op
+            "-1\n",
+            "1+1\n",
+            "1*1+3^6\n",
+            // let statement
+            "let x = 1\n",
+            // multiline
+            "1.0\n1.0\n",
+            " 1.0\n  1.0\n",
+            // block
+            "{\n1.0\n}\n",
+            // fn
+            "fn foo(hoge){\n1\n2\n}\n",
+            "fn foo(hoge){\n1\n2}\n",
+            "fn test(hoge){
+    sin(1.0)
+    1.0
+}
+fn dsp(){
+    test(2.0)
+}",
+            // if-else
+            // "if (t) { 1.0 } else { 2.0 }\n",
+        ];
+        for src in cases {
+            let (tokens, _) = lexer::lexer().parse_recovery(src);
+            let tokens = tokens.expect("Failed to tokenize");
+            print_without_span(&tokens);
+
+            // let stmt = expr_stmt_parser(literal_expr_parser(), literal_expr_parser());
+            // let block = block_expr_parser(literal_expr_parser(), stmt);
+            // let parser = func_stmt_parser(block, literal_expr_parser());
+
+            let parser = parser();
+            let len = src.chars().count();
+            let (ast, _) =
+                parser.parse_recovery(chumsky::Stream::from_iter(len..len + 1, tokens.into_iter()));
+            println!("{:#?}", ast.expect("Failed to parse"));
+        }
+    }
+}
