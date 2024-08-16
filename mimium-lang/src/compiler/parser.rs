@@ -228,10 +228,7 @@ fn block_expr_parser<'a>(
         .map_with_span(|e, s| {
             match e.as_slice() {
                 [] => WithMeta(Expr::Block(None), s),
-                [e] => {
-                    let inner = WithMeta(Expr::ExprStmt(Box::new(e.clone()), None), e.1.clone());
-                    WithMeta(Expr::Block(Some(Box::new(inner))), s)
-                }
+                [e] => WithMeta(Expr::Block(Some(Box::new(e.clone()))), s),
                 // fold into a chain of ExprStmt
                 [head @ .., last] => head.iter().rfold(last.clone(), |acc, x| {
                     WithMeta(
