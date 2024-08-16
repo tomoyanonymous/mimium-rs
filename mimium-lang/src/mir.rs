@@ -42,8 +42,7 @@ pub enum Instruction {
     Load(VPtr),
     // store value to pointer
     Store(VPtr, VPtr),
-    // Tuple(Vec<Value>),
-    // Proj(Value, u64),
+    Proj(VPtr, u64),
     // call function , arguments, nret
     Call(VPtr, Vec<VPtr>, TypeSize),
     CallCls(VPtr, Vec<VPtr>),
@@ -124,12 +123,6 @@ pub enum UpIndex {
     Upvalue(usize), // index of upvalues in upper functions
 }
 
-#[derive(Clone, Debug)]
-pub struct Local {
-    pub name: String,
-    pub depth: usize,
-    pub is_captured: bool,
-}
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OpenUpValue(pub usize);
 

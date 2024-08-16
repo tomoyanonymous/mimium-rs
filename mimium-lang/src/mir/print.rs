@@ -64,6 +64,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Alloc(t) => write!(f, "alloc {t}"),
             Instruction::Load(src) => write!(f, "load {src}"),
             Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
+            Instruction::Proj(v, idx) => write!(f, "proj {v} {idx}"),
             Instruction::Call(fptr, args, _nret) => {
                 write!(f, "call {} [{}]", *fptr, format_vec!(args))
             }
