@@ -54,7 +54,7 @@ fn get_feedvar_name(fid: i64) -> String {
 fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, Error> {
     let cls = |e: WithMeta<Expr>| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
     let opt_cls = |opt_e: Option<Box<WithMeta<Expr>>>| -> Result<Option<ConvertResult>, Error> {
-        Ok(opt_e.map(|t| cls(*t)).transpose()?)
+        opt_e.map(|t| cls(*t)).transpose()
     };
     let WithMeta(e, span) = expr.clone();
     match e.clone() {
@@ -66,10 +66,10 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             ))),
         },
         Expr::Tuple(v) => {
-            let elems: Vec<ConvertResult> = v.into_iter().map(|e| cls(e)).try_collect()?;
+            let elems: Vec<ConvertResult> = v.into_iter().map(&cls).try_collect()?;
             let elems_mapped: Vec<WithMeta<Expr>> =
                 elems.iter().map(|e| get_content(e.clone())).collect();
-            if elems.iter().find(|e| e.is_err()).is_some() {
+            if elems.iter().any(|e| e.is_err()) {
                 Ok(ConvertResult::Err(WithMeta(
                     Expr::Tuple(elems_mapped),
                     span,
@@ -86,13 +86,20 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
         Expr::Let(id, body, then) => {
             let body = cls(*body)?;
             let then = opt_cls(then)?;
-            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
+            if let (Ok(b), Ok(t)) = (body.clone(), then.clone().transpose()) {
                 Ok(ConvertResult::Ok(WithMeta(
                     Expr::Let(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
                     span,
                 )))
             } else {
-                Ok(ConvertResult::Err(expr.clone()))
+                Ok(ConvertResult::Err(WithMeta(
+                    Expr::Let(
+                        id,
+                        Box::new(get_content(body)),
+                        then.map(|t| Box::new(get_content(t))),
+                    ),
+                    span,
+                )))
             }
         }
         Expr::LetRec(id, body, then) => {
@@ -113,7 +120,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             let nbody = match convert_self(*body, FeedId::Local(nfctx))? {
                 ConvertResult::Err(nbody) => {
                     let feedid = get_feedvar_name(nfctx);
-                    WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone())
+                    WithMeta(Expr::Feed(feedid, nbody.into()), span.clone())
                 }
                 ConvertResult::Ok(nbody) => nbody.clone(),
             };
