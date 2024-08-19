@@ -1,6 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
-use crate::pattern::{Pattern, TypedId};
+use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -99,7 +99,7 @@ impl Context {
                 ))));
                 res
             }
-            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), src, time])
+            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), _src, _time])
                 if name.as_str() == "delay" =>
             {
                 Err(CompileError(CompileErrorKind::UnboundedDelay, span.clone()))
@@ -166,20 +166,38 @@ impl Context {
     fn add_bind(&mut self, bind: (String, VPtr)) {
         self.valenv.add_bind(&mut vec![bind]);
     }
-    fn add_bind_pattern(&mut self, pat: &Pattern, v: VPtr, ty: &Type) {
+    fn add_bind_pattern(
+        &mut self,
+        pattern: &WithMeta<TypedPattern>,
+        v: VPtr,
+        ty: &Type,
+    ) -> Result<(), CompileError> {
+        let WithMeta(TypedPattern { pat, ty: _ }, span) = pattern;
         match pat {
-            Pattern::Single(id) => self.add_bind((id.clone(), v)),
+            Pattern::Single(id) => Ok(self.add_bind((id.clone(), v))),
             Pattern::Tuple(patterns) => {
-                let tvec = ty;
+                let tvec = ty.get_as_tuple().ok_or(CompileError::from(typing::Error(
+                    typing::ErrorKind::PatternMismatch(ty.clone(), pat.clone()),
+                    span.clone(),
+                )))?;
                 for (i, pat) in patterns.iter().enumerate() {
+                    let ty = &tvec[i];
                     let v = self.push_inst(Instruction::GetElement {
                         value: v.clone(),
-                        ty,
+                        ty: ty.clone(),
                         array_idx: 0,
                         tuple_offset: i as u64,
                     });
-                    self.add_bind_pattern(pat, v)
+                    let tpat = WithMeta(
+                        TypedPattern {
+                            pat: pat.clone(),
+                            ty: None,
+                        },
+                        span.clone(),
+                    );
+                    self.add_bind_pattern(&tpat, v, &ty)?;
                 }
+                Ok(())
             }
         }
     }
@@ -355,31 +373,27 @@ impl Context {
             Expr::Tuple(items) => {
                 let len = items.len();
                 if len == 0 {
-                    panic!("0-length tuple is not supported");
+                    unreachable!("0-length tuple is not supported");
                 }
-
-                let mut types = Vec::with_capacity(len);
-
-                // TODO: we have two unresolved problems.
-                //
-                // 1. Probably, Alloc should be able to prepare a sequence of
-                //    registers depending on the type. But, since currently
-                //    gen_new_register() is called in push_inst(), we need to
-                //    call Alloc multiple times to get multiple registers.
-                // 2. While the type can be known only after the expr is
-                //    evaluated, this instruction must be inserted before
-                //    eval_expr() to make sure there's a destination for each
-                //    value. Ideally, type should be inferred beforehand.
-                let dsts: Vec<_> = (0..len)
-                    .map(|_| self.push_inst(Instruction::Alloc(Type::Unknown)))
-                    .collect();
+                // let mut types = Vec::with_capacity(len);
+                let (vs, types): (Vec<_>, Vec<_>) = items
+                    .iter()
+                    .map(|e| self.eval_expr(e))
+                    .try_collect::<Vec<_>>()?
+                    .iter()
+                    .cloned()
+                    .unzip();
+                let tup_t = Type::Tuple(types.clone());
+                let dst = self.push_inst(Instruction::Alloc(tup_t.clone()));
 
                 for i in 0..len {
-                    let (v, ty) = self.eval_expr(&items[i])?;
-
-                    self.push_inst(Instruction::Store(dsts[i].clone(), v, ty));
-
-                    types.push(ty);
+                    let ptr = self.push_inst(Instruction::GetElement {
+                        value: dst.clone(),
+                        ty: tup_t.clone(),
+                        array_idx: 0,
+                        tuple_offset: i as u64,
+                    });
+                    self.push_inst(Instruction::Store(ptr, vs[i].clone(), types[i].clone()));
                 }
 
                 // TODO: validate if the types are all identical?
@@ -390,7 +404,7 @@ impl Context {
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
-                Ok((dsts[0].clone(), Type::Tuple(types)))
+                Ok((dst, tup_t))
             }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
@@ -595,24 +609,27 @@ impl Context {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
                         let _greg =
                             self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone()));
-                        self.add_bind((id.clone(), gv));
+                        self.add_bind_pattern(pat, gv, &t)?;
                         self.eval_expr(then_e)
                     }
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
-                        block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
+                        block.insert(
+                            insert_pos,
+                            (alloc_res.clone(), Instruction::Alloc(t.clone())),
+                        );
                         let _ = self.push_inst(Instruction::Store(
                             alloc_res.clone(),
                             bodyv.clone(),
                             t.clone(),
                         ));
 
-                        self.add_bind((id.clone(), alloc_res));
+                        self.add_bind_pattern(pat, alloc_res, &t)?;
                         self.eval_expr(then_e)
                     }
                     (_, _, Some(then_e)) => {
-                        self.add_bind((id.clone(), bodyv));
+                        self.add_bind_pattern(pat, bodyv, &t)?;
                         self.eval_expr(then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
