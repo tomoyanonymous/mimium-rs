@@ -166,8 +166,12 @@ fn let_tuple(){
     let ans = vec![11.0];
     assert_eq!(res, ans);
 }
-
-
+#[test]
+fn let_tuple_nested(){
+    let res = run_file_test_mono("let_tuple_nested.mmm", 1).unwrap();
+    let ans = vec![34.0];
+    assert_eq!(res, ans);
+}
 #[test]
 fn closure_open() {
     let res = run_file_test_mono("closure_open.mmm", 1).unwrap();
