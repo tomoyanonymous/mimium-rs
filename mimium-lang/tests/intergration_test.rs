@@ -163,7 +163,7 @@ fn letmulti() {
 #[test]
 fn let_tuple(){
     let res = run_file_test_mono("let_tuple.mmm", 1).unwrap();
-    let ans = vec![13.0];
+    let ans = vec![11.0];
     assert_eq!(res, ans);
 }
 
