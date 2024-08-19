@@ -221,12 +221,16 @@ fn set_vec_range<T>(vec: &mut Vec<T>, i: usize, values: &[T])
 where
     T: Copy + std::default::Default,
 {
-    match (i + values.len()).cmp(&vec.len()) {
+    match i.cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
             vec[range].copy_from_slice(values)
         }
-        _ => vec.extend_from_slice(values),
+        Ordering::Equal => vec.extend_from_slice(values),
+        Ordering::Greater => {
+            vec.resize(i, T::default());
+            vec.extend_from_slice(values)
+        }
     }
 }
 
@@ -270,11 +274,7 @@ impl Machine {
     }
 
     fn set_stack(&mut self, offset: i64, v: RawVal) {
-        set_vec(
-            &mut self.stack,
-            (self.base_pointer as i64 + offset) as usize,
-            v,
-        );
+        self.set_stack_range(offset, &v as *const RawVal, 1)
     }
     fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
         let vs = unsafe { slice::from_raw_parts(v, size) };
@@ -338,7 +338,7 @@ impl Machine {
         unsafe { std::mem::transmute_copy::<RawVal, T>(&v) }
     }
     pub fn get_as_array<T>(v: &[RawVal]) -> &[T] {
-        unsafe { std::mem::transmute_copy::<&[RawVal], &[T]>(&v) }
+        unsafe { std::mem::transmute::<&[RawVal], &[T]>(v) }
     }
     pub fn to_value<T>(v: T) -> RawVal {
         assert_eq!(std::mem::size_of::<T>(), 8);
@@ -369,25 +369,30 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
-    fn close_upvalues(&mut self, _iret: Reg, _nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
-        //todo! drop local closure which wont escape from local
+    fn close_upvalues(&mut self, iret: Reg, nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
+        for (base_ptr_cls, clsidx) in local_closures.iter() {
+            let start = iret + self.base_pointer as u8 + iret;
+            let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
+            if is_escaping {
+                let cls = self.get_local_closure(*clsidx);
 
-        for (_base_ptr_cls, clsidx) in local_closures.iter() {
-            let cls = self.get_local_closure(*clsidx);
-
-            let newupvls = cls
-                .upvalues
-                .iter()
-                .map(|upv| {
-                    if let UpValue::Open(i) = upv {
-                        let ov = self.get_open_upvalue(self.base_pointer as usize, *i);
-                        UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
-                    } else {
-                        upv.clone()
-                    }
-                })
-                .collect::<Vec<_>>();
-            self.get_local_closure_mut(*clsidx).upvalues = newupvls;
+                let newupvls = cls
+                    .upvalues
+                    .iter()
+                    .map(|upv| {
+                        if let UpValue::Open(i) = upv {
+                            let ov = self.get_open_upvalue(self.base_pointer as usize, *i);
+                            UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
+                        } else {
+                            upv.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                self.get_local_closure_mut(*clsidx).upvalues = newupvls;
+            } else {
+                //todo: release closure
+                // self.closures[clsidx.0] = ;
+            }
         }
     }
     /// Execute function, return retcode.

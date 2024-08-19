@@ -174,8 +174,8 @@ fn let_tuple_nested() {
 }
 #[test]
 fn closure_tuple_escape() {
-    let res = run_file_test_mono("closure_tuple_escape.mmm", 1).unwrap();
-    let ans = vec![33.0];
+    let res = run_file_test_mono("closure_tuple_escape.mmm", 2).unwrap();
+    let ans = vec![33.0, 33.0];
     assert_eq!(res, ans);
 }
 #[test]
@@ -187,21 +187,21 @@ fn closure_open() {
 
 #[test]
 fn closure_open_3nested() {
-    let res = run_file_test_mono("closure_open_3nested.mmm", 1).unwrap();
-    let ans = vec![2.0];
+    let res = run_file_test_mono("closure_open_3nested.mmm", 2).unwrap();
+    let ans = vec![2.0, 2.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn closure_open_inline() {
-    let res = run_file_test_mono("closure_open_inline.mmm", 1).unwrap();
-    let ans = vec![2.0];
+    let res = run_file_test_mono("closure_open_inline.mmm", 2).unwrap();
+    let ans = vec![2.0, 2.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_closed() {
-    let res = run_file_test_mono("closure_closed.mmm", 1).unwrap();
-    let ans = vec![-6.0];
+    let res = run_file_test_mono("closure_closed.mmm", 2).unwrap();
+    let ans = vec![-6.0, -6.0];
     assert_eq!(res, ans);
 }
 
