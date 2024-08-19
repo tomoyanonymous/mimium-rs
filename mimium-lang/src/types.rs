@@ -97,14 +97,14 @@ impl fmt::Display for Type {
             Type::Primitive(p) => write!(f, "{p}"),
             Type::Array(a) => write!(f, "[{a}]"),
             Type::Tuple(v) => {
-                let vf = format_vec!(v);
-                write!(f, "{vf}")
+                let vf = format_vec!(v,",");
+                write!(f, "({vf})")
             }
             Type::Struct(v) => {
                 write!(f, "{v:?}")
             }
             Type::Function(p, r, _s) => {
-                let args = format_vec!(p);
+                let args = format_vec!(p,",");
                 write!(f, "({args})->{r}")
             }
             Type::Ref(x) => write!(f, "&{x}"),

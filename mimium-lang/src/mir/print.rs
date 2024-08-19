@@ -5,9 +5,9 @@ use super::*;
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
-            let af = format_vec!(fun.args);
+            let af = format_vec!(fun.args, ",");
             let _ = write!(f, "fn {} [{af}]\n", fun.label.0);
-            let upi = format_vec!(fun.upindexes);
+            let upi = format_vec!(fun.upindexes, ",");
             let _ = write!(f, "upindexes:[{upi}]");
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
@@ -73,10 +73,10 @@ impl std::fmt::Display for Instruction {
                 write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
             }
             Instruction::Call(fptr, args, rty) => {
-                write!(f, "call {} [{}] ->{rty}", *fptr, format_vec!(args))
+                write!(f, "call {} [{}] ->{rty}", *fptr, format_vec!(args, ","))
             }
             Instruction::CallCls(cls, args, rty) => {
-                write!(f, "callcls {} [{}] ->{rty}", *cls, format_vec!(args))
+                write!(f, "callcls {} [{}] ->{rty}", *cls, format_vec!(args, ","))
             }
             Instruction::Closure(fun) => {
                 if let Value::Function(idx, _, nret) = fun.as_ref() {

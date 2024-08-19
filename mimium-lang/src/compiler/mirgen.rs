@@ -389,35 +389,45 @@ impl Context {
                     unreachable!("0-length tuple is not supported");
                 }
                 let alloc_insert_point = self.get_current_basicblock().0.len();
-                // let mut types = Vec::with_capacity(len);
-                let (vs, types): (Vec<_>, Vec<_>) = items
-                    .iter()
-                    .map(|e| self.eval_expr(e))
-                    .try_collect::<Vec<_>>()?
-                    .iter()
-                    .cloned()
-                    .unzip();
-                let tup_t = Type::Tuple(types.clone());
                 let dst = self.gen_new_register();
-                self.get_current_basicblock().0.insert(
-                    alloc_insert_point,
-                    (dst.clone(), Instruction::Alloc(tup_t.clone())),
-                );
-
-                for i in 0..len {
+                // let mut types = Vec::with_capacity(len);
+                let mut types = vec![];
+                let mut inst_refs: Vec<usize> = vec![];
+                for (i, e) in items.iter().enumerate() {
+                    let (v, ty) = self.eval_expr(e)?;
                     let ptr = if i == 0 {
                         dst.clone()
                     } else {
+                        inst_refs.push(self.get_current_basicblock().0.len());
                         self.push_inst(Instruction::GetElement {
                             value: dst.clone(),
-                            ty: tup_t.clone(),
+                            ty: Type::Unknown, // lazyly set after loops
                             array_idx: 0,
                             tuple_offset: i as u64,
                         })
                     };
-                    self.push_inst(Instruction::Store(ptr, vs[i].clone(), types[i].clone()));
+                    self.push_inst(Instruction::Store(ptr, v, ty.clone()));
+                    types.push(ty);
                 }
-
+                let tup_t = Type::Tuple(types.clone());
+                for inst_i in inst_refs.iter() {
+                    if let Some((
+                        _,
+                        Instruction::GetElement {
+                            value: _,
+                            ref mut ty,
+                            array_idx: _,
+                            tuple_offset: _,
+                        },
+                    )) = self.get_current_basicblock().0.get_mut(*inst_i)
+                    {
+                        *ty = tup_t.clone();
+                    }
+                }
+                self.get_current_basicblock().0.insert(
+                    alloc_insert_point,
+                    (dst.clone(), Instruction::Alloc(tup_t.clone())),
+                );
                 // TODO: validate if the types are all identical?
                 // let first_ty = &types[0];
                 // if !types.iter().all(|x| x == first_ty) {
