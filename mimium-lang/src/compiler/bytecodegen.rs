@@ -332,15 +332,23 @@ impl ByteCodeGenerator {
                     _ => None,
                 }
             }
-            mir::Instruction::GetGlobal(v) => {
+            mir::Instruction::GetGlobal(v, ty) => {
                 let dst = self.get_destination(dst);
                 let idx = self.get_or_insert_global(v.clone());
-                Some(VmInstruction::GetGlobal(dst, idx))
+                Some(VmInstruction::GetGlobal(
+                    dst,
+                    idx,
+                    Self::word_size_for_type(ty),
+                ))
             }
-            mir::Instruction::SetGlobal(v, src) => {
+            mir::Instruction::SetGlobal(v, src, ty) => {
                 let s = self.vregister.find(src).unwrap();
                 let idx = self.get_or_insert_global(v.clone());
-                Some(VmInstruction::SetGlobal(idx, s))
+                Some(VmInstruction::SetGlobal(
+                    idx,
+                    s,
+                    Self::word_size_for_type(ty),
+                ))
             }
             mir::Instruction::GetElement {
                 value,
@@ -454,10 +462,10 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst);
                 Some(VmInstruction::Closure(dst, idx))
             }
-            mir::Instruction::GetUpValue(i) => {
+            mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let ouv = mir::OpenUpValue(v as usize);
+                let ouv = mir::OpenUpValue(v as usize, Self::word_size_for_type(ty));
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
                 } else {
@@ -466,20 +474,23 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::GetUpValue(
                     self.get_destination(dst),
                     *i as Reg,
+                    Self::word_size_for_type(ty),
                 ))
             }
-            mir::Instruction::SetUpValue(i) => {
+            mir::Instruction::SetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let ouv = mir::OpenUpValue(v as usize);
+                let ouv = mir::OpenUpValue(v as usize, Self::word_size_for_type(ty));
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
+
                 Some(VmInstruction::SetUpValue(
                     self.get_destination(dst),
                     *i as Reg,
+                    Self::word_size_for_type(ty),
                 ))
             }
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),

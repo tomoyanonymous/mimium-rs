@@ -1,5 +1,5 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use crate::types::Type;
+use crate::types::{Type, TypeSize};
 use std::{cell::OnceCell, sync::Arc};
 
 pub mod print;
@@ -53,13 +53,13 @@ pub enum Instruction {
     // call function, arguments
     Call(VPtr, Vec<VPtr>, Type),
     CallCls(VPtr, Vec<VPtr>, Type),
-    GetGlobal(VPtr),
-    SetGlobal(VPtr, VPtr),
+    GetGlobal(VPtr, Type),
+    SetGlobal(VPtr, VPtr, Type),
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
-    GetUpValue(u64),
-    SetUpValue(u64),
+    GetUpValue(u64, Type),
+    SetUpValue(u64, Type),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
@@ -131,7 +131,7 @@ pub enum UpIndex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct OpenUpValue(pub usize);
+pub struct OpenUpValue(pub usize, pub TypeSize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {

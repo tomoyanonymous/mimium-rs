@@ -161,15 +161,21 @@ fn letmulti() {
     assert_eq!(res, ans);
 }
 #[test]
-fn let_tuple(){
+fn let_tuple() {
     let res = run_file_test_mono("let_tuple.mmm", 1).unwrap();
     let ans = vec![11.0];
     assert_eq!(res, ans);
 }
 #[test]
-fn let_tuple_nested(){
+fn let_tuple_nested() {
     let res = run_file_test_mono("let_tuple_nested.mmm", 1).unwrap();
     let ans = vec![34.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn closure_tuple_escape() {
+    let res = run_file_test_mono("closure_tuple_escape.mmm", 1).unwrap();
+    let ans = vec![33.0];
     assert_eq!(res, ans);
 }
 #[test]

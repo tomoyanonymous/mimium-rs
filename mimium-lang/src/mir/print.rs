@@ -85,10 +85,10 @@ impl std::fmt::Display for Instruction {
                     write!(f, "closure {}", *fun)
                 }
             }
-            Instruction::GetUpValue(idx) => write!(f, "getupval {idx}"),
-            Instruction::SetUpValue(idx) => write!(f, "setupval {idx}"),
-            Instruction::GetGlobal(v) => write!(f, "getglobal {}", *v),
-            Instruction::SetGlobal(dst, src) => write!(f, "setglobal {} {}", *dst, *src),
+            Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {ty}"),
+            Instruction::SetUpValue(idx, ty) => write!(f, "setupval {idx} {ty}"),
+            Instruction::GetGlobal(v, ty) => write!(f, "getglobal {} {ty}", *v),
+            Instruction::SetGlobal(dst, src, ty) => write!(f, "setglobal {} {} {ty}", *dst, *src),
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
 

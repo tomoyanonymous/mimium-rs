@@ -2,7 +2,7 @@ use crate::types::TypeSize;
 
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
-pub type GlobalPos = u16;
+pub type GlobalPos = u8;
 pub type Offset = i16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -12,28 +12,28 @@ pub enum Instruction {
     Move(Reg, Reg),
     MoveConst(Reg, ConstPos),
     // Move the range of registers (e.g. tuple)
-    MoveRange(Reg, Reg, u8),
+    MoveRange(Reg, Reg, TypeSize),
     // call internal function
-    // Function Address,Nargs,Nret
-    Call(Reg, u8, u8),
+    // Function Address,Nargs,Word Size of Return Value
+    Call(Reg, u8, TypeSize),
     //call internal closure
-    CallCls(Reg, u8, u8),
+    CallCls(Reg, u8, TypeSize),
     // external function
     // Function Address,Nargs,Nret
-    CallExtFun(Reg, u8, u8),
+    CallExtFun(Reg, u8, TypeSize),
     //call rust closure
     // Function Address,Nargs,Nret
-    CallExtCls(Reg, u8, u8),
+    CallExtCls(Reg, u8, TypeSize),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
 
-    //destination,source
-    GetUpValue(Reg, Reg),
-    SetUpValue(Reg, Reg),
+    //destination,source, size
+    GetUpValue(Reg, Reg, TypeSize),
+    SetUpValue(Reg, Reg, TypeSize),
 
     //destination,source
-    GetGlobal(Reg, GlobalPos),
-    SetGlobal(GlobalPos, Reg),
+    GetGlobal(Reg, GlobalPos, TypeSize),
+    SetGlobal(GlobalPos, Reg, TypeSize),
     //call internal state over time, destination,source
     GetState(Reg),
     SetState(Reg),
@@ -126,10 +126,18 @@ impl std::fmt::Display for Instruction {
                 write!(f, "{:<10} {} {}", "mem", dst, src)
             }
             Instruction::Return(iret, nret) => write!(f, "{:<10} {} {}", "ret", iret, nret),
-            Instruction::GetUpValue(dst, srcup) => write!(f, "{:<10} {} {}", "getupv", dst, srcup),
-            Instruction::SetUpValue(dstup, src) => write!(f, "{:<10} {} {}", "setupv", dstup, src),
-            Instruction::GetGlobal(dst, src) => write!(f, "{:<10} {} {}", "getglobal", dst, src),
-            Instruction::SetGlobal(dst, src) => write!(f, "{:<10} {} {}", "setglobal", dst, src),
+            Instruction::GetUpValue(dst, srcup, size) => {
+                write!(f, "{:<10} {} {} {}", "getupv", dst, srcup, size)
+            }
+            Instruction::SetUpValue(dstup, src, size) => {
+                write!(f, "{:<10} {} {} {}", "setupv", dstup, src, size)
+            }
+            Instruction::GetGlobal(dst, src, size) => {
+                write!(f, "{:<10} {} {} {}", "getglobal", dst, src, size)
+            }
+            Instruction::SetGlobal(dst, src, size) => {
+                write!(f, "{:<10} {} {} {}", "setglobal", dst, src, size)
+            }
             Instruction::JmpIfNeg(dst, cond) => write!(f, "{:<10} {} {}", "jmpifneg", dst, cond),
             Instruction::AbsF(dst, src) => write!(f, "{:<10} {} {}", "absf", dst, src),
             Instruction::NegF(dst, src) => write!(f, "{:<10} {} {}", "negf", dst, src),

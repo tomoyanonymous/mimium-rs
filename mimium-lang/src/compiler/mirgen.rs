@@ -287,20 +287,19 @@ impl Context {
         Ok(v)
     }
     pub fn eval_var(&mut self, name: &str, span: &Span) -> Result<(VPtr, Type), CompileError> {
+        let t = self
+            .typeenv
+            .env
+            .lookup(name)
+            .expect("failed to find type for variable")
+            .clone();
         let v = match self.lookup(name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i, _s, _nret) => {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
                     self.push_inst(Instruction::Closure(reg))
                 }
-                _ => {
-                    let t = self
-                        .typeenv
-                        .env
-                        .lookup(name)
-                        .expect("failed to find type for variable");
-                    self.push_inst(Instruction::Load(v.clone(), t.clone()))
-                }
+                _ => self.push_inst(Instruction::Load(v.clone(), t.clone())),
             },
             LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
@@ -312,11 +311,11 @@ impl Context {
 
                 currentbb
                     .0
-                    .push((res.clone(), Instruction::GetUpValue(upi)));
+                    .push((res.clone(), Instruction::GetUpValue(upi, t.clone())));
                 res
             }),
             LookupRes::Global(v) => match v.as_ref() {
-                Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone())),
+                Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t.clone())),
                 Value::Function(_, _, _) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
                 _ => unreachable!("non global_value"),
             },
@@ -653,8 +652,11 @@ impl Context {
                 ) {
                     (true, false, Some(then_e)) => {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
-                        let _greg =
-                            self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone()));
+                        let _greg = self.push_inst(Instruction::SetGlobal(
+                            gv.clone(),
+                            bodyv.clone(),
+                            t.clone(),
+                        ));
                         self.add_bind_pattern(pat, gv, &t)?;
                         self.eval_expr(then_e)
                     }

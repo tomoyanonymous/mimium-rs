@@ -1,0 +1,19 @@
+//modified from closure_closed.mmm expect:45-12 = 33
+fn test(x:float){
+    let y = (5.0,4.0)
+    let f = | | { 
+        let z = 3.0
+        let ff = | |{ 
+            let a = x
+            let (b1,b2) = y
+            let c = z
+            a*b1 - b2*c 
+            }
+         ff()
+        }
+    f
+}
+fn dsp(){
+    let f2 = test(9.0)
+    f2()
+}
