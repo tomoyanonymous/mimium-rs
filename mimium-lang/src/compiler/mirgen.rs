@@ -181,13 +181,18 @@ impl Context {
                     span.clone(),
                 )))?;
                 for (i, pat) in patterns.iter().enumerate() {
-                    let ty = &tvec[i];
-                    let v = self.push_inst(Instruction::GetElement {
-                        value: v.clone(),
-                        ty: ty.clone(),
-                        array_idx: 0,
-                        tuple_offset: i as u64,
-                    });
+                    let cty = &tvec[i];
+                    let v = if i == 0 {
+                        v.clone()
+                    } else {
+                        self.push_inst(Instruction::GetElement {
+                            value: v.clone(),
+                            ty: ty.clone(),
+                            array_idx: 0,
+                            tuple_offset: i as u64,
+                        })
+                    };
+
                     let tpat = WithMeta(
                         TypedPattern {
                             pat: pat.clone(),
@@ -195,14 +200,20 @@ impl Context {
                         },
                         span.clone(),
                     );
-                    self.add_bind_pattern(&tpat, v, &ty)?;
+                    self.add_bind_pattern(&tpat, v, &cty)?;
                 }
                 Ok(())
             }
         }
     }
-    fn make_new_function(&mut self, name: &str, args: &[VPtr], parent_i: Option<usize>) -> usize {
-        let newf = mir::Function::new(name, args, parent_i);
+    fn make_new_function(
+        &mut self,
+        name: &str,
+        args: &[VPtr],
+        argtypes: &[Type],
+        parent_i: Option<usize>,
+    ) -> usize {
+        let newf = mir::Function::new(name, args, argtypes, parent_i);
         self.program.functions.push(newf);
         let idx = self.program.functions.len() - 1;
         idx
@@ -222,11 +233,13 @@ impl Context {
             .iter()
             .map(|(name, a, _)| (name.clone(), a.clone()))
             .collect::<Vec<_>>();
-        let vbinds = binds.iter().map(|(_, a, _)| a.clone()).collect::<Vec<_>>();
+        let vbinds = binds.iter().map(|(_, a, t)| a.clone()).collect::<Vec<_>>();
+        let tbinds = binds.iter().map(|(_, _, t)| t.clone()).collect::<Vec<_>>();
         self.valenv.extend();
         self.valenv.add_bind(&mut abinds);
         let label = self.get_ctxdata().func_i;
-        let c_idx = self.make_new_function(fname, vbinds.as_slice(), Some(label));
+        let c_idx =
+            self.make_new_function(fname, vbinds.as_slice(), tbinds.as_slice(), Some(label));
 
         self.typeenv.env.extend();
         self.typeenv.env.add_bind(&mut atbinds);
@@ -243,7 +256,7 @@ impl Context {
 
         // TODO: ideally, type should be infered before the actual action
         let f = self.program.functions.get_mut(c_idx).unwrap();
-        f.return_type = Some(ty.clone());
+        f.return_type.get_or_init(|| ty.clone());
 
         //post action
         let _ = self.data.pop();
@@ -317,7 +330,7 @@ impl Context {
         let ty = typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
         Ok((v, ty.clone()))
     }
-    fn emit_fncall(&mut self, idx: u64, statesize: u64, args: Vec<VPtr>, nret: TypeSize) -> VPtr {
+    fn emit_fncall(&mut self, idx: u64, statesize: u64, args: Vec<VPtr>, ret_t: &Type) -> VPtr {
         let f = {
             self.get_current_fn().state_size += statesize;
             self.push_inst(Instruction::Uinteger(idx))
@@ -331,7 +344,7 @@ impl Context {
             self.get_ctxdata().push_sum += statesize;
         }
 
-        let res = self.push_inst(Instruction::Call(f.clone(), args, nret));
+        let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t.clone()));
         if statesize > 0 {
             self.get_ctxdata().state_offset += statesize;
         }
@@ -375,6 +388,7 @@ impl Context {
                 if len == 0 {
                     unreachable!("0-length tuple is not supported");
                 }
+                let alloc_insert_point = self.get_current_basicblock().0.len();
                 // let mut types = Vec::with_capacity(len);
                 let (vs, types): (Vec<_>, Vec<_>) = items
                     .iter()
@@ -384,15 +398,23 @@ impl Context {
                     .cloned()
                     .unzip();
                 let tup_t = Type::Tuple(types.clone());
-                let dst = self.push_inst(Instruction::Alloc(tup_t.clone()));
+                let dst = self.gen_new_register();
+                self.get_current_basicblock().0.insert(
+                    alloc_insert_point,
+                    (dst.clone(), Instruction::Alloc(tup_t.clone())),
+                );
 
                 for i in 0..len {
-                    let ptr = self.push_inst(Instruction::GetElement {
-                        value: dst.clone(),
-                        ty: tup_t.clone(),
-                        array_idx: 0,
-                        tuple_offset: i as u64,
-                    });
+                    let ptr = if i == 0 {
+                        dst.clone()
+                    } else {
+                        self.push_inst(Instruction::GetElement {
+                            value: dst.clone(),
+                            ty: tup_t.clone(),
+                            array_idx: 0,
+                            tuple_offset: i as u64,
+                        })
+                    };
                     self.push_inst(Instruction::Store(ptr, vs[i].clone(), types[i].clone()));
                 }
 
@@ -431,16 +453,22 @@ impl Context {
                     }?;
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
-                            Value::Function(idx, statesize, nret) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
+                            Value::Function(idx, statesize, _rty) => {
+                                self.emit_fncall(*idx as u64, *statesize, a_regs, &rt)
                             }
-                            Value::Register(_) => {
-                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
-                            }
+                            Value::Register(_) => self.push_inst(Instruction::CallCls(
+                                v.clone(),
+                                a_regs.clone(),
+                                rt.clone(),
+                            )),
                             Value::FixPoint(fnid) => {
                                 let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                                 let cls = self.push_inst(Instruction::Closure(clspos));
-                                self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                                self.push_inst(Instruction::CallCls(
+                                    cls,
+                                    a_regs.clone(),
+                                    rt.clone(),
+                                ))
                             }
                             _ => {
                                 panic!("calling non-function global value")
@@ -449,18 +477,21 @@ impl Context {
                         Value::Register(_) => {
                             //closure
                             //do not increment state size for closure
-                            let res =
-                                self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
+                            let res = self.push_inst(Instruction::CallCls(
+                                f.clone(),
+                                a_regs.clone(),
+                                rt.clone(),
+                            ));
                             res
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt.clone()))
                         }
 
-                        Value::Function(idx, statesize, nret) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
+                        Value::Function(idx, statesize, ret_t) => {
+                            self.emit_fncall(*idx as u64, *statesize, a_regs, ret_t)
                         }
                         Value::ExtFunction(label, ty) => {
                             if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
@@ -469,7 +500,7 @@ impl Context {
                                 self.push_inst(Instruction::Call(
                                     f.clone(),
                                     a_regs.clone(),
-                                    ty.size(),
+                                    ty.clone(),
                                 ))
                             }
                         }
@@ -521,22 +552,27 @@ impl Context {
                                 Instruction::PopStateOffset(push_sum),
                             )); //todo:offset size
                         }
-                        let nret = res_type.size();
                         match (res.as_ref(), res_type.clone()) {
                             (_, Type::Primitive(PType::Unit) | Type::Unknown) => {
-                                let _ =
-                                    ctx.push_inst(Instruction::Return(Arc::new(Value::None), nret));
+                                let _ = ctx.push_inst(Instruction::Return(
+                                    Arc::new(Value::None),
+                                    res_type.clone(),
+                                ));
                             }
                             (Value::State(v), _) => {
-                                let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), nret));
+                                let _ = ctx.push_inst(Instruction::ReturnFeed(
+                                    v.clone(),
+                                    res_type.clone(),
+                                ));
                             }
                             (Value::Function(i, _, _), _) => {
                                 let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                                 let cls = ctx.push_inst(Instruction::Closure(idx));
-                                let _ = ctx.push_inst(Instruction::Return(cls, nret));
+                                let _ = ctx.push_inst(Instruction::Return(cls, res_type.clone()));
                             }
                             (_, _) => {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone(), nret));
+                                let _ = ctx
+                                    .push_inst(Instruction::Return(res.clone(), res_type.clone()));
                             }
                         };
 
@@ -674,7 +710,6 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
-            Expr::LetTuple(_, _, _) => todo!(),
             Expr::If(cond, then, else_) => {
                 let (c, t_cond) = self.eval_expr(cond)?;
                 //todo:need to boolean and insert cast

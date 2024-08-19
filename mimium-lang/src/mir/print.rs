@@ -72,11 +72,11 @@ impl std::fmt::Display for Instruction {
             } => {
                 write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
             }
-            Instruction::Call(fptr, args, _nret) => {
-                write!(f, "call {} [{}]", *fptr, format_vec!(args))
+            Instruction::Call(fptr, args, rty) => {
+                write!(f, "call {} [{}] ->{rty}", *fptr, format_vec!(args))
             }
-            Instruction::CallCls(cls, args) => {
-                write!(f, "callcls {} [{}]", *cls, format_vec!(args))
+            Instruction::CallCls(cls, args, rty) => {
+                write!(f, "callcls {} [{}] ->{rty}", *cls, format_vec!(args))
             }
             Instruction::Closure(fun) => {
                 if let Value::Function(idx, _, nret) = fun.as_ref() {
@@ -96,8 +96,8 @@ impl std::fmt::Display for Instruction {
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
-            Instruction::Return(a, _nret) => write!(f, "ret {}", *a),
-            Instruction::ReturnFeed(v, _nret) => write!(f, "retfeed {}", *v),
+            Instruction::Return(a, rty) => write!(f, "ret {} {rty}", *a),
+            Instruction::ReturnFeed(v, rty) => write!(f, "retfeed {} {rty}", *v),
             Instruction::Delay(max, a, b) => write!(f, "delay {max} {} {}", *a, *b),
             Instruction::Mem(a) => write!(f, "mem {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

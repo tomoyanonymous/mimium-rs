@@ -73,19 +73,6 @@ impl Type {
         todo!()
     }
 
-    pub fn size(&self) -> TypeSize {
-        match self {
-            Type::Primitive(_) => 1,
-            Type::Array(_ty) => todo!(),
-            Type::Tuple(types) => types.len() as _,
-            Type::Struct(types) => types.len() as _,
-            Type::Function(_, _, _) => 1,
-            Type::Ref(_) => 1,
-            Type::Code(_) => todo!(),
-            Type::Intermediate(_) => 1, // TODO
-            Type::Unknown => todo!(),
-        }
-    }
     pub fn get_as_tuple(&self) -> Option<&[Type]> {
         match self {
             Type::Tuple(types) => Some(&types),

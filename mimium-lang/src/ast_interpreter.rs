@@ -349,7 +349,6 @@ pub fn eval_ast(
                 .map(|t| eval_with_new_env(&t, ctx, &mut vec![(tid.id.clone(), res_rec)]))
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
-        ast::Expr::LetTuple(_, _, _) => todo!(),
         ast::Expr::If(cond, then, o_else) => {
             if eval_condition(cond, ctx)? {
                 eval_ast(then, ctx)

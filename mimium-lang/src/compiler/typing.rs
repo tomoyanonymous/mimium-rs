@@ -366,9 +366,6 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             };
             res
         }
-        Expr::LetTuple(_ids, _body, _then) => {
-            todo!("should be de-sugared before type inference")
-        }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
             let idt = match id.ty.as_ref() {

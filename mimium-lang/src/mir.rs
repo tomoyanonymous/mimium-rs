@@ -1,6 +1,6 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use crate::types::{Type, TypeSize};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use crate::types::Type;
+use std::{cell::OnceCell, sync::Arc};
 
 pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -42,15 +42,17 @@ pub enum Instruction {
     Load(VPtr, Type),
     // store value to pointer
     Store(VPtr, VPtr, Type),
+    // Instruction for computing destination address like LLVM's GetElementPtr.
+    // This instruction does no actual computation on runtime.
     GetElement {
         value: VPtr,
-        ty:Type,
+        ty: Type,
         array_idx: u64,
         tuple_offset: u64,
     },
-    // call function , arguments, nret
-    Call(VPtr, Vec<VPtr>, TypeSize),
-    CallCls(VPtr, Vec<VPtr>),
+    // call function, arguments
+    Call(VPtr, Vec<VPtr>, Type),
+    CallCls(VPtr, Vec<VPtr>, Type),
     GetGlobal(VPtr),
     SetGlobal(VPtr, VPtr),
     // make closure with upindexes
@@ -71,9 +73,9 @@ pub enum Instruction {
     //merge
     Phi(VPtr, VPtr),
 
-    Return(VPtr, TypeSize),
+    Return(VPtr, Type),
     //value to update state
-    ReturnFeed(VPtr, TypeSize),
+    ReturnFeed(VPtr, Type),
 
     Delay(u64, VPtr, VPtr),
     Mem(VPtr),
@@ -135,18 +137,20 @@ pub struct OpenUpValue(pub usize);
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
-    pub return_type: Option<Type>, // TODO: None is the state when the type is not inferred yet.
+    pub argtypes: Vec<Type>,
+    pub return_type: OnceCell<Type>, // TODO: None is the state when the type is not inferred yet.
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[VPtr], upperfn_i: Option<usize>) -> Self {
+    pub fn new(name: &str, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
         Self {
             label: Label(name.to_string()),
             args: args.to_vec(),
-            return_type: None,
+            argtypes: argtypes.to_vec(),
+            return_type: OnceCell::new(),
             upindexes: vec![],
             upperfn_i,
             body: vec![Block::default()],

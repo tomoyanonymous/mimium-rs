@@ -30,11 +30,6 @@ pub enum Expr {
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(WithMeta<TypedPattern>, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
-    LetTuple(
-        Vec<TypedId>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
-    ),
     If(
         Box<WithMeta<Self>>,
         Box<WithMeta<Self>>,
@@ -118,7 +113,6 @@ impl MiniPrint for Expr {
                 body.0.simple_print(),
                 then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
-            Expr::LetTuple(_, _, _) => todo!(),
             Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.0.simple_print()),
             Expr::Then(first, second) => format!(
                 "(then {} {})",
