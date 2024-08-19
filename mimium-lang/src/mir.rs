@@ -64,7 +64,7 @@ pub enum Instruction {
     PushStateOffset(u64),
     PopStateOffset(u64),
     //load internal state to register(destination)
-    GetState,
+    GetState(Type),
 
     //condition,  basic block index for then else statement
     JmpIf(VPtr, u64, u64),

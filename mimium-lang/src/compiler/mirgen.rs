@@ -164,7 +164,7 @@ impl Context {
         res
     }
     fn add_bind(&mut self, bind: (String, VPtr)) {
-        self.valenv.add_bind(&mut vec![bind]);
+        self.valenv.add_bind(&mut [bind]);
     }
     fn add_bind_pattern(
         &mut self,
@@ -176,7 +176,14 @@ impl Context {
         match pat {
             Pattern::Single(id) => Ok(self.add_bind((id.clone(), v))),
             Pattern::Tuple(patterns) => {
-                let tvec = ty.get_as_tuple().ok_or(CompileError::from(typing::Error(
+                let interm_vec = patterns
+                    .iter()
+                    .map(|_| self.typeenv.gen_intermediate_type())
+                    .collect::<Vec<_>>();
+                let tvec = self
+                    .typeenv
+                    .unify_types(ty.clone(), Type::Tuple(interm_vec))?;
+                let tvec = tvec.get_as_tuple().ok_or(CompileError::from(typing::Error(
                     typing::ErrorKind::PatternMismatch(ty.clone(), pat.clone()),
                     span.clone(),
                 )))?;
@@ -200,7 +207,7 @@ impl Context {
                         },
                         span.clone(),
                     );
-                    self.add_bind_pattern(&tpat, v, &cty)?;
+                    self.add_bind_pattern(&tpat, v, cty)?;
                 }
                 Ok(())
             }
@@ -604,7 +611,9 @@ impl Context {
                 Ok((res, fty))
             }
             Expr::Feed(id, expr) => {
-                let res = self.push_inst(Instruction::GetState);
+                let insert_pos = self.get_current_basicblock().0.len();
+                //set typesize lazily
+                let res = self.push_inst(Instruction::GetState(Type::Unknown));
 
                 self.get_ctxdata().state_offset += 1;
 
@@ -617,6 +626,12 @@ impl Context {
                     tf
                 };
                 let (retv, t) = self.eval_expr(expr)?;
+
+                if let (_, Instruction::GetState(ty)) =
+                    self.get_current_basicblock().0.get_mut(insert_pos).unwrap()
+                {
+                    *ty = t.clone();
+                }
                 self.typeenv.unify_types(tf, t.clone())?;
                 self.get_current_fn().state_size += 1;
                 Ok((Arc::new(Value::State(retv)), t))

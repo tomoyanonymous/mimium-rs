@@ -15,7 +15,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrorKind {
     TypeMismatch(Type, Type),
-    PatternMismatch(Type,Pattern),
+    PatternMismatch(Type, Pattern),
     NonFunction(Type),
     CircularType,
     IndexOutOfRange(u16, u16),
@@ -242,28 +242,32 @@ impl InferContext {
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
         }
     }
-    pub fn bind_pattern(&mut self, t: &Type, pat:&WithMeta<TypedPattern>)->Result<Type, Error>{
-        let WithMeta(TypedPattern { pat, ty:_ },span)=pat;
-        match pat{
+    pub fn bind_pattern(&mut self, t: &Type, pat: &WithMeta<TypedPattern>) -> Result<Type, Error> {
+        let WithMeta(TypedPattern { pat, ty: _ }, span) = pat;
+        match pat {
             Pattern::Single(id) => {
                 self.env.add_bind(&[(id.clone(), t.clone())]);
                 Ok(t.clone())
-            },
+            }
             Pattern::Tuple(pats) => {
-                match t{
-                    Type::Tuple(ts)=>{
-                        let res = pats.iter().zip(ts.iter()).map(|(p,t)|{
-                            let p = WithMeta(TypedPattern{pat:p.clone(),ty:None},span.clone());
-                            self.bind_pattern(t,&p)
-                        }).try_collect::<Vec<_>>()?;
-                        Ok(Type::Tuple(res))
-                    },
-                    _=>Err(Error(ErrorKind::PatternMismatch(t.clone(),pat.clone()),span.clone()))
-                }
+                let res = pats
+                    .iter()
+                    .map(|p| {
+                        let ity = self.gen_intermediate_type();
+                        let p = WithMeta(
+                            TypedPattern {
+                                pat: p.clone(),
+                                ty: Some(ity.clone()),
+                            },
+                            span.clone(),
+                        );
+                        self.bind_pattern(&ity, &p)
+                    })
+                    .try_collect::<Vec<_>>()?;
 
-            },
+                Ok(Type::Tuple(res))
+            }
         }
-        
     }
 }
 
@@ -357,9 +361,9 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
                 Some(t) => t.clone(),
                 None => c.gen_intermediate_type(),
             };
-            
+
             let bodyt_u = c.unify_types(idt, bodyt)?;
-            let _ = c.bind_pattern( &bodyt_u,tpat)?;
+            let _ = c.bind_pattern(&bodyt_u, tpat)?;
             let res = match then {
                 Some(e) => infer_type(e, c),
                 None => Ok(Type::Primitive(PType::Unit)),

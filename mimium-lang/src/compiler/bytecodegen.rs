@@ -465,14 +465,16 @@ impl ByteCodeGenerator {
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let ouv = mir::OpenUpValue(v as usize, Self::word_size_for_type(ty));
+                let size: u8 = Self::word_size_for_type(ty);
+                let ouv = mir::OpenUpValue(v as usize, size);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
+                let d = self.vregister.push_stack(&dst, size as _);
                 Some(VmInstruction::GetUpValue(
-                    self.get_destination(dst),
+                    d,
                     *i as Reg,
                     Self::word_size_for_type(ty),
                 ))
@@ -480,22 +482,28 @@ impl ByteCodeGenerator {
             mir::Instruction::SetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let ouv = mir::OpenUpValue(v as usize, Self::word_size_for_type(ty));
+                let size: u8 = Self::word_size_for_type(ty);
+                let ouv = mir::OpenUpValue(v as usize, size);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
+                let d = self.vregister.push_stack(&dst, size as _);
 
                 Some(VmInstruction::SetUpValue(
-                    self.get_destination(dst),
+                    d,
                     *i as Reg,
                     Self::word_size_for_type(ty),
                 ))
             }
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
-            mir::Instruction::GetState => Some(VmInstruction::GetState(self.get_destination(dst))),
+            mir::Instruction::GetState(ty) => {
+                let size = Self::word_size_for_type(ty);
+                let d = self.vregister.push_stack(&dst, size as _);
+                Some(VmInstruction::GetState(d))
+            }
 
             mir::Instruction::JmpIf(cond, tbb, ebb) => {
                 let c = self.vregister.find(cond).unwrap();

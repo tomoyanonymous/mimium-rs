@@ -1,4 +1,4 @@
-//modified from closure_closed.mmm expect:45-12 = 33
+//modified from closure_closed.mmm expect:45-4+3 = 44
 fn test(x:float){
     let y = (5.0,4.0)
     let f = | | { 
@@ -7,7 +7,7 @@ fn test(x:float){
             let a = x
             let (b1,b2) = y
             let c = z
-            a*b1 - b2*c 
+            a*b1 - b2 + c 
             }
          ff()
         }

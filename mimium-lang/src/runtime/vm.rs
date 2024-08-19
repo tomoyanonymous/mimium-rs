@@ -4,7 +4,6 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::HashMap,
-    ops::Range,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -221,15 +220,20 @@ fn set_vec_range<T>(vec: &mut Vec<T>, i: usize, values: &[T])
 where
     T: Copy + std::default::Default,
 {
+    //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
+    // and copy_from_slice use ptr::copy_nonoverwrapping internally.
+    // vec[range].copy_from_slice(values)
     match i.cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
-            vec[range].copy_from_slice(values)
+            for (v, i) in values.iter().zip(range.into_iter()) {
+                vec[i] = *v;
+            }
         }
-        Ordering::Equal => vec.extend_from_slice(values),
+        Ordering::Equal => values.iter().for_each(|v| vec.push(*v)),
         Ordering::Greater => {
             vec.resize(i, T::default());
-            vec.extend_from_slice(values)
+            values.iter().for_each(|v| vec.push(*v))
         }
     }
 }
@@ -263,13 +267,16 @@ impl Machine {
         }
     }
     fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> &[RawVal] {
+        let slice = self.stack.as_slice();
+        let start = self.base_pointer as usize + offset as usize;
+        let end = word_size as usize;
+
         unsafe {
-            // w/ unstable feature
-            // let (_,snd) = self.stack.as_slice().split_at_unchecked(offset as usize);
-            // snd.split_at_unchecked(n as usize)
-            let start = self.stack.as_slice().as_ptr();
-            let vstart = start.offset(self.base_pointer as isize + offset as isize);
-            slice::from_raw_parts(vstart, word_size as usize)
+            debug_assert!(start > 0 && start <= slice.len());
+            let fst = slice.split_at_unchecked(start).1;
+            debug_assert!(end > 0 && end <= fst.len());
+            let snd = fst.split_at_unchecked(end).0;
+            snd
         }
     }
 
@@ -277,6 +284,8 @@ impl Machine {
         self.set_stack_range(offset, &v as *const RawVal, 1)
     }
     fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
+        debug_assert!(!v.is_null());
+        debug_assert!(v.is_aligned());
         let vs = unsafe { slice::from_raw_parts(v, size) };
         set_vec_range(
             &mut self.stack,
@@ -303,7 +312,7 @@ impl Machine {
         log::trace!("upper base:{}, upvalue:{}", upper_base, offset);
         let abs_pos = Self::get_upvalue_offset(upper_base, ov);
         unsafe {
-            let vstart = self.stack.as_slice().as_ptr().offset(abs_pos as isize);
+            let vstart = self.stack.as_slice().as_ptr().add(abs_pos);
             slice::from_raw_parts(vstart, size as usize)
         }
     }
@@ -330,7 +339,7 @@ impl Machine {
         // clean up temporary variables to ensure that `nret`
         // at the top of the stack is the return value
         self.stack.truncate(base - 1 as usize + nret as usize);
-        let res_slice = self.stack.split_at(base as usize).1;
+        let res_slice = self.stack.split_at(base).1;
         res_slice
     }
 
@@ -373,7 +382,7 @@ impl Machine {
         for (base_ptr_cls, clsidx) in local_closures.iter() {
             let start = iret + self.base_pointer as u8 + iret;
             let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
-            if is_escaping {
+            if is_escaping|true {
                 let cls = self.get_local_closure(*clsidx);
 
                 let newupvls = cls
@@ -410,25 +419,25 @@ impl Machine {
         // }
 
         loop {
-            // if cfg!(debug_assertions) || cfg!(test) ||log::max_level()>=log::Level::Trace{
-            //     let mut line = String::new();
-            //     line += &format!("{: <20} {}", func.bytecodes[pcounter], ": [");
-            //     for i in 0..self.stack.len() {
-            //         if i == self.base_pointer as usize {
-            //             line+="!";
-            //         }
-            //         line += &match self.debug_stacktype[i] {
-            //             RawValType::Float => format!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
-            //             RawValType::Int => format!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
-            //             RawValType::UInt => format!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
-            //         };
-            //         if i < self.stack.len() - 1 {
-            //             line+=",";
-            //         }
-            //     }
-            //     line+="]";
-            //     log::trace!("{line}");
-            // }
+            if cfg!(debug_assertions) || cfg!(test) || log::max_level() >= log::Level::Trace {
+                let mut line = String::new();
+                line += &format!("{: <20} {}", func.bytecodes[pcounter], ": [");
+                for i in 0..self.stack.len() {
+                    if i == self.base_pointer as usize {
+                        line += "!";
+                    }
+                    line += &match self.debug_stacktype[i] {
+                        RawValType::Float => format!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
+                        RawValType::Int => format!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
+                        RawValType::UInt => format!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
+                    };
+                    if i < self.stack.len() - 1 {
+                        line += ",";
+                    }
+                }
+                line += "]";
+                log::trace!("{line}");
+            }
             let mut increment = 1;
             match func.bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
@@ -536,12 +545,11 @@ impl Machine {
                     match rv {
                         UpValue::Open(OpenUpValue(i, size)) => {
                             unsafe {
-                                let vstart = self
-                                    .stack
-                                    .as_mut_slice()
-                                    .as_mut_ptr()
-                                    .offset((upper_base + i) as isize);
+                                let vstart =
+                                    self.stack.as_mut_slice().as_mut_ptr().add(upper_base + i);
                                 let v = self.get_stack_range(src as i64, *size);
+                                debug_assert!(!vstart.is_null());
+                                debug_assert!(vstart.is_aligned());
                                 let range = slice::from_raw_parts_mut(vstart, *size as usize);
                                 range.copy_from_slice(v);
                             };
@@ -556,6 +564,8 @@ impl Machine {
                 Instruction::GetGlobal(dst, gid, size) => {
                     let gvs = unsafe {
                         let vstart = self.global_vals.as_ptr().offset(gid as _);
+                        debug_assert!(!vstart.is_null());
+                        debug_assert!(vstart.is_aligned());
                         slice::from_raw_parts(vstart, size as _)
                     };
                     self.set_stack_range(dst as i64, gvs.as_ptr(), gvs.len())
@@ -563,6 +573,8 @@ impl Machine {
                 Instruction::SetGlobal(gid, src, size) => {
                     let gvs = unsafe {
                         let vstart = self.global_vals.as_mut_ptr().offset(gid as _);
+                        debug_assert!(!vstart.is_null());
+                        debug_assert!(vstart.is_aligned());
                         slice::from_raw_parts_mut(vstart, size as _)
                     };
                     gvs.copy_from_slice(self.get_stack_range(src as i64, size));

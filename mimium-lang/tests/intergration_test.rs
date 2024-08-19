@@ -175,7 +175,13 @@ fn let_tuple_nested() {
 #[test]
 fn closure_tuple_escape() {
     let res = run_file_test_mono("closure_tuple_escape.mmm", 2).unwrap();
-    let ans = vec![33.0, 33.0];
+    let ans = vec![44.0, 44.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn state_tuple() {
+    let res = run_file_test_stereo("state_tuple.mmm", 3).unwrap();
+    let ans = vec![0.0, 0.0, 1.0, 2.0, 2.0, 4.0];
     assert_eq!(res, ans);
 }
 #[test]

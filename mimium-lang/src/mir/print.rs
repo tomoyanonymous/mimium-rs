@@ -92,7 +92,7 @@ impl std::fmt::Display for Instruction {
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
 
-            Instruction::GetState => write!(f, "getstate"),
+            Instruction::GetState(ty) => write!(f, "getstate {ty}"),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),

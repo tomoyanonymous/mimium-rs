@@ -1,0 +1,8 @@
+fn bifb()->(float,float){
+    let (a,b) =self
+    (a+1.0,b+2.0)
+}
+
+fn dsp(){
+    bifb()
+}
