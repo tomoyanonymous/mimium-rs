@@ -269,12 +269,12 @@ impl ByteCodeGenerator {
                 let _ = self.vregister.push_stack(&dst);
                 None
             }
-            mir::Instruction::Load(ptr) => {
+            mir::Instruction::Load(ptr,ty) => {
                 let d = self.get_destination(dst);
                 let s = self.vregister.find_keep(ptr).unwrap();
                 (d != s).then(|| VmInstruction::Move(d, s))
             }
-            mir::Instruction::Store(dst, src) => {
+            mir::Instruction::Store(dst, src,ty) => {
                 let s = self.vregister.find(src).unwrap();
                 let d = self.vregister.find_keep(dst).unwrap();
                 (d != s).then(|| VmInstruction::Move(d, s))

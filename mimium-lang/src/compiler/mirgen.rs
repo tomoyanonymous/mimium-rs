@@ -1,6 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
-use crate::pattern::TypedId;
+use crate::pattern::{Pattern, TypedId};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -166,6 +166,23 @@ impl Context {
     fn add_bind(&mut self, bind: (String, VPtr)) {
         self.valenv.add_bind(&mut vec![bind]);
     }
+    fn add_bind_pattern(&mut self, pat: &Pattern, v: VPtr, ty: &Type) {
+        match pat {
+            Pattern::Single(id) => self.add_bind((id.clone(), v)),
+            Pattern::Tuple(patterns) => {
+                let tvec = ty;
+                for (i, pat) in patterns.iter().enumerate() {
+                    let v = self.push_inst(Instruction::GetElement {
+                        value: v.clone(),
+                        ty,
+                        array_idx: 0,
+                        tuple_offset: i as u64,
+                    });
+                    self.add_bind_pattern(pat, v)
+                }
+            }
+        }
+    }
     fn make_new_function(&mut self, name: &str, args: &[VPtr], parent_i: Option<usize>) -> usize {
         let newf = mir::Function::new(name, args, parent_i);
         self.program.functions.push(newf);
@@ -245,7 +262,14 @@ impl Context {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
                     self.push_inst(Instruction::Closure(reg))
                 }
-                _ => self.push_inst(Instruction::Load(v.clone())),
+                _ => {
+                    let t = self
+                        .typeenv
+                        .env
+                        .lookup(name)
+                        .expect("failed to find type for variable");
+                    self.push_inst(Instruction::Load(v.clone(), t.clone()))
+                }
             },
             LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
@@ -353,7 +377,7 @@ impl Context {
                 for i in 0..len {
                     let (v, ty) = self.eval_expr(&items[i])?;
 
-                    self.push_inst(Instruction::Store(dsts[i].clone(), v));
+                    self.push_inst(Instruction::Store(dsts[i].clone(), v, ty));
 
                     types.push(ty);
                 }
@@ -538,10 +562,10 @@ impl Context {
                 self.get_current_fn().state_size += 1;
                 Ok((Arc::new(Value::State(retv)), t))
             }
-            Expr::Let(WithMeta(pat,_s), body, then) => {
-                let tid = TypedId::try_from(pat.clone()).unwrap();
-                let id = tid.id.clone();
-                self.fn_label = Some(tid.id.clone());
+            Expr::Let(pat, body, then) => {
+                if let Ok(tid) = TypedId::try_from(pat.0.clone()) {
+                    self.fn_label = Some(tid.id.clone());
+                };
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
@@ -550,7 +574,7 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(body)?;
                 //todo:need to boolean and insert cast
-                let idt = match tid.ty.as_ref() {
+                let idt = match pat.0.ty.as_ref() {
                     Some(Type::Function(atypes, box rty, s)) => {
                         self.typeenv.convert_unknown_function(atypes, rty, s)
                     }
@@ -559,9 +583,7 @@ impl Context {
                 };
                 self.typeenv.unify_types(idt, t.clone())?;
 
-                self.typeenv
-                    .env
-                    .add_bind(&[(id.clone(), t.clone())]);
+                let t = self.typeenv.bind_pattern(&t, pat)?;
                 self.fn_label = None;
 
                 match (
@@ -580,8 +602,11 @@ impl Context {
                         let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
-                        let _ =
-                            self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
+                        let _ = self.push_inst(Instruction::Store(
+                            alloc_res.clone(),
+                            bodyv.clone(),
+                            t.clone(),
+                        ));
 
                         self.add_bind((id.clone(), alloc_res));
                         self.eval_expr(then_e)

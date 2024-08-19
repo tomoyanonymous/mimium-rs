@@ -32,7 +32,6 @@ pub enum Type {
 // currently, this refers to the number of registers
 pub type TypeSize = u8;
 
-
 impl Type {
     pub fn is_primitive(&self) -> bool {
         if let Type::Primitive(_) = self {
@@ -87,6 +86,12 @@ impl Type {
             Type::Unknown => todo!(),
         }
     }
+    pub fn get_as_tuple(&self) -> Option<&[Type]> {
+        match self {
+            Type::Tuple(types) => Some(&types),
+            _ => None,
+        }
+    }
 }
 impl fmt::Display for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -125,8 +130,6 @@ impl fmt::Display for Type {
         }
     }
 }
-
-
 
 pub mod builder;
 

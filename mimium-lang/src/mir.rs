@@ -39,10 +39,15 @@ pub enum Instruction {
     // allocate memory from stack depending on the size
     Alloc(Type),
     // load value to register from the pointer type
-    Load(VPtr),
+    Load(VPtr, Type),
     // store value to pointer
-    Store(VPtr, VPtr),
-    Proj(VPtr, u64),
+    Store(VPtr, VPtr, Type),
+    GetElement {
+        value: VPtr,
+        ty:Type,
+        array_idx: u64,
+        tuple_offset: u64,
+    },
     // call function , arguments, nret
     Call(VPtr, Vec<VPtr>, TypeSize),
     CallCls(VPtr, Vec<VPtr>),

@@ -62,9 +62,16 @@ impl std::fmt::Display for Instruction {
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
             Instruction::Alloc(t) => write!(f, "alloc {t}"),
-            Instruction::Load(src) => write!(f, "load {src}"),
-            Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
-            Instruction::Proj(v, idx) => write!(f, "proj {v} {idx}"),
+            Instruction::Load(src, ty) => write!(f, "load {src}, {ty}"),
+            Instruction::Store(dst, src, ty) => write!(f, "store {dst}, {src}, {ty}"),
+            Instruction::GetElement {
+                value,
+                ty,
+                array_idx,
+                tuple_offset,
+            } => {
+                write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
+            }
             Instruction::Call(fptr, args, _nret) => {
                 write!(f, "call {} [{}]", *fptr, format_vec!(args))
             }
