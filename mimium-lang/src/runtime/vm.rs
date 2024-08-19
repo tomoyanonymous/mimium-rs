@@ -35,11 +35,17 @@ impl StateStorage {
     fn resize(&mut self, size: usize) {
         self.rawdata.resize(size, 0)
     }
-    fn get_state(&self) -> RawVal {
-        unsafe { *self.rawdata.get_unchecked(self.pos) }
+    fn get_state(&self, size: u64) -> &[RawVal] {
+        unsafe {
+            let head = self.rawdata.as_ptr().add(self.pos);
+            slice::from_raw_parts(head, size as _)
+        }
     }
-    fn get_state_mut(&mut self) -> &mut RawVal {
-        unsafe { self.rawdata.get_unchecked_mut(self.pos) }
+    fn get_state_mut(&mut self, size: usize) -> &mut [RawVal] {
+        unsafe {
+            let head = self.rawdata.as_mut_ptr().add(self.pos);
+            slice::from_raw_parts_mut(head, size as _)
+        }
     }
     fn get_as_ringbuffer(&mut self, size_in_samples: u64) -> Ringbuffer<'_> {
         let data_head = unsafe { self.rawdata.as_mut_ptr().offset(self.pos as isize) };
@@ -267,16 +273,10 @@ impl Machine {
         }
     }
     fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> &[RawVal] {
-        let slice = self.stack.as_slice();
         let start = self.base_pointer as usize + offset as usize;
-        let end = word_size as usize;
-
         unsafe {
-            debug_assert!(start > 0 && start <= slice.len());
-            let fst = slice.split_at_unchecked(start).1;
-            debug_assert!(end > 0 && end <= fst.len());
-            let snd = fst.split_at_unchecked(end).0;
-            snd
+            let vstart = self.stack.as_slice().as_ptr().add(start);
+            slice::from_raw_parts(vstart, word_size as usize)
         }
     }
 
@@ -382,7 +382,7 @@ impl Machine {
         for (base_ptr_cls, clsidx) in local_closures.iter() {
             let start = iret + self.base_pointer as u8 + iret;
             let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
-            if is_escaping|true {
+            if is_escaping | true {
                 let cls = self.get_local_closure(*clsidx);
 
                 let newupvls = cls
@@ -641,14 +641,22 @@ impl Machine {
                     dst as i64,
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
-                Instruction::GetState(dst) => {
-                    let v = self.get_current_state().get_state();
-                    self.set_stack(dst as i64, Self::to_value(v));
+                Instruction::GetState(dst, size) => {
+                    let v = self.get_current_state().get_state(size as _);
+                    let ptr = v.as_ptr();
+                    let size = v.len();
+                    self.set_stack_range(dst as i64, ptr, size);
                 }
-                Instruction::SetState(src) => {
-                    let v = self.get_stack(src as i64);
-                    let ptr = self.get_current_state().get_state_mut();
-                    *ptr = v
+                Instruction::SetState(src, size) => {
+                    let (ptr, len) = {
+                        let v = self.get_stack_range(src as i64, size as _);
+                        (v.as_ptr(), v.len())
+                    };
+                    let dst = self.get_current_state().get_state_mut(size as _);
+                    unsafe {
+                        let s = slice::from_raw_parts(ptr, len);
+                        s.iter().enumerate().for_each(|(i, v)| dst[i] = *v);
+                    }
                 }
                 Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
                 Instruction::Delay(dst, src, time) => {
@@ -665,11 +673,11 @@ impl Machine {
                 }
                 Instruction::Mem(dst, src) => {
                     let s = self.get_stack(src as i64);
-                    let ptr = self.get_current_state().get_state_mut();
-                    let v = Self::to_value(*ptr);
+                    let ptr = self.get_current_state().get_state_mut(1);
+                    let v = Self::to_value(ptr[0]);
                     self.set_stack(dst as i64, v);
-                    let ptr = self.get_current_state().get_state_mut();
-                    *ptr = s;
+                    let ptr = self.get_current_state().get_state_mut(1);
+                    ptr[0] = s;
                 }
                 Instruction::Dummy => {
                     unreachable!()

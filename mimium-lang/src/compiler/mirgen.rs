@@ -82,7 +82,7 @@ impl Context {
             ) if name.as_str() == "delay" => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn().state_size += shift_size as u64;
+                self.get_current_fn().state_size += shift_size;
                 let coffset = self.get_ctxdata().state_offset;
                 if coffset > 0 {
                     self.get_current_basicblock()

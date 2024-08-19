@@ -502,7 +502,7 @@ impl ByteCodeGenerator {
             mir::Instruction::GetState(ty) => {
                 let size = Self::word_size_for_type(ty);
                 let d = self.vregister.push_stack(&dst, size as _);
-                Some(VmInstruction::GetState(d))
+                Some(VmInstruction::GetState(d, size))
             }
 
             mir::Instruction::JmpIf(cond, tbb, ebb) => {
@@ -581,9 +581,10 @@ impl ByteCodeGenerator {
             mir::Instruction::ReturnFeed(new, rty) => {
                 let old = self.vregister.add_newvalue(&dst);
                 let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                bytecodes_dst.push(VmInstruction::GetState(old));
+                let size = Self::word_size_for_type(rty);
+                bytecodes_dst.push(VmInstruction::GetState(old, size));
                 let new = self.vregister.find(new).unwrap();
-                bytecodes_dst.push(VmInstruction::SetState(new));
+                bytecodes_dst.push(VmInstruction::SetState(new, size));
                 let nret = Self::word_size_for_type(rty);
                 Some(VmInstruction::Return(old, nret))
             }
@@ -636,7 +637,8 @@ impl ByteCodeGenerator {
         fidx: usize,
     ) -> (String, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
-
+        let state_size = mirfunc.state_size
+            * Self::word_size_for_type(mirfunc.return_type.get().unwrap()) as u64;
         let mut func = vm::FuncProto {
             nparam: mirfunc.args.len(),
             nret: Self::word_size_for_type(
@@ -648,7 +650,7 @@ impl ByteCodeGenerator {
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
-            state_size: mirfunc.state_size,
+            state_size,
             delay_sizes: vec![],
         };
         self.vregister.0.push(VRegister::default());

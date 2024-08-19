@@ -35,8 +35,8 @@ pub enum Instruction {
     GetGlobal(Reg, GlobalPos, TypeSize),
     SetGlobal(GlobalPos, Reg, TypeSize),
     //call internal state over time, destination,source
-    GetState(Reg),
-    SetState(Reg),
+    GetState(Reg, TypeSize),
+    SetState(Reg, TypeSize),
     ShiftStatePos(Offset),
 
     // Close(), // currently not implemented as it is not required unless loop/break is used
@@ -99,8 +99,8 @@ impl std::fmt::Display for Instruction {
         match self {
             Instruction::Return0 => write!(f, "ret0"),
             Instruction::Jmp(dst) => write!(f, "{:<10} {}", "jmp", dst),
-            Instruction::GetState(dst) => write!(f, "{:<10} {}", "getstate", dst),
-            Instruction::SetState(src) => write!(f, "{:<10} {}", "setstate", src),
+            Instruction::GetState(dst, size) => write!(f, "{:<10} {} {}", "getstate", dst, size),
+            Instruction::SetState(src, size) => write!(f, "{:<10} {} {}", "setstate", src, size),
             Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
