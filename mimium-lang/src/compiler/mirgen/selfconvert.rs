@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Literal};
+use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 use crate::utils::{
     error::ReportableError,
     metadata::{Span, WithMeta},
@@ -46,9 +46,9 @@ fn get_new_feedid(fid: FeedId) -> i64 {
     }
 }
 
-fn get_feedvar_name(fid: i64) -> String {
+fn get_feedvar_name(fid: i64) -> Symbol {
     //todo:need to assign true unique name
-    format!("feed_id{}", fid)
+    format!("feed_id{}", fid).to_symbol()
 }
 
 fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, Error> {
@@ -197,7 +197,7 @@ mod test {
             Expr::Let(
                 WithMeta(
                     TypedPattern {
-                        pat: Pattern::Single("lowpass".to_string()),
+                        pat: Pattern::Single("lowpass".to_symbol()),
                         ty: None,
                     },
                     0..1,
@@ -206,7 +206,7 @@ mod test {
                     Expr::Lambda(
                         vec![WithMeta::<_>(
                             TypedId {
-                                id: "input".to_string(),
+                                id: "input".to_symbol(),
                                 ty: None,
                             },
                             0..1,
@@ -225,7 +225,7 @@ mod test {
         let ans = Expr::Let(
             WithMeta(
                 TypedPattern {
-                    pat: Pattern::Single("lowpass".to_string()),
+                    pat: Pattern::Single("lowpass".to_symbol()),
                     ty: None,
                 },
                 0..1,
@@ -235,15 +235,15 @@ mod test {
                     vec![WithMeta::<_>(
                         TypedId {
                             ty: None,
-                            id: "input".to_string(),
+                            id: "input".to_symbol(),
                         },
                         0..1,
                     )],
                     None,
                     Box::new(WithMeta::<_>(
                         Expr::Feed(
-                            "feed_id0".to_string(),
-                            Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_string(), None), 0..1)),
+                            "feed_id0".to_symbol(),
+                            Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_symbol(), None), 0..1)),
                         ),
                         0..1,
                     )),

@@ -18,7 +18,10 @@ use ringbuffer::Ringbuffer;
 use program::OpenUpValue;
 pub use program::{FuncProto, Program};
 
-use crate::types::TypeSize;
+use crate::{
+    ast::{Symbol, ToSymbol},
+    types::TypeSize,
+};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
@@ -126,9 +129,9 @@ pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
     closures: Vec<Closure>,
-    pub ext_fun_table: Vec<(String, ExtFunType)>,
+    pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
-    pub ext_cls_table: Vec<(String, ExtClsType)>,
+    pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
     cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
@@ -247,9 +250,9 @@ where
 
 impl Machine {
     pub fn new() -> Self {
-        let ext_fun_table = builtin::BUILTIN_FNS
+        let ext_fun_table = builtin::get_builtin_fns()
             .iter()
-            .map(|(name, f, _t)| (name.to_string(), *f))
+            .map(|(name, f, _t)| (name.to_symbol(), *f))
             .collect::<Vec<_>>();
         Self {
             stack: vec![],
@@ -710,10 +713,10 @@ impl Machine {
             pcounter = (pcounter as i64 + increment as i64) as usize;
         }
     }
-    pub fn install_extern_fn(&mut self, name: String, f: ExtFunType) {
+    pub fn install_extern_fn(&mut self, name: Symbol, f: ExtFunType) {
         self.ext_fun_table.push((name, f));
     }
-    pub fn install_extern_cls(&mut self, name: String, f: ExtClsType) {
+    pub fn install_extern_cls(&mut self, name: Symbol, f: ExtClsType) {
         self.ext_cls_table.push((name, f));
     }
     pub fn link_functions(&mut self, prog: &Program) {
@@ -764,7 +767,7 @@ impl Machine {
             0
         }
     }
-    pub fn execute_entry(&mut self, prog: &Program, entry: &str) -> ReturnCode {
+    pub fn execute_entry(&mut self, prog: &Program, entry: &Symbol) -> ReturnCode {
         if let Some(idx) = prog.get_fun_index(entry) {
             self.execute_idx(prog, idx)
         } else {

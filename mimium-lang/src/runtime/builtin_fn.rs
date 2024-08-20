@@ -228,7 +228,8 @@ macro_rules! f2_f {
     };
 }
 
-pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 49]> = LazyCell::new(|| {
+// TODO: use predefined symbols instead of strings
+pub fn get_builtin_fns() -> [BuiltinFn; 49] {
     [
         i_i!(neg),
         i_i!(not),
@@ -304,7 +305,7 @@ pub const BUILTIN_FNS: LazyCell<[BuiltinFn; 49]> = LazyCell::new(|| {
             intrinsic::numeric::probeln as *const (),
         ),
     ]
-});
+}
 
 pub fn eval_float1(name: &str, x: f64) -> Option<f64> {
     match name {

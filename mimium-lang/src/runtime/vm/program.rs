@@ -1,4 +1,5 @@
 use super::{Instruction, RawVal};
+use crate::ast::{Symbol, ToSymbol};
 use crate::mir;
 use crate::types::Type;
 pub use mir::OpenUpValue;
@@ -34,23 +35,21 @@ impl FuncProto {
     }
 }
 
-
-
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
-    pub global_fn_table: Vec<(String, FuncProto)>,
-    pub ext_fun_table: Vec<(String, Type)>,
-    pub ext_cls_table: Vec<(String, Type)>,
+    pub global_fn_table: Vec<(Symbol, FuncProto)>,
+    pub ext_fun_table: Vec<(Symbol, Type)>,
+    pub ext_cls_table: Vec<(Symbol, Type)>,
     pub global_vals: Vec<RawVal>,
 }
 impl Program {
-    pub fn get_fun_index(&self, name: &str) -> Option<usize> {
+    pub fn get_fun_index(&self, name: &Symbol) -> Option<usize> {
         self.global_fn_table
             .iter()
-            .position(|(label, _f)| label.as_str() == name)
+            .position(|(label, _f)| label == name)
     }
     pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
-        self.get_fun_index("dsp")
+        self.get_fun_index(&"dsp".to_symbol())
             .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
     }
 }

@@ -1,3 +1,4 @@
+use crate::ast::ToSymbol;
 use crate::compiler;
 use crate::utils::{error::ReportableError, metadata::Span};
 
@@ -41,7 +42,7 @@ pub fn run_bytecode_test<'a>(
     bytecodes: &'a vm::Program,
     n: usize,
 ) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
-    let retcode = machine.execute_entry(bytecodes, "dsp");
+    let retcode = machine.execute_entry(bytecodes, &"dsp".to_symbol());
     if retcode >= 0 {
         Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
     } else {
@@ -56,7 +57,7 @@ pub fn run_bytecode_test_multiple(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut machine = vm::Machine::new();
     machine.link_functions(bytecodes);
-    let _retcode = machine.execute_entry(bytecodes, "_mimium_global");
+    let _retcode = machine.execute_entry(bytecodes, &"_mimium_global".to_symbol());
     let n = if stereo { 2 } else { 1 };
     let mut ret = Vec::with_capacity(times as usize * n);
     for i in 0..times {

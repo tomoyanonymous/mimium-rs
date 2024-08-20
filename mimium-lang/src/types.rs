@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::format_vec;
+use crate::{ast::Symbol, format_vec};
 
 use super::utils::miniprint::MiniPrint;
 
@@ -19,7 +19,7 @@ pub enum Type {
     //aggregate types
     Array(Box<Self>),
     Tuple(Vec<Self>),
-    Struct(Vec<(String, Box<Self>)>),
+    Struct(Vec<(Symbol, Box<Self>)>),
     //Function that has a vector of parameters, return type, and type for internal states.
     Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
     Ref(Box<Self>),
@@ -97,14 +97,14 @@ impl fmt::Display for Type {
             Type::Primitive(p) => write!(f, "{p}"),
             Type::Array(a) => write!(f, "[{a}]"),
             Type::Tuple(v) => {
-                let vf = format_vec!(v,",");
+                let vf = format_vec!(v, ",");
                 write!(f, "({vf})")
             }
             Type::Struct(v) => {
                 write!(f, "{v:?}")
             }
             Type::Function(p, r, _s) => {
-                let args = format_vec!(p,",");
+                let args = format_vec!(p, ",");
                 write!(f, "({args})->{r}")
             }
             Type::Ref(x) => write!(f, "&{x}"),

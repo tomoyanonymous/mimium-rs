@@ -19,7 +19,6 @@ fn stack_set_vec_test2() {
     assert_eq!(testvec, vec![0u64, 1, 2, 3, 4, 5, 6, 7])
 }
 
-
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -122,16 +121,16 @@ fn closuretest() {
         state_size: 0,
     };
     let global_fn_table = vec![
-        ("main".to_string(), main_f),
-        ("makecounter".to_string(), makecounter_f),
-        ("inner".to_string(), inner_f),
+        ("main".to_symbol(), main_f),
+        ("makecounter".to_symbol(), makecounter_f),
+        ("inner".to_symbol(), inner_f),
     ];
     let mut machine = Machine::new();
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("probe".to_string(), function!(vec![numeric!()], numeric!()))],
+        ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
         ext_cls_table: vec![],
         global_vals: vec![],
     };
@@ -161,7 +160,7 @@ fn rust_closure_test() {
         state_size: 0,
     };
     let fns = vec![main_f];
-    let fnames = vec!["main".to_string()];
+    let fnames = vec!["main".to_symbol()];
     let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
     // let mut count = 0;
     let cls = Arc::new(Mutex::new(|m: &mut Machine| {
@@ -173,12 +172,12 @@ fn rust_closure_test() {
         return 1;
     }));
     let mut machine = Machine::new();
-    machine.install_extern_fn("lib_printi".to_string(), lib_printi);
-    machine.install_extern_cls("rustclosure".to_string(), cls.clone());
+    machine.install_extern_fn("lib_printi".to_symbol(), lib_printi);
+    machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_string(), Type::Unknown)],
-        ext_cls_table: vec![("rustclosure".to_string(), Type::Unknown)],
+        ext_fun_table: vec![("lib_printi".to_symbol(), Type::Unknown)],
+        ext_cls_table: vec![("rustclosure".to_symbol(), Type::Unknown)],
         global_vals: vec![],
     };
     // let mut feedstate = FeedState::default();

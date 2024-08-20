@@ -1,6 +1,8 @@
 use std::fmt;
 
 use crate::compiler::intrinsics;
+
+use super::{Symbol, ToSymbol};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Comment {
     SingleLine(String),
@@ -33,8 +35,8 @@ pub enum Op {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Token {
-    Ident(String),
-    MacroExpand(String),
+    Ident(Symbol),
+    MacroExpand(Symbol),
 
     FloatType,
     IntegerType,
@@ -87,7 +89,7 @@ pub enum Token {
     EndOfInput,
 }
 impl Op {
-    pub fn get_associated_fn_name(&self) -> &str {
+    pub fn get_associated_fn_name(&self) -> Symbol {
         match self {
             Op::Sum => intrinsics::ADD,
             Op::Minus => intrinsics::SUB,
@@ -106,6 +108,7 @@ impl Op {
             Op::Pipe => "pipe",
             Op::Unknown(x) => x.as_str(),
         }
+        .to_symbol() // TODO: use prefilled symbols instead of converting on the fly.
     }
 }
 

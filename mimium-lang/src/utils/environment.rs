@@ -1,5 +1,7 @@
 use std::collections::LinkedList;
-type EnvInner<T> = LinkedList<Vec<(String, T)>>;
+
+use crate::ast::Symbol;
+type EnvInner<T> = LinkedList<Vec<(Symbol, T)>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment<T>(pub EnvInner<T>);
@@ -26,12 +28,12 @@ impl<T: Clone> Environment<T> {
     pub fn to_outer(&mut self) {
         let _ = self.0.pop_front();
     }
-    pub fn add_bind(&mut self, binds: & [(String, T)]) {
+    pub fn add_bind(&mut self, binds: &[(Symbol, T)]) {
         assert!(self.0.len() > 0);
         self.0.front_mut().unwrap().extend_from_slice(binds);
     }
 
-    pub fn lookup_cls(&self, name: &str) -> LookupRes<&T> {
+    pub fn lookup_cls(&self, name: &Symbol) -> LookupRes<&T> {
         match self
             .0
             .iter()
@@ -47,7 +49,7 @@ impl<T: Clone> Environment<T> {
             Some((level, e)) => LookupRes::UpValue(level, e),
         }
     }
-    pub fn lookup(&self, name: &str) -> Option<&T> {
+    pub fn lookup(&self, name: &Symbol) -> Option<&T> {
         match self.lookup_cls(name) {
             LookupRes::None => None,
             LookupRes::Global(e) | LookupRes::Local(e) | LookupRes::UpValue(_, e) => Some(e),

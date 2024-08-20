@@ -4,7 +4,7 @@ use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
-use crate::mir::{self, Argument, Instruction, Label, Mir, VPtr, VReg, Value};
+use crate::mir::{self, Argument, Instruction, Mir, VPtr, VReg, Value};
 
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
-use crate::ast::{Expr, Literal};
+use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -31,7 +31,7 @@ struct ContextData {
 pub struct Context {
     typeenv: InferContext,
     valenv: Environment<VPtr>,
-    fn_label: Option<String>,
+    fn_label: Option<Symbol>,
     anonymous_fncount: u64,
     reg_count: VReg,
     program: Mir,
@@ -56,11 +56,11 @@ impl Context {
         self.data.get_mut(self.data_i).unwrap()
     }
 
-    fn consume_fnlabel(&mut self) -> String {
+    fn consume_fnlabel(&mut self) -> Symbol {
         let res = self.fn_label.clone().unwrap_or_else(|| {
             let res = format!("lambda_{}", self.anonymous_fncount);
             self.anonymous_fncount += 1;
-            res
+            res.to_symbol()
         });
         self.fn_label = None;
         res
@@ -77,9 +77,9 @@ impl Context {
     ) -> Result<Option<VPtr>, CompileError> {
         match (f.as_ref(), args) {
             (
-                Value::ExtFunction(Label(name), _ty),
+                Value::ExtFunction(name, _ty),
                 [WithMeta(Expr::Literal(Literal::Float(max)), _span), src, time],
-            ) if name.as_str() == "delay" => {
+            ) if *name == "delay".to_symbol() => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_size += shift_size;
@@ -99,8 +99,8 @@ impl Context {
                 ))));
                 res
             }
-            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), _src, _time])
-                if name.as_str() == "delay" =>
+            (Value::ExtFunction(name, _ty), [WithMeta(_max, span), _src, _time])
+                if *name == "delay".to_symbol() =>
             {
                 Err(CompileError(CompileErrorKind::UnboundedDelay, span.clone()))
             }
@@ -110,7 +110,7 @@ impl Context {
     }
     fn make_intrinsics(
         &mut self,
-        label: &String,
+        label: Symbol,
         args: Vec<VPtr>,
     ) -> Result<Option<VPtr>, CompileError> {
         let inst = match (label.as_str(), args.len()) {
@@ -163,7 +163,7 @@ impl Context {
         self.get_current_basicblock().0.push((res.clone(), inst));
         res
     }
-    fn add_bind(&mut self, bind: (String, VPtr)) {
+    fn add_bind(&mut self, bind: (Symbol, VPtr)) {
         self.valenv.add_bind(&mut [bind]);
     }
     fn add_bind_pattern(
@@ -174,7 +174,7 @@ impl Context {
     ) -> Result<(), CompileError> {
         let WithMeta(TypedPattern { pat, ty: _ }, span) = pattern;
         match pat {
-            Pattern::Single(id) => Ok(self.add_bind((id.clone(), v))),
+            Pattern::Single(id) => Ok(self.add_bind((*id, v))),
             Pattern::Tuple(patterns) => {
                 let interm_vec = patterns
                     .iter()
@@ -215,7 +215,7 @@ impl Context {
     }
     fn make_new_function(
         &mut self,
-        name: &str,
+        name: Symbol,
         args: &[VPtr],
         argtypes: &[Type],
         parent_i: Option<usize>,
@@ -227,8 +227,8 @@ impl Context {
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, Type), CompileError>>(
         &mut self,
-        fname: &String,
-        binds: &[(String, VPtr, Type)],
+        fname: Symbol,
+        binds: &[(Symbol, VPtr, Type)],
         mut action: F,
     ) -> Result<(usize, VPtr, Type), CompileError> {
         //pre action
@@ -272,7 +272,7 @@ impl Context {
         self.typeenv.env.to_outer();
         Ok((c_idx, fptr, ty))
     }
-    fn lookup(&self, key: &str) -> LookupRes<VPtr> {
+    fn lookup(&self, key: &Symbol) -> LookupRes<VPtr> {
         match self.valenv.lookup_cls(key) {
             LookupRes::Local(v) => LookupRes::Local(v.clone()),
             LookupRes::UpValue(level, v) => LookupRes::UpValue(level, v.clone()),
@@ -293,14 +293,14 @@ impl Context {
         };
         Ok(v)
     }
-    pub fn eval_var(&mut self, name: &str, span: &Span) -> Result<(VPtr, Type), CompileError> {
+    pub fn eval_var(&mut self, name: Symbol, span: &Span) -> Result<(VPtr, Type), CompileError> {
         let t = self
             .typeenv
             .env
-            .lookup(name)
+            .lookup(&name)
             .expect("failed to find type for variable")
             .clone();
-        let v = match self.lookup(name) {
+        let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i, _s, _nret) => {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
@@ -329,7 +329,7 @@ impl Context {
             LookupRes::None => {
                 let ty =
                     typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
-                Arc::new(Value::ExtFunction(Label(name.to_string()), ty))
+                Arc::new(Value::ExtFunction(name, ty))
             }
         };
 
@@ -380,7 +380,7 @@ impl Context {
                 let t = infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name, _time) => self.eval_var(name, span),
+            Expr::Var(name, _time) => self.eval_var(*name, span),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(block)
@@ -510,7 +510,7 @@ impl Context {
                             self.emit_fncall(*idx as u64, *statesize, a_regs, ret_t)
                         }
                         Value::ExtFunction(label, ty) => {
-                            if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
+                            if let Some(res) = self.make_intrinsics(*label, a_regs.clone())? {
                                 res
                             } else {
                                 self.push_inst(Instruction::Call(
@@ -537,7 +537,7 @@ impl Context {
                             let tenv = &mut self.typeenv;
                             tenv.gen_intermediate_type()
                         });
-                        let a = Argument(Label(label.clone()), t.clone());
+                        let a = Argument(label, t.clone());
                         let res = (
                             label.clone(),
                             Arc::new(Value::Argument(idx, Arc::new(a))),
@@ -548,7 +548,7 @@ impl Context {
                     .collect::<Vec<_>>();
                 let name = self.consume_fnlabel();
                 let (c_idx, f, res_type) =
-                    self.do_in_child_ctx(&name, binds.as_slice(), |ctx, c_idx| {
+                    self.do_in_child_ctx(name, binds.as_slice(), |ctx, c_idx| {
                         let (res, mut res_type) = ctx.eval_expr(&body)?;
                         res_type = if let Some(rt) = rett {
                             let tenv = &mut ctx.typeenv;

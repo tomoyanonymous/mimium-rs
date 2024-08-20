@@ -27,12 +27,6 @@ impl std::fmt::Display for Mir {
     }
 }
 
-impl std::fmt::Display for Label {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl std::fmt::Display for Argument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Argument(label, _t) = self;
