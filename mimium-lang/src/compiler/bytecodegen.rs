@@ -70,9 +70,31 @@ impl VRegister {
             .position(|v| v.is_none())
             .unwrap()
             + self.1;
+
         self.0[pos] = Some(Region::Value(v.clone()));
         log::trace!(
             "add  reg:{v} to {pos} {}",
+            tostring_helper(self.0.as_slice()),
+        );
+        pos as Reg
+    }
+    pub fn add_newvalue_range(&mut self, v: &Arc<mir::Value>, size: usize) -> Reg {
+        let len = self.0.len();
+        let pos = self.0[self.1..len]
+            .iter()
+            .position(|v| v.is_none())
+            .unwrap()
+            + self.1;
+        for i in 0..size {
+            if i == 0 {
+                self.0[pos] = Some(Region::Value(v.clone()));
+            } else {
+                self.0[pos + i] = Some(Region::SubRegion());
+            }
+        }
+        log::trace!(
+            "add  reg:{v} to {pos}..{} {}",
+            pos + size,
             tostring_helper(self.0.as_slice()),
         );
         pos as Reg
@@ -95,6 +117,27 @@ impl VRegister {
             _ => None,
         }
     }
+    pub fn find_range(&mut self, v: &Arc<mir::Value>,size:usize)->Option<Reg>{
+        log::trace!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
+        //todo: Error handling
+        let res = self.0.iter().position(|v1| match v1 {
+            Some(Region::Value(v1_c)) => *v1_c == *v,
+            _ => false,
+        });
+        match (res, v.as_ref()) {
+            //argument is registered in absolute position
+            (Some(pos), mir::Value::Argument(_, _)) => Some(pos as Reg),
+            (Some(pos), _) => {
+                //mir is SSA form, so the value will be used only once.
+                self.0[pos] = None;
+                for i in 1..size{
+                    self.0[pos+i] = None;
+                }
+                Some(pos as Reg)
+            }
+            _ => None,
+        }
+    }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
         log::trace!("findkeep reg:{v} {}", tostring_helper(self.0.as_slice()),);
@@ -106,20 +149,6 @@ impl VRegister {
             })
             .map(|pos| pos as Reg)
     }
-    pub fn find_upvalue(&mut self, v: Arc<mir::Value>) -> Option<Reg> {
-        log::trace!("findup reg:{v} {}", tostring_helper(self.0.as_slice()),);
-        //todo: Error handling
-        let res = self.0.iter().position(|v1| match v1 {
-            Some(Region::Value(v1_c)) => *v1_c == v,
-            _ => false,
-        });
-        match (res, v.as_ref()) {
-            //argument is registered in absolute position
-            (Some(pos), mir::Value::Argument(_, _)) => Some(pos as Reg),
-            (Some(pos), _) => Some(pos as Reg),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -128,10 +157,12 @@ impl VStack {
     fn get_top(&mut self) -> &mut VRegister {
         self.0.last_mut().unwrap()
     }
-    fn get_parent(&mut self) -> Option<&mut VRegister> {
-        debug_assert!(self.0.len() >= 2);
-        let idx = self.0.len() - 2;
-        self.0.get_mut(idx)
+    fn find_upvalue(&self, v: &Arc<mir::Value>) -> Option<Reg> {
+        self.0
+            .iter()
+            .rev()
+            .skip(1)
+            .find_map(|vreg| vreg.find_keep(v))
     }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
         self.get_top().push_stack(v, size)
@@ -240,13 +271,9 @@ impl ByteCodeGenerator {
         }
     }
     fn find_upvalue(&self, upval: &Arc<mir::Value>) -> Reg {
-        let vstack = &self.vregister.0;
-        let res = vstack
-            .iter()
-            .rev()
-            .skip(1)
-            .find_map(|vreg| vreg.find_keep(upval));
-        res.expect("failed to find upvalue")
+        self.vregister
+            .find_upvalue(upval)
+            .expect("failed to find upvalue")
     }
     fn prepare_function(
         &mut self,
@@ -472,7 +499,7 @@ impl ByteCodeGenerator {
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
-                let d = self.vregister.push_stack(&dst, size as _);
+                let d = self.vregister.get_top().add_newvalue_range(&dst, size as _);
                 Some(VmInstruction::GetUpValue(
                     d,
                     *i as Reg,
@@ -489,8 +516,7 @@ impl ByteCodeGenerator {
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
-                let d = self.vregister.push_stack(&dst, size as _);
-
+                let d = self.vregister.get_top().add_newvalue_range(&dst, size as _);
                 Some(VmInstruction::SetUpValue(
                     d,
                     *i as Reg,
