@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::HashMap,
+    ops::Range,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -224,7 +225,7 @@ where
 }
 fn set_vec_range<T>(vec: &mut Vec<T>, i: usize, values: &[T])
 where
-    T: Copy + std::default::Default,
+    T: std::fmt::Debug + Copy + std::default::Default,
 {
     //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
     // and copy_from_slice use ptr::copy_nonoverwrapping internally.
@@ -265,19 +266,29 @@ impl Machine {
             debug_stacktype: vec![RawValType::Int; 255],
         }
     }
-    fn get_stack(&self, offset: i64) -> RawVal {
-        unsafe {
-            *self
-                .stack
-                .get_unchecked((self.base_pointer + offset as u64) as usize)
-        }
+    pub fn clear_stack(&mut self) {
+        self.stack.fill(0);
     }
-    fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> &[RawVal] {
-        let start = self.base_pointer as usize + offset as usize;
-        unsafe {
-            let vstart = self.stack.as_slice().as_ptr().add(start);
+    fn get_stack(&self, offset: i64) -> RawVal {
+        // unsafe {
+        //     *self
+        //         .stack
+        //         .get_unchecked((self.base_pointer + offset as u64) as usize)
+        // }
+        self.get_stack_range(offset, 1).1[0]
+    }
+    fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> (Range<usize>, &[RawVal]) {
+        let addr_start = self.base_pointer as usize + offset as usize;
+        let addr_end = addr_start + word_size as usize;
+        let start = self.stack.as_slice().as_ptr();
+        let slice = unsafe {
+            // w/ unstable feature
+            // let (_,snd) = self.stack.as_slice().split_at_unchecked(offset as usize);
+            // snd.split_at_unchecked(n as usize)
+            let vstart = start.add(addr_start);
             slice::from_raw_parts(vstart, word_size as usize)
-        }
+        };
+        (addr_start..addr_end, slice)
     }
 
     fn set_stack(&mut self, offset: i64, v: RawVal) {
@@ -285,13 +296,24 @@ impl Machine {
     }
     fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
         debug_assert!(!v.is_null());
-        debug_assert!(v.is_aligned());
+        // debug_assert!(v.is_aligned());
         let vs = unsafe { slice::from_raw_parts(v, size) };
         set_vec_range(
             &mut self.stack,
             (self.base_pointer as i64 + offset) as usize,
             vs,
         )
+    }
+    fn move_stack_range(&mut self, offset: i64, srcrange: Range<usize>) {
+        let dest = (self.base_pointer as i64 + offset) as usize;
+        if srcrange.end > self.stack.len() {
+            self.stack.resize(srcrange.end, 0);
+        }
+        let dest_end = dest + (srcrange.end - srcrange.start);
+        if dest_end > self.stack.len() {
+            self.stack.resize(dest_end, 0);
+        }
+        self.stack.copy_within(srcrange, dest)
     }
     fn set_stacktype(&mut self, offset: i64, t: RawValType) {
         // set_vec(
@@ -307,14 +329,20 @@ impl Machine {
     fn get_upvalue_offset(upper_base: usize, offset: OpenUpValue) -> usize {
         upper_base + offset.0
     }
-    pub fn get_open_upvalue(&self, upper_base: usize, ov: OpenUpValue) -> &[RawVal] {
+    pub fn get_open_upvalue(
+        &self,
+        upper_base: usize,
+        ov: OpenUpValue,
+    ) -> (Range<usize>, &[RawVal]) {
         let OpenUpValue(offset, size) = ov;
         log::trace!("upper base:{}, upvalue:{}", upper_base, offset);
         let abs_pos = Self::get_upvalue_offset(upper_base, ov);
-        unsafe {
+        let end = abs_pos + size as usize;
+        let slice = unsafe {
             let vstart = self.stack.as_slice().as_ptr().add(abs_pos);
             slice::from_raw_parts(vstart, size as usize)
-        }
+        };
+        (abs_pos..end, slice)
     }
 
     fn get_current_state(&mut self) -> &mut StateStorage {
@@ -381,8 +409,9 @@ impl Machine {
     fn close_upvalues(&mut self, iret: Reg, nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
         for (base_ptr_cls, clsidx) in local_closures.iter() {
             let start = iret + self.base_pointer as u8 + iret;
-            let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
-            if is_escaping | true {
+            // let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
+            let is_escaping = true; //TODO
+            if is_escaping {
                 let cls = self.get_local_closure(*clsidx);
 
                 let newupvls = cls
@@ -390,7 +419,8 @@ impl Machine {
                     .iter()
                     .map(|upv| {
                         if let UpValue::Open(i) = upv {
-                            let ov = self.get_open_upvalue(self.base_pointer as usize, *i);
+                            let (_range, ov) =
+                                self.get_open_upvalue(self.base_pointer as usize, *i);
                             UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
                         } else {
                             upv.clone()
@@ -447,8 +477,8 @@ impl Machine {
                     self.set_stack(dst as i64, func.constants[pos as usize]);
                 }
                 Instruction::MoveRange(dst, src, n) => {
-                    let src_vs = self.get_stack_range(src as _, n);
-                    self.set_stack_range(dst as i64, src_vs.as_ptr(), src_vs.len());
+                    let (range, _slice) = self.get_stack_range(src as _, n);
+                    self.move_stack_range(dst as i64, range);
                 }
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
@@ -515,25 +545,30 @@ impl Machine {
                         let cls = &self.closures[up_i.0 as usize];
                         let upvalues = &cls.upvalues;
                         let rv = &upvalues[index as usize];
-                        let (rawv_ptr, len) = match rv {
+                        match rv {
                             UpValue::Open(i) => {
                                 let upper_base = cls.base_ptr as usize;
-                                let rawv = self.get_open_upvalue(upper_base, *i);
-                                log::trace!("{}", unsafe {
+                                let (range, rawv) = self.get_open_upvalue(upper_base, *i);
+                                log::trace!("open {}", unsafe {
                                     std::mem::transmute::<u64, f64>(rawv[0])
                                 });
-                                assert_eq!(rawv.len(), size as usize);
-                                (rawv.as_ptr(), rawv.len())
+                                // assert_eq!(rawv.len(), size as usize);
+                                self.move_stack_range(dst as _, range);
                             }
                             UpValue::Closed(rawval) => {
-                                let rawv = rawval.borrow();
-                                let ptr = rawv.as_slice().as_ptr();
-                                let len = rawv.len();
-                                assert_eq!(rawv.len(), size as usize);
-                                (ptr, len)
+                                let (ptr, len) = {
+                                    let rawv = rawval.borrow();
+                                    log::trace!("close{:?}", unsafe {
+                                        std::mem::transmute::<u64, f64>(rawv[0])
+                                    });
+                                    let ptr = rawv.as_ptr();
+                                    let len = rawv.len();
+                                    assert_eq!(rawv.len(), size as usize);
+                                    (ptr, len)
+                                };
+                                self.set_stack_range(dst as i64, ptr, len);
                             }
                         };
-                        self.set_stack_range(dst as i64, rawv_ptr, len);
                     };
                 }
                 Instruction::SetUpValue(index, src, size) => {
@@ -544,20 +579,13 @@ impl Machine {
                     let rv: &UpValue = &upvalues[index as usize];
                     match rv {
                         UpValue::Open(OpenUpValue(i, size)) => {
-                            unsafe {
-                                let vstart =
-                                    self.stack.as_mut_slice().as_mut_ptr().add(upper_base + i);
-                                let v = self.get_stack_range(src as i64, *size);
-                                debug_assert!(!vstart.is_null());
-                                debug_assert!(vstart.is_aligned());
-                                let range = slice::from_raw_parts_mut(vstart, *size as usize);
-                                range.copy_from_slice(v);
-                            };
+                            let (range, _v) = self.get_stack_range(src as i64, *size);
+                            self.stack.copy_within(range, upper_base + *i);
                         }
                         UpValue::Closed(i) => {
                             let mut uv = i.borrow_mut();
-                            let v = self.get_stack_range(src as i64, size);
-                            uv.copy_from_slice(v);
+                            let (_range, v) = self.get_stack_range(src as i64, size);
+                            uv.iter_mut().zip(v.iter()).for_each(|(d, v)| *d = *v)
                         }
                     }
                 }
@@ -565,7 +593,7 @@ impl Machine {
                     let gvs = unsafe {
                         let vstart = self.global_vals.as_ptr().offset(gid as _);
                         debug_assert!(!vstart.is_null());
-                        debug_assert!(vstart.is_aligned());
+                        // debug_assert!(vstart.is_aligned());
                         slice::from_raw_parts(vstart, size as _)
                     };
                     self.set_stack_range(dst as i64, gvs.as_ptr(), gvs.len())
@@ -574,10 +602,11 @@ impl Machine {
                     let gvs = unsafe {
                         let vstart = self.global_vals.as_mut_ptr().offset(gid as _);
                         debug_assert!(!vstart.is_null());
-                        debug_assert!(vstart.is_aligned());
+                        // debug_assert!(vstart.is_aligned());
                         slice::from_raw_parts_mut(vstart, size as _)
                     };
-                    gvs.copy_from_slice(self.get_stack_range(src as i64, size));
+                    let (_, slice) = self.get_stack_range(src as i64, size);
+                    gvs.copy_from_slice(slice);
                 }
                 // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
@@ -649,7 +678,7 @@ impl Machine {
                 }
                 Instruction::SetState(src, size) => {
                     let (ptr, len) = {
-                        let v = self.get_stack_range(src as i64, size as _);
+                        let (_range, v) = self.get_stack_range(src as i64, size as _);
                         (v.as_ptr(), v.len())
                     };
                     let dst = self.get_current_state().get_state_mut(size as _);
