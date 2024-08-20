@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{
-    ast,
+    ast::{self, Symbol, ToSymbol},
     compiler::{Error as CompileError, ErrorKind},
     integer, numeric,
     pattern::{TypedId, TypedPattern},
@@ -37,7 +37,7 @@ pub enum Value {
         Option<Type>,
     ),
     FixPoint(TypedId, Box<WithMeta<ast::Expr>>),
-    External(String),
+    External(Symbol),
 }
 impl PValue {
     pub fn get_type(&self) -> Type {
@@ -75,19 +75,24 @@ impl Value {
 #[derive(Debug, Clone)]
 pub struct Context {
     pub env: Environment<Value>,
-    ///
     pub history: (u64, Vec<PValue>),
+    pub extern_syms: Vec<Symbol>,
 }
 impl Context {
     pub fn new() -> Self {
+        let extern_syms = EXTERN_SYMS
+            .iter()
+            .map(|s| s.to_symbol())
+            .collect::<Vec<_>>();
         Self {
             env: Environment::new(),
             history: (0, vec![]),
+            extern_syms,
         }
     }
 }
 
-const EXTERN_ENV: [&str; 28] = [
+const EXTERN_SYMS: [&str; 28] = [
     "neg", "add", "sub", "mult", "div", "mod", "eq", "ne", "le", "lt", "ge", "gt", "atan2", "sin",
     "cos", "not", "round", "floor", "ceil", "atan", "sqrt", "abs", "min", "max", "pow", "log",
     "print", "println",
@@ -158,7 +163,7 @@ fn getcell<'a, 'ctx: 'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
 fn eval_with_new_env(
     e_meta: &Box<WithMeta<ast::Expr>>,
     ctx: &mut Context,
-    names: &mut Vec<(String, Value)>,
+    names: &mut Vec<(Symbol, Value)>,
 ) -> Result<Value, CompileError> {
     ctx.env.extend();
     ctx.env.add_bind(names);
@@ -167,7 +172,7 @@ fn eval_with_new_env(
     res
 }
 
-pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
+pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
     use builtin_fn::BUILTIN_FNS;
     let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
 
@@ -177,7 +182,7 @@ pub fn eval_extern(n: &String, argv: &Vec<Value>, span: Span) -> Result<Value, C
         } else {
             false
         };
-        n == name && ty_same
+        n == name.to_symbol() && ty_same
     }) {
         match argv.len() {
             1 => {
@@ -263,11 +268,15 @@ pub fn eval_ast(
     match e {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
         ast::Expr::Var(v, _time) => env
-            .lookup(&v)
+            .lookup(v)
             .map(|v| v.clone())
-            .or(lookup_extern_env(&v).map(|n| Value::External(n.to_string())))
+            .or(ctx
+                .extern_syms
+                .iter()
+                .find(|n| *n == v)
+                .map(|n| Value::External(*n)))
             .ok_or(CompileError(
-                ErrorKind::VariableNotFound(v.clone()),
+                ErrorKind::VariableNotFound(v.to_string()),
                 span.clone(),
             )),
         ast::Expr::Block(b) => b
@@ -317,7 +326,7 @@ pub fn eval_ast(
                 }
                 Value::External(n) => {
                     //todo: appropreate error type
-                    eval_extern(&n, &argv, span.clone())
+                    eval_extern(n, &argv, span.clone())
                 }
                 _ => {
                     let WithMeta(_, span) = f.as_ref();

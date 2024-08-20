@@ -175,7 +175,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     let op_start = rhs_start - 1;
                     let span_end = rhs.1.end;
                     let neg_op = Box::new(WithMeta(
-                        Expr::Var("neg".to_string(), None),
+                        Expr::Var("neg".to_symbol(), None),
                         op_start..rhs_start,
                     ));
                     WithMeta(
@@ -189,7 +189,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 WithMeta(
                     Expr::Apply(
                         Box::new(WithMeta(
-                            Expr::Var(op.get_associated_fn_name().to_string(), None),
+                            Expr::Var(op.get_associated_fn_name(), None),
                             opspan,
                         )),
                         vec![x.clone(), y.clone()],
@@ -418,10 +418,13 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
 pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
     let WithMeta(_, ref span) = ast;
     let res = Expr::Let(
-        WithMeta(TypedPattern {
-            pat: Pattern::Single(GLOBAL_LABEL.to_string()),
-            ty: None,
-        },span.clone()),
+        WithMeta(
+            TypedPattern {
+                pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
+                ty: None,
+            },
+            span.clone(),
+        ),
         Box::new(WithMeta(
             Expr::Lambda(vec![], None, Box::new(ast.clone())),
             span.clone(),

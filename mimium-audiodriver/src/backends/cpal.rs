@@ -1,6 +1,7 @@
 use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, Stream, StreamConfig};
+use mimium_lang::ast::ToSymbol;
 use mimium_lang::runtime::vm;
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
@@ -38,7 +39,9 @@ unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
     pub fn new(program: vm::Program, buffer: HeapCons<f64>) -> Self {
-        let dsp_i = program.get_fun_index("dsp").expect("no dsp function found");
+        let dsp_i = program
+            .get_fun_index(&"dsp".to_symbol())
+            .expect("no dsp function found");
         let (_, dsp_func) = &program.global_fn_table[dsp_i];
         let dsp_ochannels = dsp_func.nret;
 

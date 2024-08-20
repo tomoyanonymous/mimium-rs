@@ -1,16 +1,17 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use crate::types::{Type, TypeSize};
+use crate::{
+    ast::Symbol,
+    types::{Type, TypeSize},
+};
 use std::{cell::OnceCell, sync::Arc};
 
 pub mod print;
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct Label(pub String);
 
 // #[derive(Debug, Clone, PartialEq)]
 // pub struct Global(VPtr);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Argument(pub Label, pub Type);
+pub struct Argument(pub Symbol, pub Type);
 
 pub type VReg = u64;
 #[derive(Debug, PartialEq)]
@@ -22,7 +23,7 @@ pub enum Value {
     State(VPtr),
     // idx of the function in the program, size of internal state, return type
     Function(usize, u64, Type),
-    ExtFunction(Label, Type),
+    ExtFunction(Symbol, Type),
     FixPoint(usize), //function id
     //internal state
     None, //??
@@ -135,7 +136,7 @@ pub struct OpenUpValue(pub usize, pub TypeSize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
-    pub label: Label,
+    pub label: Symbol,
     pub args: Vec<Arc<Value>>,
     pub argtypes: Vec<Type>,
     pub return_type: OnceCell<Type>, // TODO: None is the state when the type is not inferred yet.
@@ -145,9 +146,9 @@ pub struct Function {
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
+    pub fn new(name: Symbol, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
         Self {
-            label: Label(name.to_string()),
+            label: name,
             args: args.to_vec(),
             argtypes: argtypes.to_vec(),
             return_type: OnceCell::new(),

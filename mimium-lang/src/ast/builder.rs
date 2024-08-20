@@ -1,5 +1,12 @@
 pub use crate::ast::{Expr, Literal};
 
+use super::Symbol;
+
+pub fn str_to_symbol<T: ToString>(x: T) -> Symbol {
+    use crate::ast::ToSymbol;
+    x.to_string().to_symbol()
+}
+
 #[macro_export]
 macro_rules! dummy_span {
     () => {
@@ -23,7 +30,10 @@ macro_rules! string {
 #[macro_export]
 macro_rules! var {
     ($n:literal) => {
-        WithMeta(Expr::Var($n.to_string(), None), 0..0)
+        WithMeta(
+            Expr::Var($crate::ast::builder::str_to_symbol($n), None),
+            0..0,
+        )
     };
 }
 
@@ -44,7 +54,7 @@ macro_rules! lambda_args {
                 WithMeta(
                     TypedId {
                         ty: None,
-                        id: String::from(*a),
+                        id: $crate::ast::builder::str_to_symbol(a),
                     },
                     0..0,
                 )
@@ -62,9 +72,9 @@ macro_rules! lambda {
                     .iter()
                     .map(|a: &&'static str| {
                         WithMeta(
-                            crate::pattern::TypedId {
+                            $crate::pattern::TypedId {
                                 ty: None,
-                                id: String::from(*a),
+                                id: $crate::ast::builder::str_to_symbol(a),
                             },
                             0..0,
                         )
@@ -84,9 +94,11 @@ macro_rules! let_ {
         WithMeta(
             Expr::Let(
                 WithMeta(
-                    crate::pattern::TypedPattern {
+                    $crate::pattern::TypedPattern {
                         ty: None,
-                        pat: crate::pattern::Pattern::Single($id.to_string()),
+                        pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol(
+                            $id,
+                        )),
                     },
                     0..0,
                 ),
@@ -100,9 +112,11 @@ macro_rules! let_ {
         WithMeta(
             Expr::Let(
                 WithMeta(
-                    crate::pattern::TypedPattern {
+                    $crate::pattern::TypedPattern {
                         ty: None,
-                        pat: crate::pattern::Pattern::Single($id.to_string()),
+                        pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol(
+                            $id,
+                        )),
                     },
                     0..0,
                 ),
@@ -121,7 +135,7 @@ macro_rules! letrec {
             Expr::LetRec(
                 TypedId {
                     ty: None,
-                    id: $id.to_string(),
+                    id: $crate::ast::builder::str_to_symbol($id),
                 },
                 Box::new($body),
                 $then,
@@ -134,7 +148,10 @@ macro_rules! letrec {
 #[macro_export]
 macro_rules! assign {
     ($lhs:literal,$rhs:expr) => {
-        WithMeta(Expr::Assign(String::from($lhs), Box::new($rhs)), 0..0)
+        WithMeta(
+            Expr::Assign($crate::ast::builder::str_to_symbol($lhs), Box::new($rhs)),
+            0..0,
+        )
     };
 }
 #[macro_export]

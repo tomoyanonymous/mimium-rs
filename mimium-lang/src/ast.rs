@@ -1,7 +1,7 @@
 pub mod builder;
 
 use crate::ast_interpreter::with_session_globals;
-use crate::pattern::{Id, TypedId, TypedPattern};
+use crate::pattern::{TypedId, TypedPattern};
 use crate::types::*;
 use crate::utils::metadata::WithMeta;
 use crate::utils::miniprint::MiniPrint;
@@ -58,15 +58,15 @@ pub enum Literal {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Var(Id, Option<Time>),
+    Var(Symbol, Option<Time>),
     Block(Option<Box<WithMeta<Self>>>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
-    Assign(Id, Box<WithMeta<Self>>),
+    Assign(Symbol, Box<WithMeta<Self>>),
     Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
-    Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
+    Feed(Symbol, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(
         WithMeta<TypedPattern>,
         Box<WithMeta<Self>>,

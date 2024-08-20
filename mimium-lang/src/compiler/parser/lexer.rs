@@ -1,4 +1,5 @@
 use super::token::*;
+use super::ToSymbol;
 use crate::utils::metadata::*;
 use chumsky::prelude::*;
 use chumsky::Parser;
@@ -64,7 +65,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         '.' => Token::Dot,
         ':' => Token::Colon,
         ';' => Token::SemiColon,
-        _ => Token::Ident(c.to_string()),
+        _ => Token::Ident(c.to_string().to_symbol()),
     });
     // A parser for identifiers and keywords
     let ident = text::ident().map(|ident: String| match ident.as_str() {
@@ -84,11 +85,11 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "int" => Token::IntegerType,
         "string" => Token::StringType,
         "structt" => Token::StructType,
-        _ => Token::Ident(ident),
+        _ => Token::Ident(ident.to_symbol()),
     });
     let macro_expand = text::ident()
         .then_ignore(just('!'))
-        .map(|ident: String| Token::MacroExpand(ident));
+        .map(|ident: String| Token::MacroExpand(ident.to_symbol()));
 
     let parens = one_of::<_, _, Simple<char>>("(){}[]").map(|c| match c {
         '(' => Token::ParenBegin,
@@ -97,7 +98,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         '}' => Token::BlockEnd,
         '[' => Token::ArrayBegin,
         ']' => Token::ArrayEnd,
-        _ => Token::Ident(c.to_string()),
+        _ => Token::Ident(c.to_string().to_symbol()),
     });
     let linebreak = text::newline()
         .map(|_| '\n')
@@ -137,11 +138,11 @@ mod test {
         let (res, _errs) = lexer().parse_recovery(src);
         let ans = [
             (Token::Let, 0..3),
-            (Token::Ident("hoge".to_string()), 4..8),
+            (Token::Ident("hoge".to_symbol()), 4..8),
             (Token::Assign, 9..10),
             (Token::Int(36), 11..13),
             (Token::LineBreak, 13..14),
-            (Token::Ident("fuga".to_string()), 14..18),
+            (Token::Ident("fuga".to_symbol()), 14..18),
         ];
         // dbg!(res.clone());
         if let Some(tok) = res {
@@ -161,22 +162,22 @@ here */
 another line
 ";
         let ans = vec![
-            (Token::Ident("test".into()), 0..4),
+            (Token::Ident("test".to_symbol()), 0..4),
             (Token::LineBreak, 4..5),
             (
                 Token::Comment(Comment::SingleLine("comment start".into())),
                 5..21,
             ),
-            (Token::Ident("conrains".into()), 21..29),
-            (Token::Ident("src".into()), 30..33),
+            (Token::Ident("conrains".to_symbol()), 21..29),
+            (Token::Ident("src".to_symbol()), 30..33),
             (Token::LineBreak, 33..34),
             (
                 Token::Comment(Comment::MultiLine("multiline comment\nhere ".into())),
                 34..61,
             ),
             (Token::LineBreak, 61..62),
-            (Token::Ident("another".into()), 62..69),
-            (Token::Ident("line".into()), 70..74),
+            (Token::Ident("another".to_symbol()), 62..69),
+            (Token::Ident("line".to_symbol()), 70..74),
             (Token::LineBreak, 74..75),
         ];
         let (res, errs) = lexer().parse_recovery(src);

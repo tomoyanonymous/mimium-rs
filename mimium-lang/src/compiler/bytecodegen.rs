@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::ast::Symbol;
 use crate::mir::{self, Mir};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
@@ -117,7 +118,7 @@ impl VRegister {
             _ => None,
         }
     }
-    pub fn find_range(&mut self, v: &Arc<mir::Value>,size:usize)->Option<Reg>{
+    pub fn find_range(&mut self, v: &Arc<mir::Value>, size: usize) -> Option<Reg> {
         log::trace!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
         //todo: Error handling
         let res = self.0.iter().position(|v1| match v1 {
@@ -130,8 +131,8 @@ impl VRegister {
             (Some(pos), _) => {
                 //mir is SSA form, so the value will be used only once.
                 self.0[pos] = None;
-                for i in 1..size{
-                    self.0[pos+i] = None;
+                for i in 1..size {
+                    self.0[pos + i] = None;
                 }
                 Some(pos as Reg)
             }
@@ -181,7 +182,7 @@ impl VStack {
 #[derive(Debug, Default)]
 pub struct ByteCodeGenerator {
     vregister: VStack,
-    fnmap: HashMap<String, usize>,
+    fnmap: HashMap<Symbol, usize>,
     globals: Vec<Arc<mir::Value>>,
     program: vm::Program,
 }
@@ -428,9 +429,7 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::ExtFunction(label, ty) => {
                         let idx = {
-                            self.program
-                                .ext_fun_table
-                                .push((label.0.clone(), ty.clone()));
+                            self.program.ext_fun_table.push((*label, ty.clone()));
                             self.program.ext_fun_table.len() - 1
                         };
                         let fi = funcproto.add_new_constant(idx as u64);
@@ -661,7 +660,7 @@ impl ByteCodeGenerator {
         &mut self,
         mirfunc: &mir::Function,
         fidx: usize,
-    ) -> (String, vm::FuncProto) {
+    ) -> (Symbol, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
         let state_size = mirfunc.state_size
             * Self::word_size_for_type(mirfunc.return_type.get().unwrap()) as u64;
@@ -693,7 +692,7 @@ impl ByteCodeGenerator {
                 func.bytecodes.push(i);
             }
         });
-        (mirfunc.label.0.clone(), func)
+        (mirfunc.label, func)
     }
     pub fn generate(&mut self, mir: Mir) -> vm::Program {
         self.program.global_fn_table = mir
@@ -701,8 +700,7 @@ impl ByteCodeGenerator {
             .iter()
             .enumerate()
             .map(|(i, func)| {
-                let label = &func.label.0;
-                self.fnmap.insert(label.clone(), i);
+                self.fnmap.insert(func.label, i);
                 self.generate_funcproto(func, i)
             })
             .collect();
@@ -769,6 +767,7 @@ pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn Reportable
 }
 
 mod test {
+    use crate::ast::ToSymbol;
 
     #[test]
     fn build() {
@@ -776,16 +775,15 @@ mod test {
         use crate::numeric;
         use crate::types::PType;
         use crate::types::Type;
-        use mir::Label;
         // fn test(hoge){
         //   hoge+1
         //}
         let mut src = mir::Mir::default();
         let arg = Arc::new(mir::Value::Argument(
             0,
-            Arc::new(mir::Argument(Label("hoge".to_string()), Type::Unknown)),
+            Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown)),
         ));
-        let mut func = mir::Function::new("test", &[arg.clone()], &[numeric!()], None);
+        let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
         func.return_type.get_or_init(|| numeric!());
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));
@@ -812,7 +810,7 @@ mod test {
             VmInstruction::AddF(1, 0, 1),
             VmInstruction::Return(1, 1),
         ];
-        answer.global_fn_table.push(("test".to_string(), main));
+        answer.global_fn_table.push(("test".to_symbol(), main));
         assert_eq!(res, answer);
     }
 }

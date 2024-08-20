@@ -1,11 +1,11 @@
+use crate::ast::Symbol;
 //todo! need to replace with interned string.
 use crate::types::Type;
 use crate::utils::miniprint::MiniPrint;
-pub type Id = String;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
-    Single(Id),
+    Single(Symbol),
     Tuple(Vec<Self>),
 }
 
@@ -27,7 +27,7 @@ impl std::fmt::Display for Pattern {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedId {
-    pub id: Id,
+    pub id: Symbol,
     pub ty: Option<Type>,
 }
 impl std::fmt::Display for TypedId {
@@ -43,7 +43,7 @@ impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
         match &self.ty {
             Some(t) => format!("(tid {} {})", self.id, t), //todo:type
-            None => self.id.clone(),
+            None => self.id.to_string(),
         }
     }
 }

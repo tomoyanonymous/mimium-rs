@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Literal};
+use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 use crate::compiler::intrinsics;
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
@@ -108,14 +108,14 @@ impl InferContext {
         ];
         let mut binds = binop_names
             .iter()
-            .map(|n| (n.to_string(), binop_ty.clone()))
-            .collect::<Vec<(String, Type)>>();
+            .map(|n| (n.to_symbol(), binop_ty.clone()))
+            .collect::<Vec<(Symbol, Type)>>();
         uniop_names
             .iter()
-            .map(|n| (n.to_string(), uniop_ty.clone()))
+            .map(|n| (n.to_symbol(), uniop_ty.clone()))
             .collect_into(&mut binds);
         binds.push((
-            intrinsics::DELAY.to_string(),
+            intrinsics::DELAY.to_symbol(),
             function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
         ));
         env.add_bind(&mut binds);
@@ -123,7 +123,7 @@ impl InferContext {
     fn register_builtin(env: &mut Environment<Type>) {
         let mut binds = builtin::BUILTIN_FNS
             .iter()
-            .map(|(name, _, t)| (name.to_string(), t.clone()))
+            .map(|(name, _, t)| (name.to_symbol(), t.clone()))
             .collect::<Vec<_>>();
         env.add_bind(&mut binds);
     }
@@ -281,7 +281,7 @@ pub fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
     };
     Ok(Type::Primitive(pt))
 }
-pub fn lookup(name: &str, ctx: &mut InferContext, span: &Span) -> Result<Type, Error> {
+pub fn lookup(name: &Symbol, ctx: &mut InferContext, span: &Span) -> Result<Type, Error> {
     ctx.env.lookup(name).map_or_else(
         || {
             println!("{:#?}", ctx.env);
