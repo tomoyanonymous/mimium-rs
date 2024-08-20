@@ -26,7 +26,7 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) | cfg!(test) {
-        colog::default_builder().filter_level(log::LevelFilter::Trace).init();
+        colog::default_builder().filter_level(log::LevelFilter::Debug).init();
     } else {
         colog::default_builder().init();
     }

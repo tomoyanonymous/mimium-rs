@@ -335,7 +335,7 @@ impl Machine {
         ov: OpenUpValue,
     ) -> (Range<usize>, &[RawVal]) {
         let OpenUpValue(offset, size) = ov;
-        log::trace!("upper base:{}, upvalue:{}", upper_base, offset);
+        // log::trace!("upper base:{}, upvalue:{}", upper_base, offset);
         let abs_pos = Self::get_upvalue_offset(upper_base, ov);
         let end = abs_pos + size as usize;
         let slice = unsafe {
@@ -449,25 +449,25 @@ impl Machine {
         // }
 
         loop {
-            if cfg!(debug_assertions) || cfg!(test) || log::max_level() >= log::Level::Trace {
-                let mut line = String::new();
-                line += &format!("{: <20} {}", func.bytecodes[pcounter], ": [");
-                for i in 0..self.stack.len() {
-                    if i == self.base_pointer as usize {
-                        line += "!";
-                    }
-                    line += &match self.debug_stacktype[i] {
-                        RawValType::Float => format!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
-                        RawValType::Int => format!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
-                        RawValType::UInt => format!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
-                    };
-                    if i < self.stack.len() - 1 {
-                        line += ",";
-                    }
-                }
-                line += "]";
-                log::trace!("{line}");
-            }
+            // if cfg!(debug_assertions) && log::max_level() >= log::Level::Trace {
+            //     let mut line = String::new();
+            //     line += &format!("{: <20} {}", func.bytecodes[pcounter], ": [");
+            //     for i in 0..self.stack.len() {
+            //         if i == self.base_pointer as usize {
+            //             line += "!";
+            //         }
+            //         line += &match self.debug_stacktype[i] {
+            //             RawValType::Float => format!("{0:.5}f", Self::get_as::<f64>(self.stack[i])),
+            //             RawValType::Int => format!("{0:.5}i", Self::get_as::<i64>(self.stack[i])),
+            //             RawValType::UInt => format!("{0:.5}u", Self::get_as::<u64>(self.stack[i])),
+            //         };
+            //         if i < self.stack.len() - 1 {
+            //             line += ",";
+            //         }
+            //     }
+            //     line += "]";
+            //     log::trace!("{line}");
+            // }
             let mut increment = 1;
             match func.bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
@@ -549,18 +549,18 @@ impl Machine {
                             UpValue::Open(i) => {
                                 let upper_base = cls.base_ptr as usize;
                                 let (range, rawv) = self.get_open_upvalue(upper_base, *i);
-                                log::trace!("open {}", unsafe {
-                                    std::mem::transmute::<u64, f64>(rawv[0])
-                                });
+                                // log::trace!("open {}", unsafe {
+                                //     std::mem::transmute::<u64, f64>(rawv[0])
+                                // });
                                 // assert_eq!(rawv.len(), size as usize);
                                 self.move_stack_range(dst as _, range);
                             }
                             UpValue::Closed(rawval) => {
                                 let (ptr, len) = {
                                     let rawv = rawval.borrow();
-                                    log::trace!("close{:?}", unsafe {
-                                        std::mem::transmute::<u64, f64>(rawv[0])
-                                    });
+                                    // log::trace!("close{:?}", unsafe {
+                                    //     std::mem::transmute::<u64, f64>(rawv[0])
+                                    // });
                                     let ptr = rawv.as_ptr();
                                     let len = rawv.len();
                                     assert_eq!(rawv.len(), size as usize);
@@ -621,11 +621,6 @@ impl Machine {
                 }
                 Instruction::AddF(dst, src1, src2) => binop!(+,f64,dst,src1,src2,self),
                 Instruction::SubF(dst, src1, src2) => {
-                    log::trace!(
-                        "{} - {} ",
-                        unsafe { std::mem::transmute::<u64, f64>(self.get_stack(src1 as i64)) },
-                        unsafe { std::mem::transmute::<u64, f64>(self.get_stack(src2 as i64)) }
-                    );
                     binop!(-,f64,dst,src1,src2,self)
                 }
                 Instruction::MulF(dst, src1, src2) => binop!(*,f64,dst,src1,src2,self),
