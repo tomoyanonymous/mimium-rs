@@ -250,7 +250,7 @@ where
 
 impl Machine {
     pub fn new() -> Self {
-        let ext_fun_table = builtin::BUILTIN_FNS
+        let ext_fun_table = builtin::get_builtin_fns()
             .iter()
             .map(|(name, f, _t)| (name.to_symbol(), *f))
             .collect::<Vec<_>>();

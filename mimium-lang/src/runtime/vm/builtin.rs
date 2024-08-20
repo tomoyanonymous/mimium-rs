@@ -22,9 +22,10 @@ pub fn probelnf(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-pub const BUILTIN_FNS: LazyCell<[BulitinInfo; 2]> = LazyCell::new(|| {
+// TODO: use predefined symbols instead of strings
+pub fn get_builtin_fns() -> [BulitinInfo; 2] {
     [
         ("probe", probef, function!(vec![numeric!()], numeric!())),
         ("probeln", probelnf, function!(vec![numeric!()], numeric!())),
     ]
-});
+}

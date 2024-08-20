@@ -121,7 +121,7 @@ impl InferContext {
         env.add_bind(&mut binds);
     }
     fn register_builtin(env: &mut Environment<Type>) {
-        let mut binds = builtin::BUILTIN_FNS
+        let mut binds = builtin::get_builtin_fns()
             .iter()
             .map(|(name, _, t)| (name.to_symbol(), t.clone()))
             .collect::<Vec<_>>();
