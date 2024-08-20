@@ -5,3 +5,5 @@ members = [
     "mimium-audiodriver",
     "mimium-cli"
 ]
+
+resolver = "2"
