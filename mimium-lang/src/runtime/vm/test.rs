@@ -5,6 +5,21 @@ use crate::{
     numeric,
     types::{PType, Type},
 };
+
+#[test]
+fn stack_set_vec_test1() {
+    let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
+    set_vec_range(&mut testvec, 2, &[6, 7]);
+    assert_eq!(testvec, vec![0u64, 1, 6, 7, 4, 5])
+}
+#[test]
+fn stack_set_vec_test2() {
+    let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
+    set_vec_range(&mut testvec, 6, &[6, 7]);
+    assert_eq!(testvec, vec![0u64, 1, 2, 3, 4, 5, 6, 7])
+}
+
+
 #[test]
 fn size_of_intern_func() {
     let s = std::mem::size_of::<std::rc::Rc<FuncProto>>();
@@ -40,18 +55,18 @@ fn closuretest() {
     //}
 
     let inner_insts = vec![
-        Instruction::GetUpValue(0, 0), //load n
-        Instruction::GetUpValue(1, 1), //load inc
-        Instruction::AddI(0, 0, 1),    // store n+inc in new n
-        Instruction::Move(1, 0),       //load x
-        Instruction::AddI(0, 0, 1),    // store n+inc+x in new n
-        Instruction::SetUpValue(0, 0), //store new n in upvalue index 0
-        Instruction::Return(0, 1),     // return single value at 1
+        Instruction::GetUpValue(0, 0, 1), //load n
+        Instruction::GetUpValue(1, 1, 1), //load inc
+        Instruction::AddI(0, 0, 1),       // store n+inc in new n
+        Instruction::Move(1, 0),          //load x
+        Instruction::AddI(0, 0, 1),       // store n+inc+x in new n
+        Instruction::SetUpValue(0, 0, 1), //store new n in upvalue index 0
+        Instruction::Return(0, 1),        // return single value at 1
     ];
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![OpenUpValue(1), OpenUpValue(2)],
+        upindexes: vec![OpenUpValue(1, 1), OpenUpValue(2, 1)],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         state_size: 0,

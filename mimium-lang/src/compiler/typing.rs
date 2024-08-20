@@ -1,5 +1,6 @@
 use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
+use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
 use crate::utils::{
@@ -14,6 +15,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrorKind {
     TypeMismatch(Type, Type),
+    PatternMismatch(Type, Pattern),
     NonFunction(Type),
     CircularType,
     IndexOutOfRange(u16, u16),
@@ -28,6 +30,8 @@ impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
             ErrorKind::TypeMismatch(e, a) => write!(f, "Type Mismatch, between {e} and {a}"),
+            ErrorKind::PatternMismatch(e, p) => write!(f, "Pattern {p} cannot have {e} type."),
+
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::IndexOutOfRange(len, idx) => write!(
                 f,
@@ -201,14 +205,12 @@ impl InferContext {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 if self.occur_check(i1, t2.clone()) {
                     Err(Error(ErrorKind::CircularType, 0..0)) //todo:span
+                } else if i1 < i2 {
+                    self.subst_map.insert(i1, t2);
+                    Ok(t1)
                 } else {
-                    if i1 < i2 {
-                        self.subst_map.insert(i1, t2);
-                        Ok(t1)
-                    } else {
-                        self.subst_map.insert(i2, t1);
-                        Ok(t2)
-                    }
+                    self.subst_map.insert(i2, t1);
+                    Ok(t2)
                 }
             }
             (Type::Intermediate(i), t) | (t, Type::Intermediate(i)) => {
@@ -238,6 +240,33 @@ impl InferContext {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
+        }
+    }
+    pub fn bind_pattern(&mut self, t: &Type, pat: &WithMeta<TypedPattern>) -> Result<Type, Error> {
+        let WithMeta(TypedPattern { pat, ty: _ }, span) = pat;
+        match pat {
+            Pattern::Single(id) => {
+                self.env.add_bind(&[(id.clone(), t.clone())]);
+                Ok(t.clone())
+            }
+            Pattern::Tuple(pats) => {
+                let res = pats
+                    .iter()
+                    .map(|p| {
+                        let ity = self.gen_intermediate_type();
+                        let p = WithMeta(
+                            TypedPattern {
+                                pat: p.clone(),
+                                ty: Some(ity.clone()),
+                            },
+                            span.clone(),
+                        );
+                        self.bind_pattern(&ity, &p)
+                    })
+                    .try_collect::<Vec<_>>()?;
+
+                Ok(Type::Tuple(res))
+            }
         }
     }
 }
@@ -322,10 +351,10 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             ctx.env.to_outer();
             Ok(Type::Function(ptypes, Box::new(bty), None))
         }
-        Expr::Let(id, body, then) => {
+        Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(body, c)?;
-            let idt = match id.ty.as_ref() {
+            let idt = match tpat.0.ty.as_ref() {
                 Some(Type::Function(atypes, box rty, s)) => {
                     c.convert_unknown_function(atypes, rty, s)
                 }
@@ -334,15 +363,12 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             };
 
             let bodyt_u = c.unify_types(idt, bodyt)?;
-            c.env.add_bind(&mut vec![(id.clone().id, bodyt_u)]);
+            let _ = c.bind_pattern(&bodyt_u, tpat)?;
             let res = match then {
                 Some(e) => infer_type(e, c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
             res
-        }
-        Expr::LetTuple(_ids, _body, _then) => {
-            todo!("should be de-sugared before type inference")
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;

@@ -160,7 +160,30 @@ fn letmulti() {
     let ans = vec![3.0];
     assert_eq!(res, ans);
 }
-
+#[test]
+fn let_tuple() {
+    let res = run_file_test_mono("let_tuple.mmm", 1).unwrap();
+    let ans = vec![11.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn let_tuple_nested() {
+    let res = run_file_test_mono("let_tuple_nested.mmm", 1).unwrap();
+    let ans = vec![34.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn closure_tuple_escape() {
+    let res = run_file_test_mono("closure_tuple_escape.mmm", 2).unwrap();
+    let ans = vec![44.0, 44.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn state_tuple() {
+    let res = run_file_test_stereo("state_tuple.mmm", 3).unwrap();
+    let ans = vec![0.0, 0.0, 1.0, 2.0, 2.0, 4.0];
+    assert_eq!(res, ans);
+}
 #[test]
 fn closure_open() {
     let res = run_file_test_mono("closure_open.mmm", 1).unwrap();
@@ -170,21 +193,21 @@ fn closure_open() {
 
 #[test]
 fn closure_open_3nested() {
-    let res = run_file_test_mono("closure_open_3nested.mmm", 1).unwrap();
-    let ans = vec![2.0];
+    let res = run_file_test_mono("closure_open_3nested.mmm", 2).unwrap();
+    let ans = vec![2.0, 2.0];
     assert_eq!(res, ans);
 }
 #[test]
 fn closure_open_inline() {
-    let res = run_file_test_mono("closure_open_inline.mmm", 1).unwrap();
-    let ans = vec![2.0];
+    let res = run_file_test_mono("closure_open_inline.mmm", 2).unwrap();
+    let ans = vec![2.0, 2.0];
     assert_eq!(res, ans);
 }
 
 #[test]
 fn closure_closed() {
-    let res = run_file_test_mono("closure_closed.mmm", 1).unwrap();
-    let ans = vec![-6.0];
+    let res = run_file_test_mono("closure_closed.mmm", 2).unwrap();
+    let ans = vec![-6.0, -6.0];
     assert_eq!(res, ans);
 }
 

@@ -1,6 +1,6 @@
 pub mod builder;
 
-pub use crate::types::TypedId;
+use crate::pattern::{Id, TypedId, TypedPattern};
 use crate::types::*;
 use crate::utils::metadata::WithMeta;
 use crate::utils::miniprint::MiniPrint;
@@ -28,13 +28,8 @@ pub enum Expr {
     Assign(Id, Box<WithMeta<Self>>),
     Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
-    Let(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
+    Let(WithMeta<TypedPattern>, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
-    LetTuple(
-        Vec<TypedId>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
-    ),
     If(
         Box<WithMeta<Self>>,
         Box<WithMeta<Self>>,
@@ -108,7 +103,7 @@ impl MiniPrint for Expr {
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.0.simple_print()),
             Expr::Let(id, body, then) => format!(
                 "(let {} {} {})",
-                &id.id,
+                id.0,
                 body.0.simple_print(),
                 then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
@@ -118,7 +113,6 @@ impl MiniPrint for Expr {
                 body.0.simple_print(),
                 then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
-            Expr::LetTuple(_, _, _) => todo!(),
             Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.0.simple_print()),
             Expr::Then(first, second) => format!(
                 "(then {} {})",

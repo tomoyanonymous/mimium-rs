@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::*;
+use crate::pattern::TypedId;
 use crate::utils;
 use std::path::PathBuf;
 
@@ -22,10 +22,13 @@ macro_rules! test_string {
 fn test_let() {
     let ans = WithMeta(
         Expr::Let(
-            TypedId {
-                id: "goge".to_string(),
-                ty: None,
-            },
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Single("goge".to_string()),
+                    ty: None,
+                },
+                4..8,
+            ),
             Box::new(WithMeta(Expr::Literal(Literal::Int(36)), 11..13)),
             Some(Box::new(WithMeta(
                 Expr::Var("goge".to_string(), None),
@@ -35,6 +38,36 @@ fn test_let() {
         0..19,
     );
     test_string!("let goge = 36\n goge", ans);
+}
+#[test]
+fn test_lettuple() {
+    let ans = WithMeta(
+        Expr::Let(
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Tuple(vec![
+                        Pattern::Single("a".into()),
+                        Pattern::Single("b".into()),
+                    ]),
+                    ty: None,
+                },
+                4..9,
+            ),
+            Box::new(WithMeta(
+                Expr::Tuple(vec![
+                    WithMeta(Expr::Literal(Literal::Int(36)), 13..15),
+                    WithMeta(Expr::Literal(Literal::Int(89)), 16..18),
+                ]),
+                12..19,
+            )),
+            Some(Box::new(WithMeta(
+                Expr::Var("hoge".to_string(), None),
+                21..25,
+            ))),
+        ),
+        0..25,
+    );
+    test_string!("let (a,b) = (36,89)\n hoge", ans);
 }
 #[test]
 fn test_if() {
@@ -76,10 +109,13 @@ fn test_block() {
     let ans = WithMeta(
         Expr::Block(Some(Box::new(WithMeta(
             Expr::Let(
-                TypedId {
-                    ty: None,
-                    id: "hoge".to_string(),
-                },
+                WithMeta(
+                    TypedPattern {
+                        pat: Pattern::Single("hoge".to_string()),
+                        ty: None,
+                    },
+                    5..9,
+                ),
                 Box::new(WithMeta(Expr::Literal(Literal::Int(100)), 12..15)),
                 Some(Box::new(WithMeta(
                     Expr::Var("hoge".to_string(), None),

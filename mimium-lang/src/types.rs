@@ -32,14 +32,6 @@ pub enum Type {
 // currently, this refers to the number of registers
 pub type TypeSize = u8;
 
-pub type Id = String;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TypedId {
-    pub ty: Option<Type>,
-    pub id: Id,
-}
-
 impl Type {
     pub fn is_primitive(&self) -> bool {
         if let Type::Primitive(_) = self {
@@ -81,17 +73,10 @@ impl Type {
         todo!()
     }
 
-    pub fn size(&self) -> TypeSize {
+    pub fn get_as_tuple(&self) -> Option<&[Type]> {
         match self {
-            Type::Primitive(_) => 1,
-            Type::Array(_ty) => todo!(),
-            Type::Tuple(types) => types.len() as _,
-            Type::Struct(types) => types.len() as _,
-            Type::Function(_, _, _) => 1,
-            Type::Ref(_) => 1,
-            Type::Code(_) => todo!(),
-            Type::Intermediate(_) => 1, // TODO
-            Type::Unknown => todo!(),
+            Type::Tuple(types) => Some(&types),
+            _ => None,
         }
     }
 }
@@ -112,14 +97,14 @@ impl fmt::Display for Type {
             Type::Primitive(p) => write!(f, "{p}"),
             Type::Array(a) => write!(f, "[{a}]"),
             Type::Tuple(v) => {
-                let vf = format_vec!(v);
-                write!(f, "{vf}")
+                let vf = format_vec!(v,",");
+                write!(f, "({vf})")
             }
             Type::Struct(v) => {
                 write!(f, "{v:?}")
             }
             Type::Function(p, r, _s) => {
-                let args = format_vec!(p);
+                let args = format_vec!(p,",");
                 write!(f, "({args})->{r}")
             }
             Type::Ref(x) => write!(f, "&{x}"),
@@ -129,15 +114,6 @@ impl fmt::Display for Type {
                 write!(f, "intermediate[{}]", id,)
             }
             Type::Unknown => write!(f, "unknown"),
-        }
-    }
-}
-
-impl MiniPrint for TypedId {
-    fn simple_print(&self) -> String {
-        match &self.ty {
-            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
-            None => self.id.clone(),
         }
     }
 }

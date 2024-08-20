@@ -5,9 +5,9 @@ use super::*;
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
-            let af = format_vec!(fun.args);
+            let af = format_vec!(fun.args, ",");
             let _ = write!(f, "fn {} [{af}]\n", fun.label.0);
-            let upi = format_vec!(fun.upindexes);
+            let upi = format_vec!(fun.upindexes, ",");
             let _ = write!(f, "upindexes:[{upi}]");
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
@@ -62,13 +62,21 @@ impl std::fmt::Display for Instruction {
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
             Instruction::Alloc(t) => write!(f, "alloc {t}"),
-            Instruction::Load(src) => write!(f, "load {src}"),
-            Instruction::Store(dst, src) => write!(f, "store {dst}, {src}"),
-            Instruction::Call(fptr, args, _nret) => {
-                write!(f, "call {} [{}]", *fptr, format_vec!(args))
+            Instruction::Load(src, ty) => write!(f, "load {src}, {ty}"),
+            Instruction::Store(dst, src, ty) => write!(f, "store {dst}, {src}, {ty}"),
+            Instruction::GetElement {
+                value,
+                ty,
+                array_idx,
+                tuple_offset,
+            } => {
+                write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
             }
-            Instruction::CallCls(cls, args) => {
-                write!(f, "callcls {} [{}]", *cls, format_vec!(args))
+            Instruction::Call(fptr, args, rty) => {
+                write!(f, "call {} [{}] ->{rty}", *fptr, format_vec!(args, ","))
+            }
+            Instruction::CallCls(cls, args, rty) => {
+                write!(f, "callcls {} [{}] ->{rty}", *cls, format_vec!(args, ","))
             }
             Instruction::Closure(fun) => {
                 if let Value::Function(idx, _, nret) = fun.as_ref() {
@@ -77,19 +85,19 @@ impl std::fmt::Display for Instruction {
                     write!(f, "closure {}", *fun)
                 }
             }
-            Instruction::GetUpValue(idx) => write!(f, "getupval {idx}"),
-            Instruction::SetUpValue(idx) => write!(f, "setupval {idx}"),
-            Instruction::GetGlobal(v) => write!(f, "getglobal {}", *v),
-            Instruction::SetGlobal(dst, src) => write!(f, "setglobal {} {}", *dst, *src),
+            Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {ty}"),
+            Instruction::SetUpValue(idx, ty) => write!(f, "setupval {idx} {ty}"),
+            Instruction::GetGlobal(v, ty) => write!(f, "getglobal {} {ty}", *v),
+            Instruction::SetGlobal(dst, src, ty) => write!(f, "setglobal {} {} {ty}", *dst, *src),
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
 
-            Instruction::GetState => write!(f, "getstate"),
+            Instruction::GetState(ty) => write!(f, "getstate {ty}"),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
-            Instruction::Return(a, _nret) => write!(f, "ret {}", *a),
-            Instruction::ReturnFeed(v, _nret) => write!(f, "retfeed {}", *v),
+            Instruction::Return(a, rty) => write!(f, "ret {} {rty}", *a),
+            Instruction::ReturnFeed(v, rty) => write!(f, "retfeed {} {rty}", *v),
             Instruction::Delay(max, a, b) => write!(f, "delay {max} {} {}", *a, *b),
             Instruction::Mem(a) => write!(f, "mem {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

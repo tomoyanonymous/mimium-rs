@@ -62,7 +62,7 @@ macro_rules! lambda {
                     .iter()
                     .map(|a: &&'static str| {
                         WithMeta(
-                            crate::types::TypedId {
+                            crate::pattern::TypedId {
                                 ty: None,
                                 id: String::from(*a),
                             },
@@ -83,10 +83,13 @@ macro_rules! let_ {
     ($id:literal,$body:expr,$then:expr) => {
         WithMeta(
             Expr::Let(
-                crate::types::TypedId {
-                    ty: None,
-                    id: $id.to_string(),
-                },
+                WithMeta(
+                    crate::pattern::TypedPattern {
+                        ty: None,
+                        pat: crate::pattern::Pattern::Single($id.to_string()),
+                    },
+                    0..0,
+                ),
                 Box::new($body),
                 Some(Box::new($then)),
             ),
@@ -96,10 +99,13 @@ macro_rules! let_ {
     ($id:literal,$body:expr) => {
         WithMeta(
             Expr::Let(
-                crate::types::TypedId {
-                    ty: None,
-                    id: $id.to_string(),
-                },
+                WithMeta(
+                    crate::pattern::TypedPattern {
+                        ty: None,
+                        pat: crate::pattern::Pattern::Single($id.to_string()),
+                    },
+                    0..0,
+                ),
                 Box::new($body),
                 None,
             ),

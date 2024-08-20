@@ -33,7 +33,6 @@ impl ReportableError for Error {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FeedId {
     Global,
@@ -55,7 +54,7 @@ fn get_feedvar_name(fid: i64) -> String {
 fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, Error> {
     let cls = |e: WithMeta<Expr>| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
     let opt_cls = |opt_e: Option<Box<WithMeta<Expr>>>| -> Result<Option<ConvertResult>, Error> {
-        Ok(opt_e.map(|t| cls(*t)).transpose()?)
+        opt_e.map(|t| cls(*t)).transpose()
     };
     let WithMeta(e, span) = expr.clone();
     match e.clone() {
@@ -67,10 +66,10 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             ))),
         },
         Expr::Tuple(v) => {
-            let elems: Vec<ConvertResult> = v.into_iter().map(|e| cls(e)).try_collect()?;
+            let elems: Vec<ConvertResult> = v.into_iter().map(&cls).try_collect()?;
             let elems_mapped: Vec<WithMeta<Expr>> =
                 elems.iter().map(|e| get_content(e.clone())).collect();
-            if elems.iter().find(|e| e.is_err()).is_some() {
+            if elems.iter().any(|e| e.is_err()) {
                 Ok(ConvertResult::Err(WithMeta(
                     Expr::Tuple(elems_mapped),
                     span,
@@ -87,13 +86,20 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
         Expr::Let(id, body, then) => {
             let body = cls(*body)?;
             let then = opt_cls(then)?;
-            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
+            if let (Ok(b), Ok(t)) = (body.clone(), then.clone().transpose()) {
                 Ok(ConvertResult::Ok(WithMeta(
                     Expr::Let(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
                     span,
                 )))
             } else {
-                Ok(ConvertResult::Err(expr.clone()))
+                Ok(ConvertResult::Err(WithMeta(
+                    Expr::Let(
+                        id,
+                        Box::new(get_content(body)),
+                        then.map(|t| Box::new(get_content(t))),
+                    ),
+                    span,
+                )))
             }
         }
         Expr::LetRec(id, body, then) => {
@@ -114,7 +120,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             let nbody = match convert_self(*body, FeedId::Local(nfctx))? {
                 ConvertResult::Err(nbody) => {
                     let feedid = get_feedvar_name(nfctx);
-                    WithMeta(Expr::Feed(feedid, nbody.into()).into(), span.clone())
+                    WithMeta(Expr::Feed(feedid, nbody.into()), span.clone())
                 }
                 ConvertResult::Ok(nbody) => nbody.clone(),
             };
@@ -128,7 +134,10 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             let elems: Vec<ConvertResult> = callee.into_iter().map(|e| cls(e)).try_collect()?;
             let elems_mapped: Vec<WithMeta<Expr>> =
                 elems.iter().map(|e| get_content(e.clone())).collect();
-            let content = WithMeta(Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped), span);
+            let content = WithMeta(
+                Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped),
+                span,
+            );
             if fun.is_ok() && elems.iter().find(|e| e.is_err()).is_none() {
                 Ok(ConvertResult::Ok(content))
             } else {
@@ -178,7 +187,7 @@ pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
 
 #[cfg(test)]
 mod test {
-    use crate::ast::TypedId;
+    use crate::pattern::{Pattern, TypedId, TypedPattern};
 
     use super::*;
 
@@ -186,10 +195,13 @@ mod test {
     pub fn test_selfconvert() {
         let src = WithMeta(
             Expr::Let(
-                TypedId {
-                    id: "lowpass".to_string(),
-                    ty: None,
-                },
+                WithMeta(
+                    TypedPattern {
+                        pat: Pattern::Single("lowpass".to_string()),
+                        ty: None,
+                    },
+                    0..1,
+                ),
                 Box::new(WithMeta::<_>(
                     Expr::Lambda(
                         vec![WithMeta::<_>(
@@ -211,10 +223,13 @@ mod test {
         let WithMeta(res, _) = convert_self_top(src).unwrap();
 
         let ans = Expr::Let(
-            TypedId {
-                ty: None,
-                id: "lowpass".to_string(),
-            },
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Single("lowpass".to_string()),
+                    ty: None,
+                },
+                0..1,
+            ),
             Box::new(WithMeta::<_>(
                 Expr::Lambda(
                     vec![WithMeta::<_>(

@@ -1,5 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
+use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -81,7 +82,7 @@ impl Context {
             ) if name.as_str() == "delay" => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn().state_size += shift_size as u64;
+                self.get_current_fn().state_size += shift_size;
                 let coffset = self.get_ctxdata().state_offset;
                 if coffset > 0 {
                     self.get_current_basicblock()
@@ -98,7 +99,7 @@ impl Context {
                 ))));
                 res
             }
-            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), src, time])
+            (Value::ExtFunction(Label(name), _ty), [WithMeta(_max, span), _src, _time])
                 if name.as_str() == "delay" =>
             {
                 Err(CompileError(CompileErrorKind::UnboundedDelay, span.clone()))
@@ -163,10 +164,63 @@ impl Context {
         res
     }
     fn add_bind(&mut self, bind: (String, VPtr)) {
-        self.valenv.add_bind(&mut vec![bind]);
+        self.valenv.add_bind(&mut [bind]);
     }
-    fn make_new_function(&mut self, name: &str, args: &[VPtr], parent_i: Option<usize>) -> usize {
-        let newf = mir::Function::new(name, args, parent_i);
+    fn add_bind_pattern(
+        &mut self,
+        pattern: &WithMeta<TypedPattern>,
+        v: VPtr,
+        ty: &Type,
+    ) -> Result<(), CompileError> {
+        let WithMeta(TypedPattern { pat, ty: _ }, span) = pattern;
+        match pat {
+            Pattern::Single(id) => Ok(self.add_bind((id.clone(), v))),
+            Pattern::Tuple(patterns) => {
+                let interm_vec = patterns
+                    .iter()
+                    .map(|_| self.typeenv.gen_intermediate_type())
+                    .collect::<Vec<_>>();
+                let tvec = self
+                    .typeenv
+                    .unify_types(ty.clone(), Type::Tuple(interm_vec))?;
+                let tvec = tvec.get_as_tuple().ok_or(CompileError::from(typing::Error(
+                    typing::ErrorKind::PatternMismatch(ty.clone(), pat.clone()),
+                    span.clone(),
+                )))?;
+                for (i, pat) in patterns.iter().enumerate() {
+                    let cty = &tvec[i];
+                    let v = if i == 0 {
+                        v.clone()
+                    } else {
+                        self.push_inst(Instruction::GetElement {
+                            value: v.clone(),
+                            ty: ty.clone(),
+                            array_idx: 0,
+                            tuple_offset: i as u64,
+                        })
+                    };
+
+                    let tpat = WithMeta(
+                        TypedPattern {
+                            pat: pat.clone(),
+                            ty: None,
+                        },
+                        span.clone(),
+                    );
+                    self.add_bind_pattern(&tpat, v, cty)?;
+                }
+                Ok(())
+            }
+        }
+    }
+    fn make_new_function(
+        &mut self,
+        name: &str,
+        args: &[VPtr],
+        argtypes: &[Type],
+        parent_i: Option<usize>,
+    ) -> usize {
+        let newf = mir::Function::new(name, args, argtypes, parent_i);
         self.program.functions.push(newf);
         let idx = self.program.functions.len() - 1;
         idx
@@ -186,11 +240,13 @@ impl Context {
             .iter()
             .map(|(name, a, _)| (name.clone(), a.clone()))
             .collect::<Vec<_>>();
-        let vbinds = binds.iter().map(|(_, a, _)| a.clone()).collect::<Vec<_>>();
+        let vbinds = binds.iter().map(|(_, a, t)| a.clone()).collect::<Vec<_>>();
+        let tbinds = binds.iter().map(|(_, _, t)| t.clone()).collect::<Vec<_>>();
         self.valenv.extend();
         self.valenv.add_bind(&mut abinds);
         let label = self.get_ctxdata().func_i;
-        let c_idx = self.make_new_function(fname, vbinds.as_slice(), Some(label));
+        let c_idx =
+            self.make_new_function(fname, vbinds.as_slice(), tbinds.as_slice(), Some(label));
 
         self.typeenv.env.extend();
         self.typeenv.env.add_bind(&mut atbinds);
@@ -207,7 +263,7 @@ impl Context {
 
         // TODO: ideally, type should be infered before the actual action
         let f = self.program.functions.get_mut(c_idx).unwrap();
-        f.return_type = Some(ty.clone());
+        f.return_type.get_or_init(|| ty.clone());
 
         //post action
         let _ = self.data.pop();
@@ -238,13 +294,19 @@ impl Context {
         Ok(v)
     }
     pub fn eval_var(&mut self, name: &str, span: &Span) -> Result<(VPtr, Type), CompileError> {
+        let t = self
+            .typeenv
+            .env
+            .lookup(name)
+            .expect("failed to find type for variable")
+            .clone();
         let v = match self.lookup(name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i, _s, _nret) => {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
                     self.push_inst(Instruction::Closure(reg))
                 }
-                _ => self.push_inst(Instruction::Load(v.clone())),
+                _ => self.push_inst(Instruction::Load(v.clone(), t.clone())),
             },
             LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
@@ -256,11 +318,11 @@ impl Context {
 
                 currentbb
                     .0
-                    .push((res.clone(), Instruction::GetUpValue(upi)));
+                    .push((res.clone(), Instruction::GetUpValue(upi, t.clone())));
                 res
             }),
             LookupRes::Global(v) => match v.as_ref() {
-                Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone())),
+                Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t.clone())),
                 Value::Function(_, _, _) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
                 _ => unreachable!("non global_value"),
             },
@@ -274,7 +336,7 @@ impl Context {
         let ty = typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
         Ok((v, ty.clone()))
     }
-    fn emit_fncall(&mut self, idx: u64, statesize: u64, args: Vec<VPtr>, nret: TypeSize) -> VPtr {
+    fn emit_fncall(&mut self, idx: u64, statesize: u64, args: Vec<VPtr>, ret_t: &Type) -> VPtr {
         let f = {
             self.get_current_fn().state_size += statesize;
             self.push_inst(Instruction::Uinteger(idx))
@@ -288,7 +350,7 @@ impl Context {
             self.get_ctxdata().push_sum += statesize;
         }
 
-        let res = self.push_inst(Instruction::Call(f.clone(), args, nret));
+        let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t.clone()));
         if statesize > 0 {
             self.get_ctxdata().state_offset += statesize;
         }
@@ -330,33 +392,48 @@ impl Context {
             Expr::Tuple(items) => {
                 let len = items.len();
                 if len == 0 {
-                    panic!("0-length tuple is not supported");
+                    unreachable!("0-length tuple is not supported");
                 }
-
-                let mut types = Vec::with_capacity(len);
-
-                // TODO: we have two unresolved problems.
-                //
-                // 1. Probably, Alloc should be able to prepare a sequence of
-                //    registers depending on the type. But, since currently
-                //    gen_new_register() is called in push_inst(), we need to
-                //    call Alloc multiple times to get multiple registers.
-                // 2. While the type can be known only after the expr is
-                //    evaluated, this instruction must be inserted before
-                //    eval_expr() to make sure there's a destination for each
-                //    value. Ideally, type should be inferred beforehand.
-                let dsts: Vec<_> = (0..len)
-                    .map(|_| self.push_inst(Instruction::Alloc(Type::Unknown)))
-                    .collect();
-
-                for i in 0..len {
-                    let (v, ty) = self.eval_expr(&items[i])?;
-
-                    self.push_inst(Instruction::Store(dsts[i].clone(), v));
-
+                let alloc_insert_point = self.get_current_basicblock().0.len();
+                let dst = self.gen_new_register();
+                // let mut types = Vec::with_capacity(len);
+                let mut types = vec![];
+                let mut inst_refs: Vec<usize> = vec![];
+                for (i, e) in items.iter().enumerate() {
+                    let (v, ty) = self.eval_expr(e)?;
+                    let ptr = if i == 0 {
+                        dst.clone()
+                    } else {
+                        inst_refs.push(self.get_current_basicblock().0.len());
+                        self.push_inst(Instruction::GetElement {
+                            value: dst.clone(),
+                            ty: Type::Unknown, // lazyly set after loops
+                            array_idx: 0,
+                            tuple_offset: i as u64,
+                        })
+                    };
+                    self.push_inst(Instruction::Store(ptr, v, ty.clone()));
                     types.push(ty);
                 }
-
+                let tup_t = Type::Tuple(types.clone());
+                for inst_i in inst_refs.iter() {
+                    if let Some((
+                        _,
+                        Instruction::GetElement {
+                            value: _,
+                            ref mut ty,
+                            array_idx: _,
+                            tuple_offset: _,
+                        },
+                    )) = self.get_current_basicblock().0.get_mut(*inst_i)
+                    {
+                        *ty = tup_t.clone();
+                    }
+                }
+                self.get_current_basicblock().0.insert(
+                    alloc_insert_point,
+                    (dst.clone(), Instruction::Alloc(tup_t.clone())),
+                );
                 // TODO: validate if the types are all identical?
                 // let first_ty = &types[0];
                 // if !types.iter().all(|x| x == first_ty) {
@@ -365,7 +442,7 @@ impl Context {
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
-                Ok((dsts[0].clone(), Type::Tuple(types)))
+                Ok((dst, tup_t))
             }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
@@ -392,16 +469,22 @@ impl Context {
                     }?;
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
-                            Value::Function(idx, statesize, nret) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
+                            Value::Function(idx, statesize, _rty) => {
+                                self.emit_fncall(*idx as u64, *statesize, a_regs, &rt)
                             }
-                            Value::Register(_) => {
-                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone()))
-                            }
+                            Value::Register(_) => self.push_inst(Instruction::CallCls(
+                                v.clone(),
+                                a_regs.clone(),
+                                rt.clone(),
+                            )),
                             Value::FixPoint(fnid) => {
                                 let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                                 let cls = self.push_inst(Instruction::Closure(clspos));
-                                self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                                self.push_inst(Instruction::CallCls(
+                                    cls,
+                                    a_regs.clone(),
+                                    rt.clone(),
+                                ))
                             }
                             _ => {
                                 panic!("calling non-function global value")
@@ -410,18 +493,21 @@ impl Context {
                         Value::Register(_) => {
                             //closure
                             //do not increment state size for closure
-                            let res =
-                                self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone()));
+                            let res = self.push_inst(Instruction::CallCls(
+                                f.clone(),
+                                a_regs.clone(),
+                                rt.clone(),
+                            ));
                             res
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, a_regs.clone()))
+                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt.clone()))
                         }
 
-                        Value::Function(idx, statesize, nret) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs, nret.size())
+                        Value::Function(idx, statesize, ret_t) => {
+                            self.emit_fncall(*idx as u64, *statesize, a_regs, ret_t)
                         }
                         Value::ExtFunction(label, ty) => {
                             if let Some(res) = self.make_intrinsics(&label.0, a_regs.clone())? {
@@ -430,7 +516,7 @@ impl Context {
                                 self.push_inst(Instruction::Call(
                                     f.clone(),
                                     a_regs.clone(),
-                                    ty.size(),
+                                    ty.clone(),
                                 ))
                             }
                         }
@@ -482,22 +568,27 @@ impl Context {
                                 Instruction::PopStateOffset(push_sum),
                             )); //todo:offset size
                         }
-                        let nret = res_type.size();
                         match (res.as_ref(), res_type.clone()) {
                             (_, Type::Primitive(PType::Unit) | Type::Unknown) => {
-                                let _ =
-                                    ctx.push_inst(Instruction::Return(Arc::new(Value::None), nret));
+                                let _ = ctx.push_inst(Instruction::Return(
+                                    Arc::new(Value::None),
+                                    res_type.clone(),
+                                ));
                             }
                             (Value::State(v), _) => {
-                                let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), nret));
+                                let _ = ctx.push_inst(Instruction::ReturnFeed(
+                                    v.clone(),
+                                    res_type.clone(),
+                                ));
                             }
                             (Value::Function(i, _, _), _) => {
                                 let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                                 let cls = ctx.push_inst(Instruction::Closure(idx));
-                                let _ = ctx.push_inst(Instruction::Return(cls, nret));
+                                let _ = ctx.push_inst(Instruction::Return(cls, res_type.clone()));
                             }
                             (_, _) => {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone(), nret));
+                                let _ = ctx
+                                    .push_inst(Instruction::Return(res.clone(), res_type.clone()));
                             }
                         };
 
@@ -520,7 +611,9 @@ impl Context {
                 Ok((res, fty))
             }
             Expr::Feed(id, expr) => {
-                let res = self.push_inst(Instruction::GetState);
+                let insert_pos = self.get_current_basicblock().0.len();
+                //set typesize lazily
+                let res = self.push_inst(Instruction::GetState(Type::Unknown));
 
                 self.get_ctxdata().state_offset += 1;
 
@@ -533,12 +626,20 @@ impl Context {
                     tf
                 };
                 let (retv, t) = self.eval_expr(expr)?;
+
+                if let (_, Instruction::GetState(ty)) =
+                    self.get_current_basicblock().0.get_mut(insert_pos).unwrap()
+                {
+                    *ty = t.clone();
+                }
                 self.typeenv.unify_types(tf, t.clone())?;
                 self.get_current_fn().state_size += 1;
                 Ok((Arc::new(Value::State(retv)), t))
             }
-            Expr::Let(id, body, then) => {
-                self.fn_label = Some(id.id.clone());
+            Expr::Let(pat, body, then) => {
+                if let Ok(tid) = TypedId::try_from(pat.0.clone()) {
+                    self.fn_label = Some(tid.id.clone());
+                };
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
@@ -547,7 +648,7 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(body)?;
                 //todo:need to boolean and insert cast
-                let idt = match id.ty.as_ref() {
+                let idt = match pat.0.ty.as_ref() {
                     Some(Type::Function(atypes, box rty, s)) => {
                         self.typeenv.convert_unknown_function(atypes, rty, s)
                     }
@@ -556,9 +657,7 @@ impl Context {
                 };
                 self.typeenv.unify_types(idt, t.clone())?;
 
-                self.typeenv
-                    .env
-                    .add_bind(&mut vec![(id.id.clone(), t.clone())]);
+                let t = self.typeenv.bind_pattern(&t, pat)?;
                 self.fn_label = None;
 
                 match (
@@ -568,23 +667,32 @@ impl Context {
                 ) {
                     (true, false, Some(then_e)) => {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
-                        let _greg =
-                            self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone()));
-                        self.add_bind((id.id.clone(), gv));
+                        let _greg = self.push_inst(Instruction::SetGlobal(
+                            gv.clone(),
+                            bodyv.clone(),
+                            t.clone(),
+                        ));
+                        self.add_bind_pattern(pat, gv, &t)?;
                         self.eval_expr(then_e)
                     }
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
-                        block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
-                        let _ =
-                            self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone()));
+                        block.insert(
+                            insert_pos,
+                            (alloc_res.clone(), Instruction::Alloc(t.clone())),
+                        );
+                        let _ = self.push_inst(Instruction::Store(
+                            alloc_res.clone(),
+                            bodyv.clone(),
+                            t.clone(),
+                        ));
 
-                        self.add_bind((id.id.clone(), alloc_res));
+                        self.add_bind_pattern(pat, alloc_res, &t)?;
                         self.eval_expr(then_e)
                     }
                     (_, _, Some(then_e)) => {
-                        self.add_bind((id.id.clone(), bodyv));
+                        self.add_bind_pattern(pat, bodyv, &t)?;
                         self.eval_expr(then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
@@ -629,7 +737,6 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
-            Expr::LetTuple(_, _, _) => todo!(),
             Expr::If(cond, then, else_) => {
                 let (c, t_cond) = self.eval_expr(cond)?;
                 //todo:need to boolean and insert cast

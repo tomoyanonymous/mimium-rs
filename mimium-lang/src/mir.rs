@@ -1,6 +1,6 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::types::{Type, TypeSize};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::OnceCell, sync::Arc};
 
 pub mod print;
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -39,26 +39,32 @@ pub enum Instruction {
     // allocate memory from stack depending on the size
     Alloc(Type),
     // load value to register from the pointer type
-    Load(VPtr),
+    Load(VPtr, Type),
     // store value to pointer
-    Store(VPtr, VPtr),
-    // Tuple(Vec<Value>),
-    // Proj(Value, u64),
-    // call function , arguments, nret
-    Call(VPtr, Vec<VPtr>, TypeSize),
-    CallCls(VPtr, Vec<VPtr>),
-    GetGlobal(VPtr),
-    SetGlobal(VPtr, VPtr),
+    Store(VPtr, VPtr, Type),
+    // Instruction for computing destination address like LLVM's GetElementPtr.
+    // This instruction does no actual computation on runtime.
+    GetElement {
+        value: VPtr,
+        ty: Type,
+        array_idx: u64,
+        tuple_offset: u64,
+    },
+    // call function, arguments
+    Call(VPtr, Vec<VPtr>, Type),
+    CallCls(VPtr, Vec<VPtr>, Type),
+    GetGlobal(VPtr, Type),
+    SetGlobal(VPtr, VPtr, Type),
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
-    GetUpValue(u64),
-    SetUpValue(u64),
+    GetUpValue(u64, Type),
+    SetUpValue(u64, Type),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
     //load internal state to register(destination)
-    GetState,
+    GetState(Type),
 
     //condition,  basic block index for then else statement
     JmpIf(VPtr, u64, u64),
@@ -67,9 +73,9 @@ pub enum Instruction {
     //merge
     Phi(VPtr, VPtr),
 
-    Return(VPtr, TypeSize),
+    Return(VPtr, Type),
     //value to update state
-    ReturnFeed(VPtr, TypeSize),
+    ReturnFeed(VPtr, Type),
 
     Delay(u64, VPtr, VPtr),
     Mem(VPtr),
@@ -124,31 +130,27 @@ pub enum UpIndex {
     Upvalue(usize), // index of upvalues in upper functions
 }
 
-#[derive(Clone, Debug)]
-pub struct Local {
-    pub name: String,
-    pub depth: usize,
-    pub is_captured: bool,
-}
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct OpenUpValue(pub usize);
+pub struct OpenUpValue(pub usize, pub TypeSize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub label: Label,
     pub args: Vec<Arc<Value>>,
-    pub return_type: Option<Type>, // TODO: None is the state when the type is not inferred yet.
+    pub argtypes: Vec<Type>,
+    pub return_type: OnceCell<Type>, // TODO: None is the state when the type is not inferred yet.
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: &str, args: &[VPtr], upperfn_i: Option<usize>) -> Self {
+    pub fn new(name: &str, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
         Self {
             label: Label(name.to_string()),
             args: args.to_vec(),
-            return_type: None,
+            argtypes: argtypes.to_vec(),
+            return_type: OnceCell::new(),
             upindexes: vec![],
             upperfn_i,
             body: vec![Block::default()],

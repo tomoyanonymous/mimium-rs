@@ -25,11 +25,10 @@ pub struct Args {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    colog::init();
-    if cfg!(debug_assertions) {
-        log::set_max_level(log::LevelFilter::Debug);
+    if cfg!(debug_assertions) | cfg!(test) {
+        colog::default_builder().filter_level(log::LevelFilter::Debug).init();
     } else {
-        log::set_max_level(log::LevelFilter::Info);
+        colog::default_builder().init();
     }
     let args = Args::parse();
     match args.file {

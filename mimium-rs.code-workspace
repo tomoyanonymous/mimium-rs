@@ -1,0 +1,96 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"rust-analyzer.check.command": "clippy"
+	},
+	"launch": {
+		// Use IntelliSense to learn about possible attributes.
+		// Hover to view descriptions of existing attributes.
+		// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug unit tests in library 'mimium-parser'",
+				"cargo": {
+					"args": [
+						"test",
+						"--no-run",
+						"--lib",
+						"--package=mimium-parser"
+					],
+					"filter": {
+						"name": "mimium-parser",
+						"kind": "lib"
+					}
+				},
+				"args": [],
+				"cwd": "${workspaceFolder}",
+				// "preLaunchTask": "symlink dSYM"
+			},
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug executable 'mimium-CLI'",
+				"cargo": {
+					"args": [
+						"build",
+						"--bin=mimium-cli",
+						"--package=mimium-cli",
+					],
+					"filter": {
+						"name": "mimium-cli",
+						"kind": "bin"
+					}
+				},
+				"args": [
+					"mimium-cli/examples/sinewave.mmm"
+				],
+				"cwd": "${workspaceFolder}"
+			},
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug bc emitter 'mimium-cli'",
+				"cargo": {
+					"args": [
+						"build",
+						"--bin=mimium-cli",
+						"--package=mimium-cli",
+					],
+					"filter": {
+						"name": "mimium-cli",
+						"kind": "bin"
+					}
+				},
+				"args": [
+					"tests/mmm/mir_counter.mmm"
+				],
+				"cwd": "${workspaceFolder}"
+			},
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug unit tests in executable 'mimium-rs'",
+				"cargo": {
+					"args": [
+						"test",
+						"--no-run",
+						"--bin=mimium-lang",
+					],
+					"filter": {
+						// "name": "mimium-rs",
+						// "kind": "bin"
+					}
+				},
+				"args": [],
+				"cwd": "${workspaceFolder}"
+			}
+		]
+	}
+}

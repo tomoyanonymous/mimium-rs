@@ -1,5 +1,5 @@
 ///remove redundunt letrec definition and convert them to plain let
-use crate::{ast::Expr, utils::metadata::WithMeta};
+use crate::{ast::Expr, pattern::TypedPattern, utils::metadata::WithMeta};
 
 fn try_find_recurse(e_s: &WithMeta<Expr>, name: &String) -> bool {
     let WithMeta(e, _span) = e_s;
@@ -42,7 +42,7 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
         Expr::LetRec(id, body, then) => {
             if !try_find_recurse(body, &id.id) {
                 Expr::Let(
-                    id.clone(),
+                    WithMeta(TypedPattern::from(id.clone()),span.clone()),
                     convert_recurse(body).into(),
                     then.as_ref().map(|b| Box::new(convert_recurse(b))),
                 )
@@ -82,7 +82,8 @@ mod test {
 
     use crate::{
         app,
-        ast::{Expr, Literal, TypedId},
+        ast::{Expr, Literal},
+        pattern::TypedId,
         ifexpr, lambda, let_, letrec, number, var,
     };
 

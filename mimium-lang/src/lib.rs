@@ -4,6 +4,7 @@
 #![feature(if_let_guard)]
 #![feature(lazy_cell)]
 // pub mod wcalculus;
+pub(crate) mod pattern;
 pub mod ast;
 pub mod mir;
 

@@ -34,22 +34,7 @@ impl FuncProto {
     }
 }
 
-impl From<&mir::Function> for FuncProto {
-    fn from(value: &mir::Function) -> Self {
-        Self {
-            nparam: value.args.len(),
-            nret: match &value.return_type {
-                Some(ty) => ty.size() as _,
-                None => 1, // TODO: what should we do when the type is not inferred yet?
-            },
-            upindexes: vec![],
-            bytecodes: vec![],
-            constants: vec![],
-            state_size: value.state_size,
-            delay_sizes: vec![],
-        }
-    }
-}
+
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {

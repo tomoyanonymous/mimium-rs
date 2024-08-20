@@ -1,11 +1,11 @@
 use crate::{
     ast,
-    compiler::Error as CompileError,
-    compiler::ErrorKind,
+    compiler::{Error as CompileError, ErrorKind},
     integer, numeric,
+    pattern::{TypedId, TypedPattern},
     runtime::builtin_fn,
     string_t,
-    types::{PType, Type, TypedId},
+    types::{PType, Type},
     unit,
     utils::{
         environment::Environment,
@@ -331,12 +331,13 @@ pub fn eval_ast(
             ctx.history.0 += 1;
             Ok(res)
         }
-        ast::Expr::Let(TypedId { id, ty: _t }, e, then) => {
+        ast::Expr::Let(WithMeta(TypedPattern { pat, ty: _t }, _s), e, then) => {
             let e_v = eval_ast(e, ctx)?;
-            match then {
-                Some(t) => eval_with_new_env(t, ctx, &mut vec![(id.clone(), e_v)]),
-                None => Ok(Value::Primitive(PValue::Unit)),
-            }
+            todo!()
+            // match then {
+            //     Some(t) => eval_with_new_env(t, ctx, &mut vec![(id.clone(), e_v)]),
+            //     None => Ok(Value::Primitive(PValue::Unit)),
+            // }
         }
         ast::Expr::LetRec(tid, e, then) => {
             let res_rec = eval_with_new_env(
@@ -348,7 +349,6 @@ pub fn eval_ast(
                 .map(|t| eval_with_new_env(&t, ctx, &mut vec![(tid.id.clone(), res_rec)]))
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
-        ast::Expr::LetTuple(_, _, _) => todo!(),
         ast::Expr::If(cond, then, o_else) => {
             if eval_condition(cond, ctx)? {
                 eval_ast(then, ctx)
