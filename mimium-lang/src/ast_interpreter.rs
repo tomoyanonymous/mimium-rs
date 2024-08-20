@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+
+use string_interner::{backend::StringBackend, StringInterner};
+
 use crate::{
     ast,
     compiler::{Error as CompileError, ErrorKind},
@@ -89,12 +93,21 @@ const EXTERN_ENV: [&str; 28] = [
     "print", "println",
 ];
 
-fn lookup_extern_env(name: &str) -> Option<&str> {
-    let filtered = EXTERN_ENV
-        .into_iter()
-        .filter(|n| *n == name)
-        .collect::<Vec<_>>();
-    filtered.get(0).map(|s| *s)
+pub struct SessionGlobals {
+    pub symbol_interner: StringInterner<StringBackend<usize>>,
+}
+
+thread_local!(static SESSION_GLOBALS: RefCell<SessionGlobals> =  RefCell::new(
+    SessionGlobals {
+        symbol_interner: StringInterner::new()
+    }
+));
+
+pub fn with_session_globals<R, F>(f: F) -> R
+where
+    F: FnOnce(&mut SessionGlobals) -> R,
+{
+    SESSION_GLOBALS.with_borrow_mut(f)
 }
 
 fn eval_literal(e: &ast::Literal) -> Value {

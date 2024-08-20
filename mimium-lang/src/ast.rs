@@ -1,11 +1,50 @@
 pub mod builder;
 
+use crate::ast_interpreter::with_session_globals;
 use crate::pattern::{Id, TypedId, TypedPattern};
 use crate::types::*;
 use crate::utils::metadata::WithMeta;
 use crate::utils::miniprint::MiniPrint;
-use std::fmt;
+use std::fmt::{self, Display};
 pub type Time = i64;
+
+#[derive(Default, Copy, Clone, PartialEq, Debug, Hash, Eq)]
+pub struct Symbol(pub usize); //Symbol Trait is implemented on usize
+
+pub trait ToSymbol {
+    fn to_symbol(&self) -> Symbol;
+}
+
+impl<T: AsRef<str>> ToSymbol for T {
+    fn to_symbol(&self) -> Symbol {
+        Symbol(with_session_globals(|session_globals| {
+            session_globals.symbol_interner.get_or_intern(self.as_ref())
+        }))
+    }
+}
+
+impl Symbol {
+    pub fn as_str(&self) -> &str {
+        with_session_globals(|session_globals| unsafe {
+            // This transmute is needed to convince the borrow checker. Since
+            // the session_global should exist until the end of the session,
+            // this &str should live sufficiently long.
+            std::mem::transmute::<&str, &str>(
+                session_globals
+                    .symbol_interner
+                    .resolve(self.0)
+                    .expect("invalid symbol"),
+            )
+        })
+    }
+}
+
+// Note: to_string() is auto-implemented by this
+impl Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Literal {
@@ -28,7 +67,11 @@ pub enum Expr {
     Assign(Id, Box<WithMeta<Self>>),
     Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
     Feed(Id, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
-    Let(WithMeta<TypedPattern>, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
+    Let(
+        WithMeta<TypedPattern>,
+        Box<WithMeta<Self>>,
+        Option<Box<WithMeta<Self>>>,
+    ),
     LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
     If(
         Box<WithMeta<Self>>,
