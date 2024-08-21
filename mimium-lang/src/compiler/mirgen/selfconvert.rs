@@ -117,7 +117,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
 
         Expr::Lambda(params, r_type, body) => {
             let nfctx = get_new_feedid(feedctx);
-            let nbody = match convert_self(*body, FeedId::Local(nfctx))? {
+            let nbody = match convert_self(*body.make_withmeta(), FeedId::Local(nfctx))? {
                 ConvertResult::Err(nbody) => {
                     let feedid = get_feedvar_name(nfctx);
                     WithMeta(Expr::Feed(feedid, nbody.into()), span.clone())
@@ -125,7 +125,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
                 ConvertResult::Ok(nbody) => nbody.clone(),
             };
             Ok(ConvertResult::Ok(WithMeta(
-                Expr::Lambda(params, r_type, Box::new(nbody)),
+                Expr::Lambda(params, r_type, nbody.into_id()),
                 span.clone(),
             )))
         }
@@ -213,7 +213,7 @@ mod test {
                             0..1,
                         )],
                         None,
-                        Box::new(WithMeta::<_>(Expr::Literal(Literal::SelfLit), 0..1)),
+                        Expr::Literal(Literal::SelfLit).into_id(0..1),
                     ),
                     0..1,
                 )),
@@ -241,13 +241,11 @@ mod test {
                         0..1,
                     )],
                     None,
-                    Box::new(WithMeta::<_>(
-                        Expr::Feed(
-                            "feed_id0".to_symbol(),
-                            Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_symbol(), None), 0..1)),
-                        ),
-                        0..1,
-                    )),
+                    Expr::Feed(
+                        "feed_id0".to_symbol(),
+                        Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_symbol(), None), 0..1)),
+                    )
+                    .into_id(0..1),
                 ),
                 0..1,
             )),

@@ -19,7 +19,7 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
         }
         Expr::Lambda(_ids, _opt_type, body) => {
             // convert_self(body)
-            try_find_recurse(body, name)
+            try_find_recurse(&body.make_withmeta(), name)
         }
         Expr::Proj(body, _idx) => try_find_recurse(&body.make_withmeta(), name),
         Expr::Block(body) => body.map_or(false, |b| try_find_recurse(&b.make_withmeta(), name)),
@@ -79,9 +79,11 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
             convert_recurse(then).into(),
             opt_else.as_ref().map(|e| Box::new(convert_recurse(&e))),
         ),
-        Expr::Lambda(ids, opt_type, body) => {
-            Expr::Lambda(ids.clone(), opt_type.clone(), convert_recurse(body).into())
-        }
+        Expr::Lambda(ids, opt_type, body) => Expr::Lambda(
+            ids.clone(),
+            opt_type.clone(),
+            convert_recurse(&body.make_withmeta()).into_id(),
+        ),
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         _ => e.clone(),
     };

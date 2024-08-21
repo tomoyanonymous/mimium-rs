@@ -549,7 +549,7 @@ impl Context {
                 let name = self.consume_fnlabel();
                 let (c_idx, f, res_type) =
                     self.do_in_child_ctx(name, binds.as_slice(), |ctx, c_idx| {
-                        let (res, mut res_type) = ctx.eval_expr(&body)?;
+                        let (res, mut res_type) = ctx.eval_expr(&body.make_withmeta())?;
                         res_type = if let Some(rt) = rett {
                             let tenv = &mut ctx.typeenv;
                             tenv.unify_types(rt.clone(), res_type.clone())

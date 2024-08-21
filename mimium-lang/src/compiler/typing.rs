@@ -343,10 +343,10 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
                 })
                 .collect();
             let bty = if let Some(r) = rtype {
-                let bty = infer_type(body, ctx)?;
+                let bty = infer_type(&body.make_withmeta(), ctx)?;
                 ctx.unify_types(r.clone(), bty)?
             } else {
-                infer_type(body, ctx)?
+                infer_type(&body.make_withmeta(), ctx)?
             };
             ctx.env.to_outer();
             Ok(Type::Function(ptypes, Box::new(bty), None))

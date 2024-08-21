@@ -114,7 +114,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 )
                 .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
                 .then(expr_group.clone())
-                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, Box::new(body)))
+                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, body.into_id()))
                 .labelled("lambda");
 
             let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
@@ -348,7 +348,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     Expr::LetRec(
                         fname,
                         Box::new(WithMeta(
-                            Expr::Lambda(ids, r_type, Box::new(block)),
+                            Expr::Lambda(ids, r_type, block.into_id()),
                             s.clone(),
                         )),
                         then,
@@ -373,7 +373,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     Expr::LetRec(
                         fname,
                         Box::new(WithMeta(
-                            Expr::Lambda(ids, None, Box::new(block)),
+                            Expr::Lambda(ids, None, block.into_id()),
                             s.clone(),
                         )),
                         then,
@@ -418,7 +418,7 @@ pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
             span.clone(),
         ),
         Box::new(WithMeta(
-            Expr::Lambda(vec![], None, Box::new(ast.clone())),
+            Expr::Lambda(vec![], None, ast.clone().into_id()),
             span.clone(),
         )),
         None,

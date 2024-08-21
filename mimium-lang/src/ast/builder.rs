@@ -81,7 +81,7 @@ macro_rules! lambda {
                     })
                     .collect::<Vec<_>>(),
                 None,
-                $body.into(),
+                $body.into_id(),
             ),
             0..0,
         )

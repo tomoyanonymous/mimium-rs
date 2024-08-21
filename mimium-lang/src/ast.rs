@@ -113,7 +113,7 @@ pub enum Expr {
     Tuple(Vec<WithMeta<Self>>),
     Proj(ExprId, i64),
     Apply(ExprId, Vec<WithMeta<Self>>),
-    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
+    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprId), //lambda, maybe information for internal state is needed
     Assign(Symbol, Box<WithMeta<Self>>),
     Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
     Feed(Symbol, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
@@ -196,7 +196,7 @@ impl MiniPrint for Expr {
                 format!(
                     "(lambda ({}) {})",
                     concat_vec(&paramstr),
-                    body.0.simple_print()
+                    body.simple_print()
                 )
             }
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.0.simple_print()),

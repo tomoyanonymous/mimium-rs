@@ -363,7 +363,7 @@ pub fn eval_ast(
         }
         ast::Expr::Lambda(a, r, e) => Ok(Value::Function(
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
-            e.clone(),
+            e.make_withmeta(),
             ctx.clone(), //todo! do not copy
             r.clone(),
         )),

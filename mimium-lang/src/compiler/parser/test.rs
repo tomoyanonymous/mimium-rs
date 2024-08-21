@@ -224,7 +224,7 @@ fn test_fndef() {
                         ),
                     ],
                     None,
-                    Box::new(WithMeta(Expr::Var("input".to_symbol(), None), 21..26)),
+                    Expr::Var("input".to_symbol(), None).into_id(21..26),
                 ),
                 0..28,
             )),
@@ -261,13 +261,11 @@ fn test_macrodef() {
                         ),
                     ],
                     None,
-                    Box::new(WithMeta(
-                        Expr::Bracket(Box::new(WithMeta(
-                            Expr::Var("input".to_symbol(), None),
-                            24..29,
-                        ))),
+                    Expr::Bracket(Box::new(WithMeta(
+                        Expr::Var("input".to_symbol(), None),
                         24..29,
-                    )),
+                    )))
+                    .into_id(24..29),
                 ),
                 0..31,
             )),
