@@ -57,7 +57,7 @@ pub enum Literal {
     Now,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
 pub struct ExprId(pub Id<Expr>);
 
 impl ExprId {
@@ -76,6 +76,18 @@ impl ExprId {
         })
     }
 }
+
+// ExprId needs to implement Ord in order to be a key of BTreeMap. To implement
+// Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
+// implemented manually so that the actual expressions and spans are compared.
+
+impl PartialEq for ExprId {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
+    }
+}
+
+impl Eq for ExprId {}
 
 impl Expr {
     fn into_id_inner(self, span: Option<Span>) -> ExprId {
