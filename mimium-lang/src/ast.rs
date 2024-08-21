@@ -1,5 +1,7 @@
 pub mod builder;
 
+use id_arena::Id;
+
 use crate::ast_interpreter::with_session_globals;
 use crate::pattern::{TypedId, TypedPattern};
 use crate::types::*;
@@ -54,6 +56,8 @@ pub enum Literal {
     SelfLit,
     Now,
 }
+
+pub type ExprId = Id<Expr>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {

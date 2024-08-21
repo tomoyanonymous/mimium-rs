@@ -1,9 +1,10 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeMap};
 
+use id_arena::{Arena, Id};
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{
-    ast::{self, Symbol, ToSymbol},
+    ast::{self, Expr, ExprId, Symbol, ToSymbol},
     compiler::{Error as CompileError, ErrorKind},
     integer, numeric,
     pattern::{TypedId, TypedPattern},
@@ -100,11 +101,39 @@ const EXTERN_SYMS: [&str; 28] = [
 
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
+    pub expr_storage: Arena<Expr>,
+    pub span_storage: BTreeMap<ExprId, Span>,
+}
+
+impl SessionGlobals {
+    fn store_expr(&mut self, expr: Expr) -> ExprId {
+        self.expr_storage.alloc(expr)
+    }
+
+    fn store_span(&mut self, expr_id: ExprId, span: Span) {
+        self.span_storage.insert(expr_id, span);
+    }
+
+    pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprId {
+        let expr_id = self.store_expr(expr);
+        self.store_span(expr_id, span);
+        expr_id
+    }
+
+    pub fn get_expr(&self, expr_id: ExprId) -> &Expr {
+        self.expr_storage.get(expr_id).expect("Unknown ExprID")
+    }
+
+    pub fn get_span(&self, expr_id: ExprId) -> &Span {
+        self.span_storage.get(&expr_id).expect("Unknown ExprID")
+    }
 }
 
 thread_local!(static SESSION_GLOBALS: RefCell<SessionGlobals> =  RefCell::new(
     SessionGlobals {
-        symbol_interner: StringInterner::new()
+        symbol_interner: StringInterner::new(),
+        expr_storage: Arena::new(),
+        span_storage: BTreeMap::new()
     }
 ));
 
