@@ -378,8 +378,9 @@ fn parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
-pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
-    let WithMeta(_, ref span) = ast;
+
+pub(crate) fn add_global_context(ast: ExprId) -> ExprId {
+    let span = ast.to_span();
     let res = Expr::Let(
         WithMeta(
             TypedPattern {
@@ -388,12 +389,12 @@ pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
             },
             span.clone(),
         ),
-        Expr::Lambda(vec![], None, ast.clone().into_id()).into_id(span.clone()),
+        Expr::Lambda(vec![], None, ast).into_id(span.clone()),
         None,
     );
-    WithMeta(res, span.clone())
+    res.into_id(span.clone())
 }
-pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
+pub fn parse(src: &str) -> Result<ExprId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
@@ -406,7 +407,7 @@ pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>>
         let (ast, parse_errs) =
             parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
-            Some(ast) => Ok(*ast.make_withmeta()),
+            Some(ast) => Ok(ast),
             None => {
                 parse_errs
                     .iter()

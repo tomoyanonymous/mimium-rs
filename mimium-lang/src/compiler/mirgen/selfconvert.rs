@@ -193,9 +193,9 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
     }
 }
 
-pub fn convert_self_top(expr: WithMeta<Expr>) -> Result<WithMeta<Expr>, Error> {
-    let res = convert_self(expr, FeedId::Global)?;
-    Ok(get_content(res))
+pub fn convert_self_top(expr: ExprId) -> Result<ExprId, Error> {
+    let res = convert_self(*expr.make_withmeta(), FeedId::Global)?;
+    Ok(get_content(res).into_id())
 }
 
 #[cfg(test)]
@@ -206,32 +206,30 @@ mod test {
 
     #[test]
     pub fn test_selfconvert() {
-        let src = WithMeta(
-            Expr::Let(
-                WithMeta(
-                    TypedPattern {
-                        pat: Pattern::Single("lowpass".to_symbol()),
+        let src = Expr::Let(
+            WithMeta(
+                TypedPattern {
+                    pat: Pattern::Single("lowpass".to_symbol()),
+                    ty: None,
+                },
+                0..1,
+            ),
+            Expr::Lambda(
+                vec![WithMeta::<_>(
+                    TypedId {
+                        id: "input".to_symbol(),
                         ty: None,
                     },
                     0..1,
-                ),
-                Expr::Lambda(
-                    vec![WithMeta::<_>(
-                        TypedId {
-                            id: "input".to_symbol(),
-                            ty: None,
-                        },
-                        0..1,
-                    )],
-                    None,
-                    Expr::Literal(Literal::SelfLit).into_id(0..1),
-                )
-                .into_id(0..1),
+                )],
                 None,
-            ),
-            0..1,
-        );
-        let WithMeta(res, _) = convert_self_top(src).unwrap();
+                Expr::Literal(Literal::SelfLit).into_id(0..1),
+            )
+            .into_id(0..1),
+            None,
+        )
+        .into_id(0..1);
+        let res = convert_self_top(src).unwrap();
 
         let ans = Expr::Let(
             WithMeta(
@@ -258,7 +256,8 @@ mod test {
             )
             .into_id(0..1),
             None,
-        );
+        )
+        .into_id(0..1);
         assert_eq!(res, ans);
     }
 }

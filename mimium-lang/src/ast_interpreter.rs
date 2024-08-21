@@ -31,13 +31,8 @@ pub enum Value {
     String(String),
     Tuple(Vec<Value>),
     //Function value holds return type
-    Function(
-        Vec<TypedId>,
-        Box<WithMeta<ast::Expr>>,
-        Context,
-        Option<Type>,
-    ),
-    FixPoint(TypedId, Box<WithMeta<ast::Expr>>),
+    Function(Vec<TypedId>, ExprId, Context, Option<Type>),
+    FixPoint(TypedId, ExprId),
     External(Symbol),
 }
 impl PValue {
@@ -158,22 +153,16 @@ fn eval_literal(e: &ast::Literal) -> Value {
     }
 }
 
-fn eval_condition<'a>(
-    e: &Box<WithMeta<ast::Expr>>,
-    ctx: &mut Context,
-) -> Result<bool, CompileError> {
+fn eval_condition<'a>(e: ExprId, ctx: &mut Context) -> Result<bool, CompileError> {
     let c_v = eval_ast(e, ctx)?;
 
     match c_v.clone() {
         Value::Primitive(PValue::Numeric(f)) => Ok(f > 0.0),
         Value::Primitive(PValue::Integer(i)) => Ok(i > 0),
-        _ => {
-            let WithMeta(_, span) = e.as_ref();
-            Err(CompileError(
-                ErrorKind::TypeMismatch(numeric!(), c_v.get_type()),
-                span.clone(),
-            ))
-        }
+        _ => Err(CompileError(
+            ErrorKind::TypeMismatch(numeric!(), c_v.get_type()),
+            e.to_span().clone(),
+        )),
     }
 }
 
@@ -190,7 +179,7 @@ fn getcell<'a, 'ctx: 'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
 }
 
 fn eval_with_new_env(
-    e_meta: &Box<WithMeta<ast::Expr>>,
+    e_meta: ExprId,
     ctx: &mut Context,
     names: &mut Vec<(Symbol, Value)>,
 ) -> Result<Value, CompileError> {
@@ -288,13 +277,10 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
     }
 }
 
-pub fn eval_ast(
-    e_meta: &Box<WithMeta<ast::Expr>>,
-    ctx: &mut Context,
-) -> Result<Value, CompileError> {
+pub fn eval_ast(e_meta: ExprId, ctx: &mut Context) -> Result<Value, CompileError> {
     let env = &mut ctx.env;
-    let WithMeta(e, span) = e_meta.as_ref();
-    match e {
+    let span = e_meta.to_span();
+    match e_meta.to_expr() {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
         ast::Expr::Var(v, _time) => env
             .lookup(v)
@@ -311,18 +297,18 @@ pub fn eval_ast(
         ast::Expr::Block(b) => b
             .as_ref()
             .map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
-                eval_ast(&body.make_withmeta(), ctx)
+                eval_ast(*body, ctx)
             }),
         ast::Expr::Tuple(v) => {
             let res = v
                 .iter()
                 //todo: collect multiple errors
-                .map(|e| eval_ast(&e.make_withmeta(), ctx).unwrap())
+                .map(|e| eval_ast(*e, ctx).unwrap())
                 .collect();
             Ok(Value::Tuple(res))
         }
         ast::Expr::Proj(t, i) => {
-            let v = eval_ast(&t.make_withmeta(), ctx)?;
+            let v = eval_ast(*t, ctx)?;
             let span = t.to_span();
             match v {
                 Value::Tuple(t) => t.get(*i as usize).map(|v| v.clone()).ok_or(CompileError(
@@ -336,11 +322,8 @@ pub fn eval_ast(
             }
         }
         ast::Expr::Apply(f, args) => {
-            let argv: Vec<_> = args
-                .iter()
-                .map(|e| eval_ast(&e.make_withmeta(), ctx))
-                .try_collect()?;
-            let func = eval_ast(&f.make_withmeta(), ctx)?;
+            let argv: Vec<_> = args.iter().map(|e| eval_ast(*e, ctx)).try_collect()?;
+            let func = eval_ast(*f, ctx)?;
             let res = match func.clone() {
                 Value::Function(params, b, mut n_ctx, _rt) => {
                     let mut argvec: Vec<_> = argv
@@ -348,10 +331,10 @@ pub fn eval_ast(
                         .zip(params.iter())
                         .map(|(v, TypedId { ty: _, id })| (id.clone(), v.clone()))
                         .collect();
-                    eval_with_new_env(&b, &mut n_ctx, &mut argvec)
+                    eval_with_new_env(b, &mut n_ctx, &mut argvec)
                 }
                 Value::FixPoint(TypedId { id, ty: _ }, e) => {
-                    eval_with_new_env(&e, ctx, &mut vec![(id, func)])
+                    eval_with_new_env(e, ctx, &mut vec![(id, func)])
                 }
                 Value::External(n) => {
                     //todo: appropreate error type
@@ -363,17 +346,13 @@ pub fn eval_ast(
         }
         ast::Expr::Lambda(a, r, e) => Ok(Value::Function(
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
-            e.make_withmeta(),
+            *e,
             ctx.clone(), //todo! do not copy
             r.clone(),
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);
-            let res = eval_with_new_env(
-                &e.make_withmeta(),
-                ctx,
-                &mut vec![(a.clone(), Value::Primitive(cellv))],
-            )?;
+            let res = eval_with_new_env(*e, ctx, &mut vec![(a.clone(), Value::Primitive(cellv))])?;
             let pres = match res {
                 Value::Primitive(p) => Ok(p),
                 _ => Err(CompileError(ErrorKind::NonPrimitiveInFeed, span.clone())),
@@ -383,7 +362,7 @@ pub fn eval_ast(
             Ok(res)
         }
         ast::Expr::Let(WithMeta(TypedPattern { pat, ty: _t }, _s), e, then) => {
-            let e_v = eval_ast(&e.make_withmeta(), ctx)?;
+            let e_v = eval_ast(*e, ctx)?;
             todo!()
             // match then {
             //     Some(t) => eval_with_new_env(t, ctx, &mut vec![(id.clone(), e_v)]),
@@ -392,29 +371,20 @@ pub fn eval_ast(
         }
         ast::Expr::LetRec(tid, e, then) => {
             let res_rec = eval_with_new_env(
-                &e.make_withmeta(),
+                *e,
                 ctx,
-                &mut vec![(
-                    tid.clone().id,
-                    Value::FixPoint(tid.clone(), e.make_withmeta()),
-                )],
+                &mut vec![(tid.clone().id, Value::FixPoint(tid.clone(), *e))],
             )?;
             then.as_ref()
-                .map(|t| {
-                    eval_with_new_env(
-                        &t.make_withmeta(),
-                        ctx,
-                        &mut vec![(tid.id.clone(), res_rec)],
-                    )
-                })
+                .map(|t| eval_with_new_env(*t, ctx, &mut vec![(tid.id.clone(), res_rec)]))
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
         ast::Expr::If(cond, then, o_else) => {
-            if eval_condition(&cond.make_withmeta(), ctx)? {
-                eval_ast(&then.make_withmeta(), ctx)
+            if eval_condition(*cond, ctx)? {
+                eval_ast(*then, ctx)
             } else {
                 o_else
-                    .map(|e_else| eval_ast(&e_else.make_withmeta(), ctx))
+                    .map(|e_else| eval_ast(e_else, ctx))
                     .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
             }
         }

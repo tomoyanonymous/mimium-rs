@@ -6,7 +6,6 @@ use crate::{
 };
 
 fn try_find_recurse(e_s: &ExprId, name: &Symbol) -> bool {
-    let span = e_s.to_span();
     match e_s.to_expr() {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
@@ -36,41 +35,41 @@ fn try_find_recurse(e_s: &ExprId, name: &Symbol) -> bool {
     }
 }
 
-pub fn convert_recurse(e_s: &ExprId) -> ExprId {
-    let convert_vec = |v: &[ExprId]| v.iter().map(|e| convert_recurse(&e)).collect();
+pub fn convert_recurse(e_s: ExprId) -> ExprId {
+    let convert_vec = |v: &[ExprId]| v.iter().map(|e| convert_recurse(*e)).collect();
     let span = e_s.to_span();
     let res = match e_s.to_expr() {
         Expr::LetRec(id, body, then) => {
-            if !try_find_recurse(&body, &id.id) {
+            if !try_find_recurse(body, &id.id) {
                 Expr::Let(
                     WithMeta(TypedPattern::from(id.clone()), span.clone()),
-                    convert_recurse(&body),
-                    then.map(|b| convert_recurse(&b)),
+                    convert_recurse(*body),
+                    then.map(|b| convert_recurse(b)),
                 )
             } else {
                 Expr::LetRec(
                     id.clone(),
-                    convert_recurse(&body),
-                    then.map(|b| convert_recurse(&b)),
+                    convert_recurse(*body),
+                    then.map(|b| convert_recurse(b)),
                 )
             }
         }
         Expr::Let(id, body, then) => Expr::Let(
             id.clone(),
-            convert_recurse(&body),
-            then.map(|t| convert_recurse(&t)),
+            convert_recurse(*body),
+            then.map(|t| convert_recurse(t)),
         ),
         Expr::Tuple(es) => Expr::Tuple(convert_vec(es)),
-        Expr::Proj(t, idx) => Expr::Proj(convert_recurse(&t), *idx),
-        Expr::Block(body) => Expr::Block(body.map(|b| convert_recurse(&b))),
-        Expr::Apply(fun, callee) => Expr::Apply(convert_recurse(&fun), convert_vec(callee)),
+        Expr::Proj(t, idx) => Expr::Proj(convert_recurse(*t), *idx),
+        Expr::Block(body) => Expr::Block(body.map(|b| convert_recurse(b))),
+        Expr::Apply(fun, callee) => Expr::Apply(convert_recurse(*fun), convert_vec(callee)),
         Expr::If(cond, then, opt_else) => Expr::If(
-            convert_recurse(&cond),
-            convert_recurse(&then),
-            opt_else.map(|e| convert_recurse(&e)),
+            convert_recurse(*cond),
+            convert_recurse(*then),
+            opt_else.map(|e| convert_recurse(e)),
         ),
         Expr::Lambda(ids, opt_type, body) => {
-            Expr::Lambda(ids.clone(), opt_type.clone(), convert_recurse(&body))
+            Expr::Lambda(ids.clone(), opt_type.clone(), convert_recurse(*body))
         }
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         e => e.clone(),
@@ -120,6 +119,6 @@ mod test {
             None
         );
 
-        assert_eq!(convert_recurse(&sample), ans)
+        assert_eq!(convert_recurse(sample), ans)
     }
 }
