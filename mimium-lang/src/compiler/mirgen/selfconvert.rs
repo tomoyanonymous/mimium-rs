@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Literal, Symbol, ToSymbol};
+use crate::ast::{make_withmeta_vec, Expr, ExprId, Literal, Symbol, ToSymbol};
 use crate::utils::{
     error::ReportableError,
     metadata::{Span, WithMeta},
@@ -66,9 +66,12 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             ))),
         },
         Expr::Tuple(v) => {
-            let elems: Vec<ConvertResult> = v.into_iter().map(&cls).try_collect()?;
-            let elems_mapped: Vec<WithMeta<Expr>> =
-                elems.iter().map(|e| get_content(e.clone())).collect();
+            let elems: Vec<ConvertResult> =
+                make_withmeta_vec(v).into_iter().map(&cls).try_collect()?;
+            let elems_mapped: Vec<ExprId> = elems
+                .iter()
+                .map(|e| get_content(e.clone()).into_id())
+                .collect();
             if elems.iter().any(|e| e.is_err()) {
                 Ok(ConvertResult::Err(WithMeta(
                     Expr::Tuple(elems_mapped),
@@ -131,9 +134,14 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
         }
         Expr::Apply(fun, callee) => {
             let fun = cls(*fun.make_withmeta())?;
-            let elems: Vec<ConvertResult> = callee.into_iter().map(|e| cls(e)).try_collect()?;
-            let elems_mapped: Vec<WithMeta<Expr>> =
-                elems.iter().map(|e| get_content(e.clone())).collect();
+            let elems: Vec<ConvertResult> = callee
+                .into_iter()
+                .map(|e| cls(*e.make_withmeta()))
+                .try_collect()?;
+            let elems_mapped: Vec<ExprId> = elems
+                .iter()
+                .map(|e| get_content(e.clone()).into_id())
+                .collect();
             let content = WithMeta(
                 Expr::Apply(fun.clone().unwrap().into_id(), elems_mapped),
                 span,
@@ -145,12 +153,12 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             }
         }
         Expr::If(cond, then, opt_else) => {
-            let cond = cls(*cond)?;
-            let then = cls(*then)?;
-            let opt_else = opt_cls(opt_else)?;
+            let cond = cls(*cond.make_withmeta())?;
+            let then = cls(*then.make_withmeta())?;
+            let opt_else = opt_cls(opt_else.map(|x| x.make_withmeta()))?;
             match (cond, then, opt_else.transpose()) {
                 (Ok(c), Ok(t), Ok(e)) => Ok(ConvertResult::Ok(WithMeta(
-                    Expr::If(Box::new(c), Box::new(t), e.map(|e| Box::new(e))),
+                    Expr::If(c.into_id(), t.into_id(), e.map(|e| e.into_id())),
                     span,
                 ))),
                 (c, t, e) => {
@@ -159,7 +167,11 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
                         Err(e) => Some(Box::new(e)),
                     };
                     Ok(ConvertResult::Err(WithMeta(
-                        Expr::If(Box::new(get_content(c)), Box::new(get_content(t)), e),
+                        Expr::If(
+                            get_content(c).into_id(),
+                            get_content(t).into_id(),
+                            e.map(|x| x.into_id()),
+                        ),
                         span,
                     )))
                 }

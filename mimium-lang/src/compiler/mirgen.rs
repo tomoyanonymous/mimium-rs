@@ -13,7 +13,7 @@ use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
-use crate::ast::{Expr, Literal, Symbol, ToSymbol};
+use crate::ast::{make_withmeta_vec, Expr, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -400,7 +400,7 @@ impl Context {
                 let mut types = vec![];
                 let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
-                    let (v, ty) = self.eval_expr(e)?;
+                    let (v, ty) = self.eval_expr(&e.make_withmeta())?;
                     let ptr = if i == 0 {
                         dst.clone()
                     } else {
@@ -447,11 +447,11 @@ impl Context {
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
                 let (f, ft) = self.eval_expr(&f.make_withmeta())?;
-                let del = self.make_delay(&f, args)?;
+                let del = self.make_delay(&f, make_withmeta_vec(&args).as_slice())?;
                 if let Some(d) = del {
                     Ok((d, Type::Primitive(PType::Numeric)))
                 } else {
-                    let atvvec = self.eval_args(args.as_slice())?;
+                    let atvvec = self.eval_args(make_withmeta_vec(&args).as_slice())?;
                     let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
                     let rt = self.typeenv.gen_intermediate_type();
                     let ftype = self
@@ -738,7 +738,7 @@ impl Context {
                 }
             }
             Expr::If(cond, then, else_) => {
-                let (c, t_cond) = self.eval_expr(cond)?;
+                let (c, t_cond) = self.eval_expr(&cond.make_withmeta())?;
                 //todo:need to boolean and insert cast
                 self.typeenv.unify_types(t_cond, numeric!())?;
 
@@ -750,7 +750,7 @@ impl Context {
                 ));
                 //insert then block
                 self.add_new_basicblock();
-                let (t, thent) = self.eval_expr(then)?;
+                let (t, thent) = self.eval_expr(&then.make_withmeta())?;
                 let t = match t.as_ref() {
                     Value::Function(idx, _, _) => {
                         let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
@@ -762,7 +762,7 @@ impl Context {
                 //insert else block
                 self.add_new_basicblock();
                 let (e, elset) = match else_ {
-                    Some(box e) => self.eval_expr(&e),
+                    Some(e) => self.eval_expr(&e.make_withmeta()),
                     None => Ok((Arc::new(Value::None), unit!())),
                 }?;
                 //if returning non-closure function, make closure

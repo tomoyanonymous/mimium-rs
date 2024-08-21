@@ -51,8 +51,8 @@ fn test_lettuple() {
                 4..9,
             ),
             Expr::Tuple(vec![
-                WithMeta(Expr::Literal(Literal::Int(36)), 13..15),
-                WithMeta(Expr::Literal(Literal::Int(89)), 16..18),
+                Expr::Literal(Literal::Int(36)).into_id(13..15),
+                Expr::Literal(Literal::Int(89)).into_id(16..18),
             ])
             .into_id(12..19),
             Some(Expr::Var("hoge".to_symbol(), None).into_id(21..25)),
@@ -65,9 +65,9 @@ fn test_lettuple() {
 fn test_if() {
     let ans = WithMeta(
         Expr::If(
-            WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
-            WithMeta(Expr::Var("hoge".to_symbol(), None).into(), 9..13).into(),
-            Some(WithMeta(Expr::Var("fuga".to_symbol(), None).into(), 19..23).into()),
+            Expr::Literal(Literal::Int(100)).into_id(4..7),
+            Expr::Var("hoge".to_symbol(), None).into_id(9..13),
+            Some(Expr::Var("fuga".to_symbol(), None).into_id(19..23)),
         ),
         0..23,
     );
@@ -77,8 +77,8 @@ fn test_if() {
 fn test_if_noelse() {
     let ans = WithMeta(
         Expr::If(
-            WithMeta(Expr::Literal(Literal::Int(100)), 4..7).into(),
-            WithMeta(Expr::Var("hoge".to_symbol(), None).into(), 9..13).into(),
+            Expr::Literal(Literal::Int(100)).into_id(4..7),
+            Expr::Var("hoge".to_symbol(), None).into_id(9..13),
             None,
         ),
         0..13,
@@ -127,8 +127,8 @@ fn test_add() {
         Expr::Apply(
             Expr::Var("add".to_symbol(), None).into_id(6..7),
             vec![
-                WithMeta(Expr::Literal(Literal::Float("3466.0".to_string())), 0..6),
-                WithMeta(Expr::Literal(Literal::Float("2000.0".to_string())), 7..13),
+                Expr::Literal(Literal::Float("3466.0".to_string())).into_id(0..6),
+                Expr::Literal(Literal::Float("2000.0".to_string())).into_id(7..13),
             ],
         ),
         0..13,
@@ -145,7 +145,7 @@ fn test_apply() {
     let ans = WithMeta(
         Expr::Apply(
             Expr::Var("myfun".to_symbol(), None).into_id(0..5),
-            vec![WithMeta(Expr::Var("callee".to_symbol(), None), 6..12)],
+            vec![Expr::Var("callee".to_symbol(), None).into_id(6..12)],
         ),
         0..13,
     );
@@ -156,13 +156,11 @@ fn test_applynested() {
     let ans = WithMeta(
         Expr::Apply(
             Expr::Var("myfun".to_symbol(), None).into_id(0..5),
-            vec![WithMeta(
-                Expr::Apply(
-                    Expr::Var("myfun2".to_symbol(), None).into_id(6..12),
-                    vec![WithMeta(Expr::Var("callee".to_symbol(), None), 13..19)],
-                ),
-                6..20,
-            )],
+            vec![Expr::Apply(
+                Expr::Var("myfun2".to_symbol(), None).into_id(6..12),
+                vec![Expr::Var("callee".to_symbol(), None).into_id(13..19)],
+            )
+            .into_id(6..20)],
         ),
         0..21,
     );
@@ -171,13 +169,13 @@ fn test_applynested() {
 #[test]
 fn test_macroexpand() {
     let ans = WithMeta(
-        Expr::Escape(Box::new(WithMeta(
+        Expr::Escape(
             Expr::Apply(
                 Expr::Var("myfun".to_symbol(), None).into_id(0..6),
-                vec![WithMeta(Expr::Var("callee".to_symbol(), None), 7..13)],
-            ),
-            0..14,
-        ))),
+                vec![Expr::Var("callee".to_symbol(), None).into_id(7..13)],
+            )
+            .into_id(0..14),
+        ),
         0..14,
     );
     test_string!("myfun!(callee)", ans);
@@ -247,11 +245,7 @@ fn test_macrodef() {
                     ),
                 ],
                 None,
-                Expr::Bracket(Box::new(WithMeta(
-                    Expr::Var("input".to_symbol(), None),
-                    24..29,
-                )))
-                .into_id(24..29),
+                Expr::Bracket(Expr::Var("input".to_symbol(), None).into_id(24..29)).into_id(24..29),
             )
             .into_id(0..31),
             None,
@@ -264,8 +258,8 @@ fn test_macrodef() {
 #[test]
 fn test_tuple() {
     let tuple_items = vec![
-        WithMeta(Expr::Literal(Literal::Float("1.0".to_string())), 1..4),
-        WithMeta(Expr::Literal(Literal::Float("2.0".to_string())), 6..9),
+        Expr::Literal(Literal::Float("1.0".to_string())).into_id(1..4),
+        Expr::Literal(Literal::Float("2.0".to_string())).into_id(6..9),
     ];
 
     let ans = WithMeta(Expr::Tuple(tuple_items.clone()), 0..10);
@@ -280,7 +274,7 @@ fn test_tuple() {
     test_string!("(1.0, )", ans);
 
     // This is not a tuple
-    let ans = tuple_items[0].clone();
+    let ans = *tuple_items[0].make_withmeta();
     test_string!("(1.0)", ans);
 }
 

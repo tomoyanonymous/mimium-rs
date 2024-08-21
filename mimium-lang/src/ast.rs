@@ -89,6 +89,14 @@ impl WithMeta<Expr> {
     }
 }
 
+// TODO: remove this
+pub fn make_withmeta_vec<T: AsRef<[ExprId]>>(x: T) -> Vec<WithMeta<Expr>> {
+    x.as_ref()
+        .iter()
+        .map(|e| *e.make_withmeta())
+        .collect::<Vec<_>>()
+}
+
 impl Expr {
     fn into_id_inner(self, span: Option<Span>) -> ExprId {
         let span = span.unwrap_or(0..0);
@@ -110,23 +118,19 @@ pub enum Expr {
     Literal(Literal),
     Var(Symbol, Option<Time>),
     Block(Option<ExprId>),
-    Tuple(Vec<WithMeta<Self>>),
+    Tuple(Vec<ExprId>),
     Proj(ExprId, i64),
-    Apply(ExprId, Vec<WithMeta<Self>>),
+    Apply(ExprId, Vec<ExprId>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprId),
     Then(ExprId, ExprId),
     Feed(Symbol, ExprId), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(WithMeta<TypedPattern>, ExprId, Option<ExprId>),
     LetRec(TypedId, ExprId, Option<ExprId>),
-    If(
-        Box<WithMeta<Self>>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
-    ),
+    If(ExprId, ExprId, Option<ExprId>),
     //exprimental macro system using multi-stage computation
-    Bracket(Box<WithMeta<Self>>),
-    Escape(Box<WithMeta<Self>>),
+    Bracket(ExprId),
+    Escape(ExprId),
 
     Error,
 }
@@ -166,6 +170,15 @@ impl MiniPrint for ExprId {
     }
 }
 
+impl MiniPrint for Option<ExprId> {
+    fn simple_print(&self) -> String {
+        match self {
+            Some(e) => e.to_expr().simple_print(),
+            None => "".to_string(),
+        }
+    }
+}
+
 impl MiniPrint for Expr {
     fn simple_print(&self) -> String {
         match self {
@@ -178,12 +191,15 @@ impl MiniPrint for Expr {
                 format!("(block {})", eid.to_expr().simple_print())
             }),
             Expr::Tuple(e) => {
-                let e1 = e.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
+                let e1 = e.iter().map(|e| e.to_expr().clone()).collect::<Vec<Expr>>();
                 format!("(tuple ({}))", concat_vec(&e1))
             }
             Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
-                let es = e2.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
+                let es = e2
+                    .iter()
+                    .map(|e| e.to_expr().clone())
+                    .collect::<Vec<Expr>>();
 
                 format!("(app {} ({}))", e1.simple_print(), concat_vec(&es))
             }
@@ -200,13 +216,13 @@ impl MiniPrint for Expr {
                 "(let {} {} {})",
                 id.0,
                 body.simple_print(),
-                then.map_or("".into(), |t| t.simple_print())
+                then.simple_print()
             ),
             Expr::LetRec(id, body, then) => format!(
                 "(letrec {} {} {})",
                 &id.id,
                 body.simple_print(),
-                then.map_or("".into(), |t| t.simple_print())
+                then.simple_print()
             ),
             Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.simple_print()),
             Expr::Then(first, second) => {
@@ -214,9 +230,9 @@ impl MiniPrint for Expr {
             }
             Expr::If(cond, then, optelse) => format!(
                 "(if {} {} {})",
-                cond.0.simple_print(),
-                then.0.simple_print(),
-                optelse.as_ref().map_or("".into(), |e| e.0.simple_print())
+                cond.simple_print(),
+                then.simple_print(),
+                optelse.simple_print()
             ),
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),

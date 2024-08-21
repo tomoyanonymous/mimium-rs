@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Literal, Symbol, ToSymbol};
+use crate::ast::{make_withmeta_vec, Expr, Literal, Symbol, ToSymbol};
 use crate::compiler::intrinsics;
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
@@ -304,7 +304,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
 
     match e {
         Expr::Literal(l) => infer_type_literal(l),
-        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e, ctx)?)),
+        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(&make_withmeta_vec(e), ctx)?)),
         Expr::Proj(e, idx) => {
             let tup = infer_type(&e.make_withmeta(), ctx)?;
             match tup {
@@ -393,7 +393,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         Expr::Var(name, _time) => lookup(&name, ctx, span),
         Expr::Apply(fun, callee) => {
             let fnl = infer_type(&fun.make_withmeta(), ctx)?;
-            let callee_t = infer_vec(callee, ctx)?;
+            let callee_t = infer_vec(&make_withmeta_vec(callee), ctx)?;
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, Box::new(res_t), None);
             let restype = ctx.unify_types(fnl, fntype)?;
@@ -404,13 +404,13 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             }
         }
         Expr::If(cond, then, opt_else) => {
-            let condt = infer_type(cond, ctx)?;
+            let condt = infer_type(&cond.make_withmeta(), ctx)?;
             let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
-            let thent = infer_type(then, ctx)?;
+            let thent = infer_type(&then.make_withmeta(), ctx)?;
             let elset = opt_else
                 .clone()
-                .map_or(Ok(Type::Primitive(PType::Unit)), |box ref e| {
-                    infer_type(e, ctx)
+                .map_or(Ok(Type::Primitive(PType::Unit)), |e| {
+                    infer_type(&e.make_withmeta(), ctx)
                 })?;
             ctx.unify_types(thent, elset)
         }

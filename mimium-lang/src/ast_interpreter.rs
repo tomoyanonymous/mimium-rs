@@ -317,7 +317,7 @@ pub fn eval_ast(
             let res = v
                 .iter()
                 //todo: collect multiple errors
-                .map(|e| eval_ast(&Box::new(e.clone()), ctx).unwrap())
+                .map(|e| eval_ast(&e.make_withmeta(), ctx).unwrap())
                 .collect();
             Ok(Value::Tuple(res))
         }
@@ -338,7 +338,7 @@ pub fn eval_ast(
         ast::Expr::Apply(f, args) => {
             let argv: Vec<_> = args
                 .iter()
-                .map(|e| eval_ast(&Box::new(e.clone()), ctx))
+                .map(|e| eval_ast(&e.make_withmeta(), ctx))
                 .try_collect()?;
             let func = eval_ast(&f.make_withmeta(), ctx)?;
             let res = match func.clone() {
@@ -410,12 +410,11 @@ pub fn eval_ast(
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
         ast::Expr::If(cond, then, o_else) => {
-            if eval_condition(cond, ctx)? {
-                eval_ast(then, ctx)
+            if eval_condition(&cond.make_withmeta(), ctx)? {
+                eval_ast(&then.make_withmeta(), ctx)
             } else {
                 o_else
-                    .as_ref()
-                    .map(|e_else| eval_ast(&e_else, ctx))
+                    .map(|e_else| eval_ast(&e_else.make_withmeta(), ctx))
                     .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
             }
         }

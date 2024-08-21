@@ -1,6 +1,6 @@
 ///remove redundunt letrec definition and convert them to plain let
 use crate::{
-    ast::{Expr, Symbol},
+    ast::{make_withmeta_vec, Expr, ExprId, Symbol},
     pattern::TypedPattern,
     utils::metadata::WithMeta,
 };
@@ -11,9 +11,7 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
             try_find_recurse(&body.make_withmeta(), name)
-                || then
-                    .as_ref()
-                    .map_or(false, |e| try_find_recurse(&e.make_withmeta(), name))
+                || then.map_or(false, |e| try_find_recurse(&e.make_withmeta(), name))
         }
         Expr::LetRec(_id, _body, _then) => {
             //todo: start new search so we return false here
@@ -27,15 +25,17 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
         Expr::Block(body) => body.map_or(false, |b| try_find_recurse(&b.make_withmeta(), name)),
         Expr::Apply(fun, callee) => {
             try_find_recurse(&fun.make_withmeta(), name)
-                || callee.into_iter().any(|v| try_find_recurse(&v, name))
+                || callee
+                    .into_iter()
+                    .any(|v| try_find_recurse(&v.make_withmeta(), name))
         }
-        Expr::Tuple(vec) => vec.into_iter().any(|v| try_find_recurse(v, name)),
+        Expr::Tuple(vec) => vec
+            .into_iter()
+            .any(|v| try_find_recurse(&v.make_withmeta(), name)),
         Expr::If(cond, then, opt_else) => {
-            try_find_recurse(cond, name)
-                || try_find_recurse(then, name)
-                || opt_else
-                    .as_ref()
-                    .map_or(false, |e| try_find_recurse(&e, name))
+            try_find_recurse(&cond.make_withmeta(), name)
+                || try_find_recurse(&then.make_withmeta(), name)
+                || opt_else.map_or(false, |e| try_find_recurse(&e.make_withmeta(), name))
         }
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         _ => false,
@@ -43,7 +43,11 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
 }
 
 pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
-    let convert_vec = |v: &Vec<_>| v.iter().map(|e| convert_recurse(e)).collect::<Vec<_>>();
+    let convert_vec = |v: &[ExprId]| {
+        v.iter()
+            .map(|e| convert_recurse(&e.make_withmeta()).into_id())
+            .collect::<Vec<ExprId>>()
+    };
     let WithMeta(e, span) = e_s;
     let res = match e {
         Expr::LetRec(id, body, then) => {
@@ -77,9 +81,9 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
             convert_vec(callee),
         ),
         Expr::If(cond, then, opt_else) => Expr::If(
-            convert_recurse(cond).into(),
-            convert_recurse(then).into(),
-            opt_else.as_ref().map(|e| Box::new(convert_recurse(&e))),
+            convert_recurse(&cond.make_withmeta()).into_id(),
+            convert_recurse(&then.make_withmeta()).into_id(),
+            opt_else.map(|e| convert_recurse(&e.make_withmeta()).into_id()),
         ),
         Expr::Lambda(ids, opt_type, body) => Expr::Lambda(
             ids.clone(),
@@ -109,41 +113,34 @@ mod test {
         let sample = letrec!(
             "testfn",
             lambda!(
-                vec!["count"],
+                ["count"],
                 ifexpr!(
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     //this letrec should be converted to plain let
-                    letrec!(
-                        "lettest",
-                        number!("12.0").into_id(),
-                        Some(number!("2.0").into_id())
-                    )
+                    letrec!("lettest", number!("12.0"), Some(number!("2.0")))
                 )
-            )
-            .into_id(),
+            ),
             None
         );
         // top letrec should not be converted
         let ans = letrec!(
             "testfn",
             lambda!(
-                vec!["count"],
+                ["count"],
                 ifexpr!(
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     // this
-                    let_!(
-                        "lettest",
-                        number!("12.0").into_id(),
-                        number!("2.0").into_id()
-                    )
+                    let_!("lettest", number!("12.0"), number!("2.0"))
                 )
-            )
-            .into_id(),
+            ),
             None
         );
 
-        assert_eq!(convert_recurse(&sample), ans)
+        assert_eq!(
+            convert_recurse(&sample.make_withmeta()),
+            *ans.make_withmeta()
+        )
     }
 }
