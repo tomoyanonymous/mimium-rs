@@ -75,26 +75,6 @@ impl ExprId {
             std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
         })
     }
-
-    // TODO: remove this
-    pub fn make_withmeta(&self) -> Box<WithMeta<Expr>> {
-        Box::new(WithMeta(self.to_expr().clone(), self.to_span().clone()))
-    }
-}
-
-// TODO: remove this
-impl WithMeta<Expr> {
-    pub fn into_id(self) -> ExprId {
-        self.0.into_id(self.1)
-    }
-}
-
-// TODO: remove this
-pub fn make_withmeta_vec<T: AsRef<[ExprId]>>(x: T) -> Vec<WithMeta<Expr>> {
-    x.as_ref()
-        .iter()
-        .map(|e| *e.make_withmeta())
-        .collect::<Vec<_>>()
 }
 
 impl Expr {

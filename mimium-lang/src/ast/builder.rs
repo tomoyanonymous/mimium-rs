@@ -77,7 +77,7 @@ macro_rules! lambda {
                 })
                 .collect::<Vec<_>>(),
             None,
-            $body.into_id(),
+            $body,
         )
         .into_id(0..0)
     };
@@ -146,6 +146,6 @@ macro_rules! then {
 #[macro_export]
 macro_rules! ifexpr {
     ($cond:expr,$then:expr,$else_:expr) => {
-        WithMeta(Expr::If($cond, $then, Some($else_)), 0..0)
+        Expr::If($cond, $then, Some($else_)).into_id(0..0)
     };
 }
