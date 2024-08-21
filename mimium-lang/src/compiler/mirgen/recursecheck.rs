@@ -24,7 +24,8 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
         Expr::Proj(body, _idx) => try_find_recurse(&body.make_withmeta(), name),
         Expr::Block(body) => body.map_or(false, |b| try_find_recurse(&b.make_withmeta(), name)),
         Expr::Apply(fun, callee) => {
-            try_find_recurse(fun, name) || callee.into_iter().any(|v| try_find_recurse(&v, name))
+            try_find_recurse(&fun.make_withmeta(), name)
+                || callee.into_iter().any(|v| try_find_recurse(&v, name))
         }
         Expr::Tuple(vec) => vec.into_iter().any(|v| try_find_recurse(v, name)),
         Expr::If(cond, then, opt_else) => {
@@ -69,7 +70,10 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
             body.map(|b| Box::new(convert_recurse(&b.make_withmeta())))
                 .map(|b| b.into_id()),
         ),
-        Expr::Apply(fun, callee) => Expr::Apply(convert_recurse(fun).into(), convert_vec(callee)),
+        Expr::Apply(fun, callee) => Expr::Apply(
+            convert_recurse(&fun.make_withmeta()).into_id(),
+            convert_vec(callee),
+        ),
         Expr::If(cond, then, opt_else) => Expr::If(
             convert_recurse(cond).into(),
             convert_recurse(then).into(),

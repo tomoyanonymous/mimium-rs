@@ -130,12 +130,12 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             )))
         }
         Expr::Apply(fun, callee) => {
-            let fun = cls(*fun)?;
+            let fun = cls(*fun.make_withmeta())?;
             let elems: Vec<ConvertResult> = callee.into_iter().map(|e| cls(e)).try_collect()?;
             let elems_mapped: Vec<WithMeta<Expr>> =
                 elems.iter().map(|e| get_content(e.clone())).collect();
             let content = WithMeta(
-                Expr::Apply(Box::new(fun.clone().unwrap()), elems_mapped),
+                Expr::Apply(fun.clone().unwrap().into_id(), elems_mapped),
                 span,
             );
             if fun.is_ok() && elems.iter().find(|e| e.is_err()).is_none() {

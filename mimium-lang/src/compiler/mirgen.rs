@@ -446,7 +446,7 @@ impl Context {
             }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
-                let (f, ft) = self.eval_expr(f)?;
+                let (f, ft) = self.eval_expr(&f.make_withmeta())?;
                 let del = self.make_delay(&f, args)?;
                 if let Some(d) = del {
                     Ok((d, Type::Primitive(PType::Numeric)))

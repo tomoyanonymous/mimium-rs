@@ -124,7 +124,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .then_ignore(just(Token::ParenEnd))
                 .map_with_span(|(id, then), s| {
                     Expr::Escape(Box::new(WithMeta(
-                        Expr::Apply(Box::new(id), vec![then]),
+                        Expr::Apply(id.into_id(), vec![then]),
                         s.clone(),
                     )))
                 })
@@ -160,10 +160,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .map_with_span(|e, s| WithMeta(e, s))
                 .repeated();
             let folder = |f: WithMeta<Expr>, args: WithMeta<Vec<WithMeta<Expr>>>| {
-                WithMeta(
-                    Expr::Apply(Box::new(f.clone()), args.0),
-                    f.1.start..args.1.end,
-                )
+                let span = f.1.start..args.1.end;
+                WithMeta(Expr::Apply(f.into_id(), args.0), span)
             };
             let apply = atom.then(parenitems).foldl(folder).labelled("apply");
 
@@ -174,10 +172,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     let rhs_start = rhs.1.start;
                     let op_start = rhs_start - 1;
                     let span_end = rhs.1.end;
-                    let neg_op = Box::new(WithMeta(
-                        Expr::Var("neg".to_symbol(), None),
-                        op_start..rhs_start,
-                    ));
+                    let neg_op = Expr::Var("neg".to_symbol(), None).into_id(op_start..rhs_start);
                     WithMeta(
                         Expr::Apply(neg_op, vec![WithMeta(rhs.0, rhs.1)]),
                         op_start..span_end,
@@ -188,10 +183,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let op_cls = |x: WithMeta<_>, y: WithMeta<_>, op: Op, opspan: Span| {
                 WithMeta(
                     Expr::Apply(
-                        Box::new(WithMeta(
-                            Expr::Var(op.get_associated_fn_name(), None),
-                            opspan,
-                        )),
+                        Expr::Var(op.get_associated_fn_name(), None).into_id(opspan),
                         vec![x.clone(), y.clone()],
                     ),
                     x.1.start..y.1.end,
@@ -269,7 +261,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .then(op.then(cmp).repeated())
                 .foldl(|lhs, ((_, _), rhs)| {
                     let span = lhs.1.start..rhs.1.end;
-                    WithMeta(Expr::Apply(Box::new(rhs), vec![lhs]), span)
+                    WithMeta(Expr::Apply(rhs.into_id(), vec![lhs]), span)
                 })
                 .boxed();
 

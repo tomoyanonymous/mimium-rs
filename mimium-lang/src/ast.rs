@@ -112,7 +112,7 @@ pub enum Expr {
     Block(Option<ExprId>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(ExprId, i64),
-    Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
+    Apply(ExprId, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
     Assign(Symbol, Box<WithMeta<Self>>),
     Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
@@ -189,7 +189,7 @@ impl MiniPrint for Expr {
             Expr::Apply(e1, e2) => {
                 let es = e2.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
 
-                format!("(app {} ({}))", e1.0.simple_print(), concat_vec(&es))
+                format!("(app {} ({}))", e1.simple_print(), concat_vec(&es))
             }
             Expr::Lambda(params, _, body) => {
                 let paramstr = params.iter().map(|e| e.0.clone()).collect::<Vec<_>>();

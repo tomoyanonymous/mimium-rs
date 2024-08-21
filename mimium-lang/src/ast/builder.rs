@@ -40,7 +40,7 @@ macro_rules! var {
 #[macro_export]
 macro_rules! app {
     ($a:expr,$b:expr) => {
-        WithMeta(Expr::Apply(Box::new($a), $b), 0..0)
+        WithMeta(Expr::Apply($a.0.into_id_without_span(), $b), 0..0)
     };
 }
 

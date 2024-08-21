@@ -340,7 +340,7 @@ pub fn eval_ast(
                 .iter()
                 .map(|e| eval_ast(&Box::new(e.clone()), ctx))
                 .try_collect()?;
-            let func = eval_ast(f, ctx)?;
+            let func = eval_ast(&f.make_withmeta(), ctx)?;
             let res = match func.clone() {
                 Value::Function(params, b, mut n_ctx, _rt) => {
                     let mut argvec: Vec<_> = argv
@@ -357,11 +357,7 @@ pub fn eval_ast(
                     //todo: appropreate error type
                     eval_extern(n, &argv, span.clone())
                 }
-                _ => {
-                    let WithMeta(_, span) = f.as_ref();
-
-                    Err(CompileError(ErrorKind::NotApplicable, span.clone()))
-                }
+                _ => Err(CompileError(ErrorKind::NotApplicable, f.to_span().clone())),
             };
             res
         }

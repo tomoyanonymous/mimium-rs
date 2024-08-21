@@ -392,7 +392,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         }
         Expr::Var(name, _time) => lookup(&name, ctx, span),
         Expr::Apply(fun, callee) => {
-            let fnl = infer_type(fun, ctx)?;
+            let fnl = infer_type(&fun.make_withmeta(), ctx)?;
             let callee_t = infer_vec(callee, ctx)?;
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, Box::new(res_t), None);

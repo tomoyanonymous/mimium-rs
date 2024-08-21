@@ -136,7 +136,7 @@ hoge}",
 fn test_add() {
     let ans = WithMeta(
         Expr::Apply(
-            Box::new(WithMeta(Expr::Var("add".to_symbol(), None), 6..7)),
+            Expr::Var("add".to_symbol(), None).into_id(6..7),
             vec![
                 WithMeta(Expr::Literal(Literal::Float("3466.0".to_string())), 0..6),
                 WithMeta(Expr::Literal(Literal::Float("2000.0".to_string())), 7..13),
@@ -155,7 +155,7 @@ fn test_var() {
 fn test_apply() {
     let ans = WithMeta(
         Expr::Apply(
-            Box::new(WithMeta(Expr::Var("myfun".to_symbol(), None), 0..5)),
+            Expr::Var("myfun".to_symbol(), None).into_id(0..5),
             vec![WithMeta(Expr::Var("callee".to_symbol(), None), 6..12)],
         ),
         0..13,
@@ -166,10 +166,10 @@ fn test_apply() {
 fn test_applynested() {
     let ans = WithMeta(
         Expr::Apply(
-            Box::new(WithMeta(Expr::Var("myfun".to_symbol(), None), 0..5)),
+            Expr::Var("myfun".to_symbol(), None).into_id(0..5),
             vec![WithMeta(
                 Expr::Apply(
-                    Box::new(WithMeta(Expr::Var("myfun2".to_symbol(), None), 6..12)),
+                    Expr::Var("myfun2".to_symbol(), None).into_id(6..12),
                     vec![WithMeta(Expr::Var("callee".to_symbol(), None), 13..19)],
                 ),
                 6..20,
@@ -184,7 +184,7 @@ fn test_macroexpand() {
     let ans = WithMeta(
         Expr::Escape(Box::new(WithMeta(
             Expr::Apply(
-                Box::new(WithMeta(Expr::Var("myfun".to_symbol(), None), 0..6)),
+                Expr::Var("myfun".to_symbol(), None).into_id(0..6),
                 vec![WithMeta(Expr::Var("callee".to_symbol(), None), 7..13)],
             ),
             0..14,
