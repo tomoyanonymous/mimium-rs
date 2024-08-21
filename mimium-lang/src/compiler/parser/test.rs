@@ -29,11 +29,8 @@ fn test_let() {
                 },
                 4..8,
             ),
-            Box::new(WithMeta(Expr::Literal(Literal::Int(36)), 11..13)),
-            Some(Box::new(WithMeta(
-                Expr::Var("goge".to_symbol(), None),
-                15..19,
-            ))),
+            Expr::Literal(Literal::Int(36)).into_id(11..13),
+            Some(Expr::Var("goge".to_symbol(), None).into_id(15..19)),
         ),
         0..19,
     );
@@ -53,17 +50,12 @@ fn test_lettuple() {
                 },
                 4..9,
             ),
-            Box::new(WithMeta(
-                Expr::Tuple(vec![
-                    WithMeta(Expr::Literal(Literal::Int(36)), 13..15),
-                    WithMeta(Expr::Literal(Literal::Int(89)), 16..18),
-                ]),
-                12..19,
-            )),
-            Some(Box::new(WithMeta(
-                Expr::Var("hoge".to_symbol(), None),
-                21..25,
-            ))),
+            Expr::Tuple(vec![
+                WithMeta(Expr::Literal(Literal::Int(36)), 13..15),
+                WithMeta(Expr::Literal(Literal::Int(89)), 16..18),
+            ])
+            .into_id(12..19),
+            Some(Expr::Var("hoge".to_symbol(), None).into_id(21..25)),
         ),
         0..25,
     );
@@ -116,11 +108,8 @@ fn test_block() {
                     },
                     5..9,
                 ),
-                Box::new(WithMeta(Expr::Literal(Literal::Int(100)), 12..15)),
-                Some(Box::new(WithMeta(
-                    Expr::Var("hoge".to_symbol(), None),
-                    16..20,
-                ))),
+                Expr::Literal(Literal::Int(100)).into_id(12..15),
+                Some(Expr::Var("hoge".to_symbol(), None).into_id(16..20)),
             )
             .into_id(1..20),
         )),
@@ -205,29 +194,27 @@ fn test_fndef() {
                 )),
                 id: "hoge".to_symbol(),
             },
-            Box::new(WithMeta(
-                Expr::Lambda(
-                    vec![
-                        WithMeta(
-                            TypedId {
-                                ty: None,
-                                id: "input".to_symbol(),
-                            },
-                            8..13,
-                        ),
-                        WithMeta(
-                            TypedId {
-                                ty: None,
-                                id: "gue".to_symbol(),
-                            },
-                            14..17,
-                        ),
-                    ],
-                    None,
-                    Expr::Var("input".to_symbol(), None).into_id(21..26),
-                ),
-                0..28,
-            )),
+            Expr::Lambda(
+                vec![
+                    WithMeta(
+                        TypedId {
+                            ty: None,
+                            id: "input".to_symbol(),
+                        },
+                        8..13,
+                    ),
+                    WithMeta(
+                        TypedId {
+                            ty: None,
+                            id: "gue".to_symbol(),
+                        },
+                        14..17,
+                    ),
+                ],
+                None,
+                Expr::Var("input".to_symbol(), None).into_id(21..26),
+            )
+            .into_id(0..28),
             None,
         ),
         0..28,
@@ -242,33 +229,31 @@ fn test_macrodef() {
                 ty: None,
                 id: "hoge".to_symbol(),
             },
-            Box::new(WithMeta(
-                Expr::Lambda(
-                    vec![
-                        WithMeta(
-                            TypedId {
-                                ty: None,
-                                id: "input".to_symbol(),
-                            },
-                            11..16,
-                        ),
-                        WithMeta(
-                            TypedId {
-                                ty: None,
-                                id: "gue".to_symbol(),
-                            },
-                            17..20,
-                        ),
-                    ],
-                    None,
-                    Expr::Bracket(Box::new(WithMeta(
-                        Expr::Var("input".to_symbol(), None),
-                        24..29,
-                    )))
-                    .into_id(24..29),
-                ),
-                0..31,
-            )),
+            Expr::Lambda(
+                vec![
+                    WithMeta(
+                        TypedId {
+                            ty: None,
+                            id: "input".to_symbol(),
+                        },
+                        11..16,
+                    ),
+                    WithMeta(
+                        TypedId {
+                            ty: None,
+                            id: "gue".to_symbol(),
+                        },
+                        17..20,
+                    ),
+                ],
+                None,
+                Expr::Bracket(Box::new(WithMeta(
+                    Expr::Var("input".to_symbol(), None),
+                    24..29,
+                )))
+                .into_id(24..29),
+            )
+            .into_id(0..31),
             None,
         ),
         0..31,

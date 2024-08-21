@@ -116,13 +116,9 @@ pub enum Expr {
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprId),
     Then(ExprId, ExprId),
-    Feed(Symbol, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
-    Let(
-        WithMeta<TypedPattern>,
-        Box<WithMeta<Self>>,
-        Option<Box<WithMeta<Self>>>,
-    ),
-    LetRec(TypedId, Box<WithMeta<Self>>, Option<Box<WithMeta<Self>>>),
+    Feed(Symbol, ExprId), //feedback connection primitive operation. This will be shown only after self-removal stage
+    Let(WithMeta<TypedPattern>, ExprId, Option<ExprId>),
+    LetRec(TypedId, ExprId, Option<ExprId>),
     If(
         Box<WithMeta<Self>>,
         Box<WithMeta<Self>>,
@@ -199,18 +195,18 @@ impl MiniPrint for Expr {
                     body.simple_print()
                 )
             }
-            Expr::Feed(id, body) => format!("(feed {} {})", id, body.0.simple_print()),
+            Expr::Feed(id, body) => format!("(feed {} {})", id, body.simple_print()),
             Expr::Let(id, body, then) => format!(
                 "(let {} {} {})",
                 id.0,
-                body.0.simple_print(),
-                then.as_ref().map_or("".into(), |t| t.0.simple_print())
+                body.simple_print(),
+                then.map_or("".into(), |t| t.simple_print())
             ),
             Expr::LetRec(id, body, then) => format!(
                 "(letrec {} {} {})",
                 &id.id,
-                body.0.simple_print(),
-                then.as_ref().map_or("".into(), |t| t.0.simple_print())
+                body.simple_print(),
+                then.map_or("".into(), |t| t.simple_print())
             ),
             Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.simple_print()),
             Expr::Then(first, second) => {

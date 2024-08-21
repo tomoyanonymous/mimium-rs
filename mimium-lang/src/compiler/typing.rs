@@ -324,12 +324,12 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         Expr::Feed(id, body) => {
             let feedv = ctx.gen_intermediate_type();
             ctx.env.add_bind(&mut vec![(id.clone(), feedv.clone())]);
-            let b = infer_type(body, ctx);
+            let b = infer_type(&body.make_withmeta(), ctx);
             let res = ctx.unify_types(b?, feedv)?;
             if res.is_primitive() {
                 Ok(res)
             } else {
-                Err(Error(ErrorKind::NonPrimitiveInFeed, body.1.clone()))
+                Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
             }
         }
         Expr::Lambda(p, rtype, body) => {
@@ -353,7 +353,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         }
         Expr::Let(tpat, body, then) => {
             let c = ctx;
-            let bodyt = infer_type(body, c)?;
+            let bodyt = infer_type(&body.make_withmeta(), c)?;
             let idt = match tpat.0.ty.as_ref() {
                 Some(Type::Function(atypes, box rty, s)) => {
                     c.convert_unknown_function(atypes, rty, s)
@@ -365,7 +365,7 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
             let bodyt_u = c.unify_types(idt, bodyt)?;
             let _ = c.bind_pattern(&bodyt_u, tpat)?;
             let res = match then {
-                Some(e) => infer_type(e, c),
+                Some(e) => infer_type(&e.make_withmeta(), c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
             res
@@ -381,11 +381,11 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
 
             let body_i = c.gen_intermediate_type();
             c.env.add_bind(&mut vec![(id.clone().id, body_i)]);
-            let bodyt = infer_type(body, c)?;
+            let bodyt = infer_type(&body.make_withmeta(), c)?;
             let _ = c.unify_types(idt, bodyt)?;
 
             let res = match then {
-                Some(e) => infer_type(e, c),
+                Some(e) => infer_type(&e.make_withmeta(), c),
                 None => Ok(Type::Primitive(PType::Unit)),
             };
             res

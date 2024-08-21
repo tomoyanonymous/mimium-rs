@@ -369,7 +369,11 @@ pub fn eval_ast(
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);
-            let res = eval_with_new_env(e, ctx, &mut vec![(a.clone(), Value::Primitive(cellv))])?;
+            let res = eval_with_new_env(
+                &e.make_withmeta(),
+                ctx,
+                &mut vec![(a.clone(), Value::Primitive(cellv))],
+            )?;
             let pres = match res {
                 Value::Primitive(p) => Ok(p),
                 _ => Err(CompileError(ErrorKind::NonPrimitiveInFeed, span.clone())),
@@ -379,7 +383,7 @@ pub fn eval_ast(
             Ok(res)
         }
         ast::Expr::Let(WithMeta(TypedPattern { pat, ty: _t }, _s), e, then) => {
-            let e_v = eval_ast(e, ctx)?;
+            let e_v = eval_ast(&e.make_withmeta(), ctx)?;
             todo!()
             // match then {
             //     Some(t) => eval_with_new_env(t, ctx, &mut vec![(id.clone(), e_v)]),
@@ -388,12 +392,21 @@ pub fn eval_ast(
         }
         ast::Expr::LetRec(tid, e, then) => {
             let res_rec = eval_with_new_env(
-                e,
+                &e.make_withmeta(),
                 ctx,
-                &mut vec![(tid.clone().id, Value::FixPoint(tid.clone(), e.clone()))],
+                &mut vec![(
+                    tid.clone().id,
+                    Value::FixPoint(tid.clone(), e.make_withmeta()),
+                )],
             )?;
             then.as_ref()
-                .map(|t| eval_with_new_env(&t, ctx, &mut vec![(tid.id.clone(), res_rec)]))
+                .map(|t| {
+                    eval_with_new_env(
+                        &t.make_withmeta(),
+                        ctx,
+                        &mut vec![(tid.id.clone(), res_rec)],
+                    )
+                })
                 .unwrap_or(Ok(Value::Primitive(PValue::Unit)))
         }
         ast::Expr::If(cond, then, o_else) => {

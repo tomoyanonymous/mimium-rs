@@ -625,7 +625,7 @@ impl Context {
                         .add_bind(&mut vec![(id.clone(), tf.clone())]);
                     tf
                 };
-                let (retv, t) = self.eval_expr(expr)?;
+                let (retv, t) = self.eval_expr(&expr.make_withmeta())?;
 
                 if let (_, Instruction::GetState(ty)) =
                     self.get_current_basicblock().0.get_mut(insert_pos).unwrap()
@@ -646,7 +646,7 @@ impl Context {
                     self.get_current_basicblock().0.len()
                 };
                 let is_global = self.get_ctxdata().func_i == 0;
-                let (bodyv, t) = self.eval_expr(body)?;
+                let (bodyv, t) = self.eval_expr(&body.make_withmeta())?;
                 //todo:need to boolean and insert cast
                 let idt = match pat.0.ty.as_ref() {
                     Some(Type::Function(atypes, box rty, s)) => {
@@ -673,7 +673,7 @@ impl Context {
                             t.clone(),
                         ));
                         self.add_bind_pattern(pat, gv, &t)?;
-                        self.eval_expr(then_e)
+                        self.eval_expr(&then_e.make_withmeta())
                     }
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
@@ -689,11 +689,11 @@ impl Context {
                         ));
 
                         self.add_bind_pattern(pat, alloc_res, &t)?;
-                        self.eval_expr(then_e)
+                        self.eval_expr(&then_e.make_withmeta())
                     }
                     (_, _, Some(then_e)) => {
                         self.add_bind_pattern(pat, bodyv, &t)?;
-                        self.eval_expr(then_e)
+                        self.eval_expr(&then_e.make_withmeta())
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
                 }
@@ -719,7 +719,7 @@ impl Context {
                 // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
                 let bind = (id.id.clone(), fix);
                 self.add_bind(bind);
-                let (b, bt) = self.eval_expr(body)?;
+                let (b, bt) = self.eval_expr(&body.make_withmeta())?;
                 let rest = self.typeenv.unify_types(t, bt)?;
 
                 self.typeenv.env.add_bind(&mut vec![(id.id.clone(), rest)]);
@@ -732,7 +732,7 @@ impl Context {
                     .unwrap();
                 *v = b;
                 if let Some(then_e) = then {
-                    self.eval_expr(then_e)
+                    self.eval_expr(&then_e.make_withmeta())
                 } else {
                     Ok((Arc::new(Value::None), unit!()))
                 }

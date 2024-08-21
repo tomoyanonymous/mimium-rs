@@ -84,30 +84,30 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             Ok(elem.map(|e| (WithMeta(Expr::Proj(e.into_id(), idx), span))))
         }
         Expr::Let(id, body, then) => {
-            let body = cls(*body)?;
-            let then = opt_cls(then)?;
+            let body = cls(*body.make_withmeta())?;
+            let then = opt_cls(then.map(|x| x.make_withmeta()))?;
             if let (Ok(b), Ok(t)) = (body.clone(), then.clone().transpose()) {
                 Ok(ConvertResult::Ok(WithMeta(
-                    Expr::Let(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
+                    Expr::Let(id, b.into_id(), t.map(|e| e.into_id())),
                     span,
                 )))
             } else {
                 Ok(ConvertResult::Err(WithMeta(
                     Expr::Let(
                         id,
-                        Box::new(get_content(body)),
-                        then.map(|t| Box::new(get_content(t))),
+                        get_content(body).into_id(),
+                        then.map(|t| get_content(t).into_id()),
                     ),
                     span,
                 )))
             }
         }
         Expr::LetRec(id, body, then) => {
-            let body = cls(*body)?;
-            let then = opt_cls(then)?;
+            let body = cls(*body.make_withmeta())?;
+            let then = opt_cls(then.map(|x| x.make_withmeta()))?;
             if let (Ok(b), Ok(t)) = (body, then.transpose()) {
                 Ok(ConvertResult::Ok(WithMeta(
-                    Expr::LetRec(id, Box::new(b.clone()), t.map(|e| Box::new(e))),
+                    Expr::LetRec(id, b.into_id(), t.map(|e| e.into_id())),
                     span,
                 )))
             } else {
@@ -120,7 +120,7 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
             let nbody = match convert_self(*body.make_withmeta(), FeedId::Local(nfctx))? {
                 ConvertResult::Err(nbody) => {
                     let feedid = get_feedvar_name(nfctx);
-                    WithMeta(Expr::Feed(feedid, nbody.into()), span.clone())
+                    WithMeta(Expr::Feed(feedid, nbody.into_id()), span.clone())
                 }
                 ConvertResult::Ok(nbody) => nbody.clone(),
             };
@@ -203,20 +203,18 @@ mod test {
                     },
                     0..1,
                 ),
-                Box::new(WithMeta::<_>(
-                    Expr::Lambda(
-                        vec![WithMeta::<_>(
-                            TypedId {
-                                id: "input".to_symbol(),
-                                ty: None,
-                            },
-                            0..1,
-                        )],
-                        None,
-                        Expr::Literal(Literal::SelfLit).into_id(0..1),
-                    ),
-                    0..1,
-                )),
+                Expr::Lambda(
+                    vec![WithMeta::<_>(
+                        TypedId {
+                            id: "input".to_symbol(),
+                            ty: None,
+                        },
+                        0..1,
+                    )],
+                    None,
+                    Expr::Literal(Literal::SelfLit).into_id(0..1),
+                )
+                .into_id(0..1),
                 None,
             ),
             0..1,
@@ -231,24 +229,22 @@ mod test {
                 },
                 0..1,
             ),
-            Box::new(WithMeta::<_>(
-                Expr::Lambda(
-                    vec![WithMeta::<_>(
-                        TypedId {
-                            ty: None,
-                            id: "input".to_symbol(),
-                        },
-                        0..1,
-                    )],
-                    None,
-                    Expr::Feed(
-                        "feed_id0".to_symbol(),
-                        Box::new(WithMeta::<_>(Expr::Var("feed_id0".to_symbol(), None), 0..1)),
-                    )
-                    .into_id(0..1),
-                ),
-                0..1,
-            )),
+            Expr::Lambda(
+                vec![WithMeta::<_>(
+                    TypedId {
+                        ty: None,
+                        id: "input".to_symbol(),
+                    },
+                    0..1,
+                )],
+                None,
+                Expr::Feed(
+                    "feed_id0".to_symbol(),
+                    Expr::Var("feed_id0".to_symbol(), None).into_id(0..1),
+                )
+                .into_id(0..1),
+            )
+            .into_id(0..1),
             None,
         );
         assert_eq!(res, ans);

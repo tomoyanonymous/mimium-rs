@@ -10,8 +10,10 @@ fn try_find_recurse(e_s: &WithMeta<Expr>, name: &Symbol) -> bool {
     match e {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
-            try_find_recurse(body, name)
-                || then.as_ref().map_or(false, |e| try_find_recurse(&e, name))
+            try_find_recurse(&body.make_withmeta(), name)
+                || then
+                    .as_ref()
+                    .map_or(false, |e| try_find_recurse(&e.make_withmeta(), name))
         }
         Expr::LetRec(_id, _body, _then) => {
             //todo: start new search so we return false here
@@ -45,24 +47,24 @@ pub fn convert_recurse(e_s: &WithMeta<Expr>) -> WithMeta<Expr> {
     let WithMeta(e, span) = e_s;
     let res = match e {
         Expr::LetRec(id, body, then) => {
-            if !try_find_recurse(body, &id.id) {
+            if !try_find_recurse(&body.make_withmeta(), &id.id) {
                 Expr::Let(
                     WithMeta(TypedPattern::from(id.clone()), span.clone()),
-                    convert_recurse(body).into(),
-                    then.as_ref().map(|b| Box::new(convert_recurse(b))),
+                    convert_recurse(&body.make_withmeta()).into_id(),
+                    then.map(|b| convert_recurse(&b.make_withmeta()).into_id()),
                 )
             } else {
                 Expr::LetRec(
                     id.clone(),
-                    convert_recurse(body).into(),
-                    then.as_ref().map(|b| Box::new(convert_recurse(b))),
+                    convert_recurse(&body.make_withmeta()).into_id(),
+                    then.map(|b| convert_recurse(&b.make_withmeta()).into_id()),
                 )
             }
         }
         Expr::Let(id, body, then) => Expr::Let(
             id.clone(),
-            convert_recurse(body).into(),
-            then.as_ref().map(|t| convert_recurse(t).into()),
+            convert_recurse(&body.make_withmeta()).into_id(),
+            then.map(|t| convert_recurse(&t.make_withmeta()).into_id()),
         ),
         Expr::Tuple(es) => Expr::Tuple(convert_vec(es)),
         Expr::Proj(t, idx) => Expr::Proj(convert_recurse(&t.make_withmeta()).into_id(), *idx),
@@ -112,10 +114,14 @@ mod test {
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     //this letrec should be converted to plain let
-                    letrec!("lettest", number!("12.0"), Some(number!("2.0").into()))
+                    letrec!(
+                        "lettest",
+                        number!("12.0").into_id(),
+                        Some(number!("2.0").into_id())
+                    )
                 )
             )
-            .into(),
+            .into_id(),
             None
         );
         // top letrec should not be converted
@@ -127,10 +133,14 @@ mod test {
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     // this
-                    let_!("lettest", number!("12.0"), number!("2.0").into())
+                    let_!(
+                        "lettest",
+                        number!("12.0").into_id(),
+                        number!("2.0").into_id()
+                    )
                 )
             )
-            .into(),
+            .into_id(),
             None
         );
 

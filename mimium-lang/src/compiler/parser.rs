@@ -100,7 +100,13 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .then(expr.clone())
                 .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
                 .then(expr_group.clone().map(|e| Box::new(e)).or_not())
-                .map(|((ident, body), then)| Expr::Let(ident, Box::new(body), then))
+                .map(|((ident, body), then)| {
+                    Expr::Let(
+                        ident,
+                        body.into_id(),
+                        then.map(|x: Box<WithMeta<Expr>>| x.into_id()),
+                    )
+                })
                 .boxed()
                 .labelled("let");
 
@@ -347,11 +353,8 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 WithMeta(
                     Expr::LetRec(
                         fname,
-                        Box::new(WithMeta(
-                            Expr::Lambda(ids, r_type, block.into_id()),
-                            s.clone(),
-                        )),
-                        then,
+                        Expr::Lambda(ids, r_type, block.into_id()).into_id(s.clone()),
+                        then.map(|x| x.into_id()),
                     ),
                     s,
                 )
