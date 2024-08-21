@@ -114,8 +114,8 @@ pub enum Expr {
     Proj(ExprId, i64),
     Apply(ExprId, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprId), //lambda, maybe information for internal state is needed
-    Assign(Symbol, Box<WithMeta<Self>>),
-    Then(Box<WithMeta<Self>>, Box<WithMeta<Self>>),
+    Assign(Symbol, ExprId),
+    Then(ExprId, ExprId),
     Feed(Symbol, Box<WithMeta<Self>>), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(
         WithMeta<TypedPattern>,
@@ -212,12 +212,10 @@ impl MiniPrint for Expr {
                 body.0.simple_print(),
                 then.as_ref().map_or("".into(), |t| t.0.simple_print())
             ),
-            Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.0.simple_print()),
-            Expr::Then(first, second) => format!(
-                "(then {} {})",
-                first.0.simple_print(),
-                second.0.simple_print()
-            ),
+            Expr::Assign(lid, rhs) => format!("(assign {lid} {})", rhs.simple_print()),
+            Expr::Then(first, second) => {
+                format!("(then {} {})", first.simple_print(), second.simple_print())
+            }
             Expr::If(cond, then, optelse) => format!(
                 "(if {} {} {})",
                 cond.0.simple_print(),
