@@ -111,7 +111,7 @@ pub enum Expr {
     Var(Symbol, Option<Time>),
     Block(Option<ExprId>),
     Tuple(Vec<WithMeta<Self>>),
-    Proj(Box<WithMeta<Self>>, i64),
+    Proj(ExprId, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
     Lambda(Vec<WithMeta<TypedId>>, Option<Type>, Box<WithMeta<Self>>), //lambda, maybe information for internal state is needed
     Assign(Symbol, Box<WithMeta<Self>>),
@@ -164,6 +164,12 @@ fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
     }
 }
 
+impl MiniPrint for ExprId {
+    fn simple_print(&self) -> String {
+        self.to_expr().simple_print()
+    }
+}
+
 impl MiniPrint for Expr {
     fn simple_print(&self) -> String {
         match self {
@@ -179,7 +185,7 @@ impl MiniPrint for Expr {
                 let e1 = e.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
                 format!("(tuple ({}))", concat_vec(&e1))
             }
-            Expr::Proj(e, idx) => format!("(proj {} {})", e.0.simple_print(), idx),
+            Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
                 let es = e2.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
 

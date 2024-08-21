@@ -306,19 +306,19 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
         Expr::Literal(l) => infer_type_literal(l),
         Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e, ctx)?)),
         Expr::Proj(e, idx) => {
-            let tup = infer_type(e, ctx)?;
+            let tup = infer_type(&e.make_withmeta(), ctx)?;
             match tup {
                 Type::Tuple(vec) => {
                     if vec.len() < *idx as usize {
                         Err(Error(
                             ErrorKind::IndexOutOfRange(vec.len() as u16, *idx as u16),
-                            e.1.clone(),
+                            e.to_span().clone(),
                         ))
                     } else {
                         Ok(vec[*idx as usize].clone())
                     }
                 }
-                _ => Err(Error(ErrorKind::IndexForNonTuple, e.1.clone())),
+                _ => Err(Error(ErrorKind::IndexForNonTuple, e.to_span().clone())),
             }
         }
         Expr::Feed(id, body) => {

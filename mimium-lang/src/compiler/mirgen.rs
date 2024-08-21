@@ -8,7 +8,7 @@ use crate::mir::{self, Argument, Instruction, Mir, VPtr, VReg, Value};
 
 use std::sync::Arc;
 
-use crate::types::{PType, Type, TypeSize};
+use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};

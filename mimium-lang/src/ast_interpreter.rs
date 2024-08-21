@@ -322,8 +322,8 @@ pub fn eval_ast(
             Ok(Value::Tuple(res))
         }
         ast::Expr::Proj(t, i) => {
-            let v = eval_ast(t, ctx)?;
-            let WithMeta(_, span) = t.as_ref();
+            let v = eval_ast(&t.make_withmeta(), ctx)?;
+            let span = t.to_span();
             match v {
                 Value::Tuple(t) => t.get(*i as usize).map(|v| v.clone()).ok_or(CompileError(
                     ErrorKind::IndexOutOfRange(t.len() as u16, *i as u16),

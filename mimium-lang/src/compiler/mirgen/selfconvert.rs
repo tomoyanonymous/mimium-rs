@@ -80,8 +80,8 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
         }
 
         Expr::Proj(e, idx) => {
-            let elem = cls(*e)?;
-            Ok(elem.map(|e| (WithMeta(Expr::Proj(Box::new(e), idx), span))))
+            let elem = cls(*e.make_withmeta())?;
+            Ok(elem.map(|e| (WithMeta(Expr::Proj(e.into_id(), idx), span))))
         }
         Expr::Let(id, body, then) => {
             let body = cls(*body)?;
