@@ -107,7 +107,7 @@ fn test_string() {
 #[test]
 fn test_block() {
     let ans = WithMeta(
-        Expr::Block(Some(Box::new(WithMeta(
+        Expr::Block(Some(
             Expr::Let(
                 WithMeta(
                     TypedPattern {
@@ -121,9 +121,9 @@ fn test_block() {
                     Expr::Var("hoge".to_symbol(), None),
                     16..20,
                 ))),
-            ),
-            1..20,
-        )))),
+            )
+            .into_id(1..20),
+        )),
         0..21,
     );
     test_string!(

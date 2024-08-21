@@ -311,7 +311,7 @@ pub fn eval_ast(
         ast::Expr::Block(b) => b
             .as_ref()
             .map_or(Ok(Value::Primitive(PValue::Unit)), |body| {
-                eval_ast(&body, ctx)
+                eval_ast(&body.make_withmeta(), ctx)
             }),
         ast::Expr::Tuple(v) => {
             let res = v

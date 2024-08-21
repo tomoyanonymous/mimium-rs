@@ -167,7 +167,8 @@ fn convert_self(expr: WithMeta<Expr>, feedctx: FeedId) -> Result<ConvertResult, 
         }
         Expr::Block(body) => {
             if let Some(body) = body {
-                Ok(cls(*body)?.map(|e| WithMeta(Expr::Block(Some(Box::new(e))), span)))
+                Ok(cls(*body.make_withmeta())?
+                    .map(|e| WithMeta(Expr::Block(Some(e.0.into_id(e.1))), span)))
             } else {
                 Ok(ConvertResult::Ok(WithMeta(Expr::Block(None), span)))
             }

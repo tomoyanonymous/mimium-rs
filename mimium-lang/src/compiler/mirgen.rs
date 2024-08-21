@@ -383,7 +383,7 @@ impl Context {
             Expr::Var(name, _time) => self.eval_var(*name, span),
             Expr::Block(b) => {
                 if let Some(block) = b {
-                    self.eval_expr(block)
+                    self.eval_expr(&block.make_withmeta())
                 } else {
                     //todo?
                     Ok((Arc::new(Value::None), unit!()))

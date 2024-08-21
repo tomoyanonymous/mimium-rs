@@ -281,7 +281,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .clone()
             .padded_by(just(Token::LineBreak).or_not())
             .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
-            .map(|e: WithMeta<Expr>| Expr::Block(Some(Box::new(e))));
+            .map(|e: WithMeta<Expr>| Expr::Block(Some(e.into_id())));
 
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)

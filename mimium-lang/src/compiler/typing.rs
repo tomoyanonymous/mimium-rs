@@ -414,11 +414,9 @@ pub fn infer_type(e_span: &WithMeta<Expr>, ctx: &mut InferContext) -> Result<Typ
                 })?;
             ctx.unify_types(thent, elset)
         }
-        Expr::Block(expr) => expr
-            .clone()
-            .map_or(Ok(Type::Primitive(PType::Unit)), |box ref e| {
-                infer_type(e, ctx)
-            }),
+        Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| {
+            infer_type(&e.make_withmeta(), ctx)
+        }),
         _ => {
             // todo!();
             Ok(Type::Primitive(PType::Unit))

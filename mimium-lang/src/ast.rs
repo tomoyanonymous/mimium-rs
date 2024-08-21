@@ -75,12 +75,33 @@ impl ExprId {
             std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
         })
     }
+
+    // TODO: remove this
+    pub fn make_withmeta(&self) -> Box<WithMeta<Expr>> {
+        Box::new(WithMeta(self.to_expr().clone(), self.to_span().clone()))
+    }
+}
+
+// TODO: remove this
+impl WithMeta<Expr> {
+    pub fn into_id(self) -> ExprId {
+        self.0.into_id(self.1)
+    }
 }
 
 impl Expr {
-    pub fn into_id(self, span: Option<Span>) -> ExprId {
+    fn into_id_inner(self, span: Option<Span>) -> ExprId {
         let span = span.unwrap_or(0..0);
         with_session_globals(|session_globals| session_globals.store_expr_with_span(self, span))
+    }
+
+    pub fn into_id(self, span: Span) -> ExprId {
+        self.into_id_inner(Some(span))
+    }
+
+    // For testing purposes
+    pub fn into_id_without_span(self) -> ExprId {
+        self.into_id_inner(None)
     }
 }
 
@@ -88,7 +109,7 @@ impl Expr {
 pub enum Expr {
     Literal(Literal),
     Var(Symbol, Option<Time>),
-    Block(Option<Box<WithMeta<Self>>>),
+    Block(Option<ExprId>),
     Tuple(Vec<WithMeta<Self>>),
     Proj(Box<WithMeta<Self>>, i64),
     Apply(Box<WithMeta<Self>>, Vec<WithMeta<Self>>),
@@ -151,8 +172,8 @@ impl MiniPrint for Expr {
                 Some(t) => format!("{}@{}", v, t),
                 None => v.to_string(),
             },
-            Expr::Block(e) => e.as_ref().map_or("".to_string(), |box WithMeta(v, _s)| {
-                format!("(block {})", v.simple_print())
+            Expr::Block(e) => e.map_or("".to_string(), |eid| {
+                format!("(block {})", eid.to_expr().simple_print())
             }),
             Expr::Tuple(e) => {
                 let e1 = e.iter().map(|e| e.0.clone()).collect::<Vec<Expr>>();
