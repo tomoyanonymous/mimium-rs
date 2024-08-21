@@ -80,7 +80,7 @@ use crate::{
 };
 pub fn emit_ast(src: &str) -> Result<WithMeta<ast::Expr>, Vec<Box<dyn ReportableError>>> {
     let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-    Ok(recursecheck::convert_recurse(&ast))
+    Ok(*recursecheck::convert_recurse(&ast.into_id()).make_withmeta())
 }
 
 pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {

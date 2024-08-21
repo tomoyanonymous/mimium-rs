@@ -826,8 +826,8 @@ impl ReportableError for CompileError {
 }
 
 pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
-    let ast2 = recursecheck::convert_recurse(&src);
-    let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
+    let ast2 = recursecheck::convert_recurse(&src.into_id());
+    let expr2 = selfconvert::convert_self_top(*ast2.make_withmeta()).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
