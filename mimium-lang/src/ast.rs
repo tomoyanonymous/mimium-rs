@@ -5,7 +5,7 @@ use id_arena::Id;
 use crate::ast_interpreter::with_session_globals;
 use crate::pattern::{TypedId, TypedPattern};
 use crate::types::*;
-use crate::utils::metadata::WithMeta;
+use crate::utils::metadata::{Span, WithMeta};
 use crate::utils::miniprint::MiniPrint;
 use std::fmt::{self, Display};
 pub type Time = i64;
@@ -57,7 +57,32 @@ pub enum Literal {
     Now,
 }
 
-pub type ExprId = Id<Expr>;
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+pub struct ExprId(pub Id<Expr>);
+
+impl ExprId {
+    pub fn to_expr(&self) -> &Expr {
+        with_session_globals(|session_globals| unsafe {
+            // This transmute is needed to convince the borrow checker. Since
+            // the session_global should exist until the end of the session,
+            // this &Expr should live sufficiently long.
+            std::mem::transmute::<&Expr, &Expr>(session_globals.get_expr(*self))
+        })
+    }
+
+    pub fn to_span(&self) -> &Span {
+        with_session_globals(|session_globals| unsafe {
+            std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
+        })
+    }
+}
+
+impl Expr {
+    pub fn into_id(self, span: Option<Span>) -> ExprId {
+        let span = span.unwrap_or(0..0);
+        with_session_globals(|session_globals| session_globals.store_expr_with_span(self, span))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {

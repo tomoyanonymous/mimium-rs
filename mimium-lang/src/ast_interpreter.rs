@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::BTreeMap};
 
-use id_arena::{Arena, Id};
+use id_arena::Arena;
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{
@@ -107,7 +107,7 @@ pub struct SessionGlobals {
 
 impl SessionGlobals {
     fn store_expr(&mut self, expr: Expr) -> ExprId {
-        self.expr_storage.alloc(expr)
+        ExprId(self.expr_storage.alloc(expr))
     }
 
     fn store_span(&mut self, expr_id: ExprId, span: Span) {
@@ -121,7 +121,7 @@ impl SessionGlobals {
     }
 
     pub fn get_expr(&self, expr_id: ExprId) -> &Expr {
-        self.expr_storage.get(expr_id).expect("Unknown ExprID")
+        self.expr_storage.get(expr_id.0).expect("Unknown ExprID")
     }
 
     pub fn get_span(&self, expr_id: ExprId) -> &Span {
