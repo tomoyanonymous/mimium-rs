@@ -13,7 +13,7 @@ use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
-use crate::ast::{make_withmeta_vec, Expr, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, ExprId, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -70,15 +70,22 @@ impl Context {
         let i = self.get_ctxdata().func_i;
         &mut self.program.functions[i]
     }
-    fn make_delay(
-        &mut self,
-        f: &VPtr,
-        args: &[WithMeta<Expr>],
-    ) -> Result<Option<VPtr>, CompileError> {
-        match (f.as_ref(), args) {
+    fn make_delay(&mut self, f: &VPtr, args: &[ExprId]) -> Result<Option<VPtr>, CompileError> {
+        let (max, src, time) = match args {
+            [max, src, time] => (max, src, time),
+            _ => {
+                let span = match args.first() {
+                    Some(e) => e.to_span().clone(),
+                    None => 0..0, // something is wrong
+                };
+                return Err(CompileError(CompileErrorKind::UnboundedDelay, span));
+            }
+        };
+
+        match (f.as_ref(), max.to_expr()) {
             (
-                Value::ExtFunction(name, _ty),
-                [WithMeta(Expr::Literal(Literal::Float(max)), _span), src, time],
+                Value::ExtFunction(name, Type::Primitive(PType::Numeric)),
+                Expr::Literal(Literal::Float(max)),
             ) if *name == "delay".to_symbol() => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
@@ -90,7 +97,7 @@ impl Context {
                         .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
                     self.get_ctxdata().push_sum += coffset;
                 }
-                let args = self.eval_args(&[src.clone(), time.clone()])?;
+                let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<Type>) = args.into_iter().unzip();
                 let res = Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
@@ -99,11 +106,9 @@ impl Context {
                 ))));
                 res
             }
-            (Value::ExtFunction(name, _ty), [WithMeta(_max, span), _src, _time])
-                if *name == "delay".to_symbol() =>
-            {
-                Err(CompileError(CompileErrorKind::UnboundedDelay, span.clone()))
-            }
+            (Value::ExtFunction(name, _ty), _) if *name == "delay".to_symbol() => Err(
+                CompileError(CompileErrorKind::UnboundedDelay, max.to_span().clone()),
+            ),
 
             _ => Ok(None),
         }
@@ -356,10 +361,10 @@ impl Context {
         }
         res
     }
-    fn eval_args(&mut self, args: &[WithMeta<Expr>]) -> Result<Vec<(VPtr, Type)>, CompileError> {
+    fn eval_args(&mut self, args: &[ExprId]) -> Result<Vec<(VPtr, Type)>, CompileError> {
         args.iter()
             .map(|a_meta| -> Result<_, CompileError> {
-                let (v, t) = self.eval_expr(a_meta)?;
+                let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
                     // for the higher order function, make closure regardless it is global function
                     Value::Function(idx, _, _) => {
@@ -372,9 +377,9 @@ impl Context {
             })
             .try_collect::<Vec<_>>()
     }
-    pub fn eval_expr(&mut self, e_meta: &WithMeta<Expr>) -> Result<(VPtr, Type), CompileError> {
-        let WithMeta(e, span) = e_meta;
-        match e {
+    pub fn eval_expr(&mut self, e_meta: ExprId) -> Result<(VPtr, Type), CompileError> {
+        let span = e_meta.to_span();
+        match e_meta.to_expr() {
             Expr::Literal(lit) => {
                 let v = self.eval_literal(lit, span)?;
                 let t = infer_type_literal(lit).map_err(CompileError::from)?;
@@ -383,7 +388,7 @@ impl Context {
             Expr::Var(name, _time) => self.eval_var(*name, span),
             Expr::Block(b) => {
                 if let Some(block) = b {
-                    self.eval_expr(&block.make_withmeta())
+                    self.eval_expr(*block)
                 } else {
                     //todo?
                     Ok((Arc::new(Value::None), unit!()))
@@ -400,7 +405,7 @@ impl Context {
                 let mut types = vec![];
                 let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
-                    let (v, ty) = self.eval_expr(&e.make_withmeta())?;
+                    let (v, ty) = self.eval_expr(*e)?;
                     let ptr = if i == 0 {
                         dst.clone()
                     } else {
@@ -446,12 +451,12 @@ impl Context {
             }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
-                let (f, ft) = self.eval_expr(&f.make_withmeta())?;
-                let del = self.make_delay(&f, make_withmeta_vec(&args).as_slice())?;
+                let (f, ft) = self.eval_expr(*f)?;
+                let del = self.make_delay(&f, args)?;
                 if let Some(d) = del {
                     Ok((d, Type::Primitive(PType::Numeric)))
                 } else {
-                    let atvvec = self.eval_args(make_withmeta_vec(&args).as_slice())?;
+                    let atvvec = self.eval_args(&args)?;
                     let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
                     let rt = self.typeenv.gen_intermediate_type();
                     let ftype = self
@@ -549,7 +554,7 @@ impl Context {
                 let name = self.consume_fnlabel();
                 let (c_idx, f, res_type) =
                     self.do_in_child_ctx(name, binds.as_slice(), |ctx, c_idx| {
-                        let (res, mut res_type) = ctx.eval_expr(&body.make_withmeta())?;
+                        let (res, mut res_type) = ctx.eval_expr(*body)?;
                         res_type = if let Some(rt) = rett {
                             let tenv = &mut ctx.typeenv;
                             tenv.unify_types(rt.clone(), res_type.clone())
@@ -625,7 +630,7 @@ impl Context {
                         .add_bind(&mut vec![(id.clone(), tf.clone())]);
                     tf
                 };
-                let (retv, t) = self.eval_expr(&expr.make_withmeta())?;
+                let (retv, t) = self.eval_expr(*expr)?;
 
                 if let (_, Instruction::GetState(ty)) =
                     self.get_current_basicblock().0.get_mut(insert_pos).unwrap()
@@ -646,7 +651,7 @@ impl Context {
                     self.get_current_basicblock().0.len()
                 };
                 let is_global = self.get_ctxdata().func_i == 0;
-                let (bodyv, t) = self.eval_expr(&body.make_withmeta())?;
+                let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
                 let idt = match pat.0.ty.as_ref() {
                     Some(Type::Function(atypes, box rty, s)) => {
@@ -673,7 +678,7 @@ impl Context {
                             t.clone(),
                         ));
                         self.add_bind_pattern(pat, gv, &t)?;
-                        self.eval_expr(&then_e.make_withmeta())
+                        self.eval_expr(*then_e)
                     }
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
@@ -689,11 +694,11 @@ impl Context {
                         ));
 
                         self.add_bind_pattern(pat, alloc_res, &t)?;
-                        self.eval_expr(&then_e.make_withmeta())
+                        self.eval_expr(*then_e)
                     }
                     (_, _, Some(then_e)) => {
                         self.add_bind_pattern(pat, bodyv, &t)?;
-                        self.eval_expr(&then_e.make_withmeta())
+                        self.eval_expr(*then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
                 }
@@ -719,7 +724,7 @@ impl Context {
                 // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
                 let bind = (id.id.clone(), fix);
                 self.add_bind(bind);
-                let (b, bt) = self.eval_expr(&body.make_withmeta())?;
+                let (b, bt) = self.eval_expr(*body)?;
                 let rest = self.typeenv.unify_types(t, bt)?;
 
                 self.typeenv.env.add_bind(&mut vec![(id.id.clone(), rest)]);
@@ -732,13 +737,13 @@ impl Context {
                     .unwrap();
                 *v = b;
                 if let Some(then_e) = then {
-                    self.eval_expr(&then_e.make_withmeta())
+                    self.eval_expr(*then_e)
                 } else {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
             Expr::If(cond, then, else_) => {
-                let (c, t_cond) = self.eval_expr(&cond.make_withmeta())?;
+                let (c, t_cond) = self.eval_expr(*cond)?;
                 //todo:need to boolean and insert cast
                 self.typeenv.unify_types(t_cond, numeric!())?;
 
@@ -750,7 +755,7 @@ impl Context {
                 ));
                 //insert then block
                 self.add_new_basicblock();
-                let (t, thent) = self.eval_expr(&then.make_withmeta())?;
+                let (t, thent) = self.eval_expr(*then)?;
                 let t = match t.as_ref() {
                     Value::Function(idx, _, _) => {
                         let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
@@ -762,7 +767,7 @@ impl Context {
                 //insert else block
                 self.add_new_basicblock();
                 let (e, elset) = match else_ {
-                    Some(e) => self.eval_expr(&e.make_withmeta()),
+                    Some(e) => self.eval_expr(*e),
                     None => Ok((Arc::new(Value::None), unit!())),
                 }?;
                 //if returning non-closure function, make closure
@@ -832,7 +837,7 @@ pub fn compile(src: WithMeta<Expr>) -> Result<Mir, Box<dyn ReportableError>> {
         eb
     })?;
     let mut ctx = Context::new();
-    let _res = ctx.eval_expr(&expr2).map_err(|e| {
+    let _res = ctx.eval_expr(expr2.into_id()).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
