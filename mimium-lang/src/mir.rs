@@ -139,15 +139,20 @@ pub struct OpenUpValue(pub usize, pub TypeSize);
 pub struct Function {
     pub label: Symbol,
     pub args: Vec<Arc<Value>>,
-    pub argtypes: Vec<Type>,
-    pub return_type: OnceCell<Type>, // TODO: None is the state when the type is not inferred yet.
+    pub argtypes: Vec<TypeNodeId>,
+    pub return_type: OnceCell<TypeNodeId>, // TODO: None is the state when the type is not inferred yet.
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: Symbol, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
+    pub fn new(
+        name: Symbol,
+        args: &[VPtr],
+        argtypes: &[TypeNodeId],
+        upperfn_i: Option<usize>,
+    ) -> Self {
         Self {
             label: name,
             args: args.to_vec(),

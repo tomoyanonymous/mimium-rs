@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ast::Symbol;
+use crate::interner::TypeNodeId;
 use crate::mir::{self, Mir};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
@@ -206,17 +207,14 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 impl ByteCodeGenerator {
     //Calculate byte size of the value for type T based on 1 word size (=currently 64bit).
     //The base word size may change depending on the backend in the future.
-    fn word_size_for_type(ty: &Type) -> TypeSize {
-        match ty {
+    fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
+        match ty.to_type() {
             Type::Primitive(_) => 1,
             Type::Array(_ty) => todo!(),
-            Type::Tuple(types) => types
-                .iter()
-                .map(|t| Self::word_size_for_type(t.to_type()))
-                .sum(),
+            Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(*t)).sum(),
             Type::Struct(types) => types
                 .iter()
-                .map(|(_s, t)| Self::word_size_for_type(t.to_type()))
+                .map(|(_s, t)| Self::word_size_for_type(*t))
                 .sum(),
             Type::Function(_, _, _) => 1,
             Type::Ref(_) => 1,
@@ -339,14 +337,14 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::Alloc(t) => {
-                let size = Self::word_size_for_type(t) as u64;
+                let size = Self::word_size_for_type(t.clone().into_id()) as u64;
                 let _ = self.vregister.push_stack(&dst, size);
                 None
             }
             mir::Instruction::Load(ptr, ty) => {
                 let d = self.get_destination(dst);
                 let s = self.vregister.find_keep(ptr).unwrap();
-                let size = Self::word_size_for_type(ty);
+                let size = Self::word_size_for_type(ty.clone().into_id());
                 match (d, s, size) {
                     (d, s, 1) if d != s => Some(VmInstruction::Move(d, s)),
                     (d, s, size) if d != s => Some(VmInstruction::MoveRange(d, s, size)),
@@ -356,7 +354,7 @@ impl ByteCodeGenerator {
             mir::Instruction::Store(dst, src, ty) => {
                 let s = self.vregister.find(src).unwrap();
                 let d = self.vregister.find_keep(dst).unwrap();
-                let size = Self::word_size_for_type(ty);
+                let size = Self::word_size_for_type(ty.clone().into_id());
                 match (d, s, size) {
                     (d, s, 1) if d != s => Some(VmInstruction::Move(d, s)),
                     (d, s, size) if d != s => Some(VmInstruction::MoveRange(d, s, size)),
@@ -369,7 +367,7 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::GetGlobal(
                     dst,
                     idx,
-                    Self::word_size_for_type(ty),
+                    Self::word_size_for_type(ty.clone().into_id()),
                 ))
             }
             mir::Instruction::SetGlobal(v, src, ty) => {
@@ -378,7 +376,7 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::SetGlobal(
                     idx,
                     s,
-                    Self::word_size_for_type(ty),
+                    Self::word_size_for_type(ty.clone().into_id()),
                 ))
             }
             mir::Instruction::GetElement {
@@ -388,11 +386,11 @@ impl ByteCodeGenerator {
                 tuple_offset,
             } => {
                 let ptr = self.vregister.find_keep(value).unwrap() as usize;
-                let t_size = Self::word_size_for_type(ty.to_type());
+                let t_size = Self::word_size_for_type(*ty);
                 let tvec = ty.to_type().get_as_tuple().unwrap();
                 let t_offset: u64 = tvec[0..(*tuple_offset as _)]
                     .iter()
-                    .map(|t| Self::word_size_for_type(t.to_type()) as u64)
+                    .map(|t| Self::word_size_for_type(*t) as u64)
                     .sum();
                 let offset = t_size as u64 * *array_idx + t_offset as u64;
                 if offset != 0 {
@@ -415,7 +413,7 @@ impl ByteCodeGenerator {
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let fadd = self.prepare_function(bytecodes_dst, faddress, args);
                         let dst = self.get_destination(dst);
-                        let nret = Self::word_size_for_type(r_ty);
+                        let nret = Self::word_size_for_type(r_ty.clone().into_id());
                         bytecodes_dst.push(VmInstruction::Call(fadd, nargs, nret));
                         for a in args {
                             //reset register for args
@@ -441,7 +439,7 @@ impl ByteCodeGenerator {
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let fadd = self.prepare_function(bytecodes_dst, dst, args);
                         bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
-                        let nret = Self::word_size_for_type(ty);
+                        let nret = Self::word_size_for_type(ty.clone().into_id());
                         bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, nret));
                         for a in args {
                             //reset register for args
@@ -467,7 +465,7 @@ impl ByteCodeGenerator {
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let fadd = self.prepare_function(bytecodes_dst, faddress, args);
-                        let nret = Self::word_size_for_type(r_ty);
+                        let nret = Self::word_size_for_type(r_ty.clone().into_id());
                         bytecodes_dst.push(VmInstruction::CallCls(fadd, nargs, nret));
                         let dst = self.get_destination(dst);
                         for a in args {
@@ -494,7 +492,7 @@ impl ByteCodeGenerator {
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let size: u8 = Self::word_size_for_type(ty);
+                let size: u8 = Self::word_size_for_type(ty.clone().into_id());
                 let ouv = mir::OpenUpValue(v as usize, size);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
@@ -505,13 +503,13 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::GetUpValue(
                     d,
                     *i as Reg,
-                    Self::word_size_for_type(ty),
+                    Self::word_size_for_type(ty.clone().into_id()),
                 ))
             }
             mir::Instruction::SetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
-                let size: u8 = Self::word_size_for_type(ty);
+                let size: u8 = Self::word_size_for_type(ty.clone().into_id());
                 let ouv = mir::OpenUpValue(v as usize, size);
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
@@ -522,13 +520,13 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::SetUpValue(
                     d,
                     *i as Reg,
-                    Self::word_size_for_type(ty),
+                    Self::word_size_for_type(ty.clone().into_id()),
                 ))
             }
             mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
             mir::Instruction::GetState(ty) => {
-                let size = Self::word_size_for_type(ty);
+                let size = Self::word_size_for_type(ty.clone().into_id());
                 let d = self.vregister.push_stack(&dst, size as _);
                 Some(VmInstruction::GetState(d, size))
             }
@@ -599,7 +597,7 @@ impl ByteCodeGenerator {
                 unreachable!()
             }
             mir::Instruction::Return(v, rty) => {
-                let nret = Self::word_size_for_type(rty);
+                let nret = Self::word_size_for_type(rty.clone().into_id());
                 let inst = match v.as_ref() {
                     mir::Value::None => VmInstruction::Return0,
                     _ => VmInstruction::Return(self.vregister.find(v).unwrap(), nret),
@@ -609,11 +607,11 @@ impl ByteCodeGenerator {
             mir::Instruction::ReturnFeed(new, rty) => {
                 let old = self.vregister.add_newvalue(&dst);
                 let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                let size = Self::word_size_for_type(rty);
+                let size = Self::word_size_for_type(rty.clone().into_id());
                 bytecodes_dst.push(VmInstruction::GetState(old, size));
                 let new = self.vregister.find(new).unwrap();
                 bytecodes_dst.push(VmInstruction::SetState(new, size));
-                let nret = Self::word_size_for_type(rty);
+                let nret = Self::word_size_for_type(rty.clone().into_id());
                 Some(VmInstruction::Return(old, nret))
             }
             mir::Instruction::Delay(max, src, time) => {
@@ -666,11 +664,11 @@ impl ByteCodeGenerator {
     ) -> (Symbol, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
         let state_size = mirfunc.state_size
-            * Self::word_size_for_type(mirfunc.return_type.get().unwrap()) as u64;
+            * Self::word_size_for_type(*mirfunc.return_type.get().unwrap()) as u64;
         let mut func = vm::FuncProto {
             nparam: mirfunc.args.len(),
             nret: Self::word_size_for_type(
-                mirfunc
+                *mirfunc
                     .return_type
                     .get()
                     .expect("return type not inferred correctly"),
@@ -683,7 +681,7 @@ impl ByteCodeGenerator {
         };
         self.vregister.0.push(VRegister::default());
         for (a, t) in mirfunc.args.iter().zip(mirfunc.argtypes.iter()) {
-            let size = Self::word_size_for_type(t);
+            let size = Self::word_size_for_type(*t);
             self.vregister.push_stack(a, size as _);
         }
 
@@ -786,8 +784,13 @@ mod test {
             0,
             Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown.into_id())),
         ));
-        let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
-        func.return_type.get_or_init(|| numeric!());
+        let mut func = mir::Function::new(
+            "test".to_symbol(),
+            &[arg.clone()],
+            &[numeric!().into_id()],
+            None,
+        );
+        func.return_type.get_or_init(|| numeric!().into_id());
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));
         block.0.push((resint.clone(), mir::Instruction::Integer(1)));

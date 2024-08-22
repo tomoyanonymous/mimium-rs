@@ -1,6 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
-use crate::interner::ExprNodeId;
+use crate::interner::{ExprNodeId, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
@@ -217,7 +217,7 @@ impl Context {
         &mut self,
         name: Symbol,
         args: &[VPtr],
-        argtypes: &[Type],
+        argtypes: &[TypeNodeId],
         parent_i: Option<usize>,
     ) -> usize {
         let newf = mir::Function::new(name, args, argtypes, parent_i);
@@ -241,7 +241,10 @@ impl Context {
             .map(|(name, a, _)| (name.clone(), a.clone()))
             .collect::<Vec<_>>();
         let vbinds = binds.iter().map(|(_, a, t)| a.clone()).collect::<Vec<_>>();
-        let tbinds = binds.iter().map(|(_, _, t)| t.clone()).collect::<Vec<_>>();
+        let tbinds = binds
+            .iter()
+            .map(|(_, _, t)| t.clone().into_id())
+            .collect::<Vec<_>>();
         self.valenv.extend();
         self.valenv.add_bind(&mut abinds);
         let label = self.get_ctxdata().func_i;
@@ -263,7 +266,7 @@ impl Context {
 
         // TODO: ideally, type should be infered before the actual action
         let f = self.program.functions.get_mut(c_idx).unwrap();
-        f.return_type.get_or_init(|| ty.clone());
+        f.return_type.get_or_init(|| ty.clone().into_id());
 
         //post action
         let _ = self.data.pop();
