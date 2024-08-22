@@ -1,7 +1,8 @@
 use crate::ast::Symbol;
-use crate::interner::TypeNodeId;
+use crate::interner::{with_session_globals, SessionGlobals, TypeNodeId};
 //todo! need to replace with interned string.
 use crate::types::Type;
+use crate::utils::metadata::Span;
 use crate::utils::miniprint::MiniPrint;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +32,19 @@ pub struct TypedId {
     pub id: Symbol,
     pub ty: Option<TypeNodeId>,
 }
+
+impl TypedId {
+    pub fn to_span(&self) -> Option<&Span> {
+        with_session_globals(|session_globals| match &self.ty {
+            Some(tid) => unsafe {
+                let span = std::mem::transmute::<&Span, &Span>(session_globals.get_span(*tid));
+                Some(span)
+            },
+            None => None,
+        })
+    }
+}
+
 impl std::fmt::Display for TypedId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.ty {
@@ -54,6 +68,19 @@ pub struct TypedPattern {
     pub pat: Pattern,
     pub ty: Option<TypeNodeId>,
 }
+
+impl TypedPattern {
+    pub fn to_span(&self) -> Option<&Span> {
+        with_session_globals(|session_globals| match &self.ty {
+            Some(tid) => unsafe {
+                let span = std::mem::transmute::<&Span, &Span>(session_globals.get_span(*tid));
+                Some(span)
+            },
+            None => None,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct ConversionError;
 impl std::fmt::Display for ConversionError {
