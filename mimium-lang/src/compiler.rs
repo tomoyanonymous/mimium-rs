@@ -69,8 +69,8 @@ impl ReportableError for Error {
 use mirgen::recursecheck;
 
 use crate::{
-    ast::ExprNodeId,
     ast_interpreter,
+    interner::ExprNodeId,
     mir::Mir,
     runtime::vm,
     types::Type,

@@ -1,5 +1,6 @@
 use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
+use crate::interner::ExprNodeId;
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
@@ -13,7 +14,7 @@ use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
-use crate::ast::{Expr, ExprNodeId, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;

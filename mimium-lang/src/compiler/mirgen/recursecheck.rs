@@ -1,6 +1,7 @@
 ///remove redundunt letrec definition and convert them to plain let
 use crate::{
-    ast::{Expr, ExprNodeId, Symbol},
+    ast::{Expr, Symbol},
+    interner::ExprNodeId,
     pattern::TypedPattern,
     utils::metadata::WithMeta,
 };

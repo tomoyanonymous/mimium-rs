@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::interner::ExprNodeId;
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;

@@ -1,8 +1,6 @@
 pub mod builder;
 
-use id_arena::Id;
-
-use crate::ast_interpreter::with_session_globals;
+use crate::interner::{with_session_globals, ExprNodeId};
 use crate::pattern::{TypedId, TypedPattern};
 use crate::types::*;
 use crate::utils::metadata::{Span, WithMeta};
@@ -56,54 +54,6 @@ pub enum Literal {
     SelfLit,
     Now,
 }
-
-#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
-pub struct ExprNodeId(pub Id<Expr>);
-
-impl ExprNodeId {
-    pub fn to_expr(&self) -> &Expr {
-        with_session_globals(|session_globals| unsafe {
-            // This transmute is needed to convince the borrow checker. Since
-            // the session_global should exist until the end of the session,
-            // this &Expr should live sufficiently long.
-            std::mem::transmute::<&Expr, &Expr>(session_globals.get_expr(*self))
-        })
-    }
-
-    pub fn to_span(&self) -> &Span {
-        with_session_globals(|session_globals| unsafe {
-            std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum NodeId {
-    ExprArena(usize),
-    TypeArena(usize),
-}
-
-pub trait ToNodeId {
-    fn to_node_id(&self) -> NodeId;
-}
-
-impl ToNodeId for ExprNodeId {
-    fn to_node_id(&self) -> NodeId {
-        NodeId::ExprArena(self.0.index())
-    }
-}
-
-// ExprNodeId needs to implement Ord in order to be a key of BTreeMap. To implement
-// Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
-// implemented manually so that the actual expressions and spans are compared.
-
-impl PartialEq for ExprNodeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
-    }
-}
-
-impl Eq for ExprNodeId {}
 
 impl Expr {
     fn into_id_inner(self, span: Option<Span>) -> ExprNodeId {

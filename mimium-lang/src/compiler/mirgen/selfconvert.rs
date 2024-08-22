@@ -1,4 +1,5 @@
-use crate::ast::{Expr, ExprNodeId, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, Literal, Symbol, ToSymbol};
+use crate::interner::ExprNodeId;
 use crate::utils::{error::ReportableError, metadata::Span};
 use std::fmt;
 
