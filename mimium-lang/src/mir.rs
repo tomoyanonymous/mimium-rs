@@ -1,6 +1,7 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::{
     ast::Symbol,
+    interner::TypeNodeId,
     types::{Type, TypeSize},
 };
 use std::{cell::OnceCell, sync::Arc};
@@ -47,7 +48,7 @@ pub enum Instruction {
     // This instruction does no actual computation on runtime.
     GetElement {
         value: VPtr,
-        ty: Type,
+        ty: TypeNodeId,
         array_idx: u64,
         tuple_offset: u64,
     },

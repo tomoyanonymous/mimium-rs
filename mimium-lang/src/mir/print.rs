@@ -64,6 +64,7 @@ impl std::fmt::Display for Instruction {
                 array_idx,
                 tuple_offset,
             } => {
+                let ty = ty.to_type();
                 write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
             }
             Instruction::Call(fptr, args, rty) => {

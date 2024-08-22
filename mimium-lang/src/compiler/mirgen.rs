@@ -194,7 +194,7 @@ impl Context {
                     } else {
                         self.push_inst(Instruction::GetElement {
                             value: v.clone(),
-                            ty: ty.clone(),
+                            ty: ty.clone().into_id(),
                             array_idx: 0,
                             tuple_offset: i as u64,
                         })
@@ -407,7 +407,7 @@ impl Context {
                         inst_refs.push(self.get_current_basicblock().0.len());
                         self.push_inst(Instruction::GetElement {
                             value: dst.clone(),
-                            ty: Type::Unknown, // lazyly set after loops
+                            ty: Type::Unknown.into_id(), // lazyly set after loops
                             array_idx: 0,
                             tuple_offset: i as u64,
                         })
@@ -427,7 +427,7 @@ impl Context {
                         },
                     )) = self.get_current_basicblock().0.get_mut(*inst_i)
                     {
-                        *ty = tup_t.clone();
+                        *ty = tup_t.clone().into_id();
                     }
                 }
                 self.get_current_basicblock().0.insert(

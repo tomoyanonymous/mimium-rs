@@ -46,7 +46,7 @@ impl PValue {
     }
 }
 impl Value {
-    pub fn get_type(&self) -> Type {
+    fn get_type(&self) -> Type {
         match self {
             Value::Primitive(p) => p.get_type(),
             Value::String(_) => string_t!(),
@@ -55,11 +55,7 @@ impl Value {
                 a.iter()
                     .map(|TypedId { ty, id: _ }| ty.clone().expect("function argument untyped"))
                     .collect(),
-                r_type
-                    .as_ref()
-                    .expect("Return type cannot inferred")
-                    .clone()
-                    .into(), //todo!
+                r_type.expect("Return type cannot inferred"), //todo!
                 None,
             ),
             Value::FixPoint(TypedId { ty, id: _ }, _) => ty.clone().unwrap_or(unit!()),
