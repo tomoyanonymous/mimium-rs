@@ -1,11 +1,11 @@
 ///remove redundunt letrec definition and convert them to plain let
 use crate::{
-    ast::{Expr, ExprId, Symbol},
+    ast::{Expr, ExprNodeId, Symbol},
     pattern::TypedPattern,
     utils::metadata::WithMeta,
 };
 
-fn try_find_recurse(e_s: &ExprId, name: &Symbol) -> bool {
+fn try_find_recurse(e_s: &ExprNodeId, name: &Symbol) -> bool {
     match e_s.to_expr() {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
@@ -35,8 +35,8 @@ fn try_find_recurse(e_s: &ExprId, name: &Symbol) -> bool {
     }
 }
 
-pub fn convert_recurse(e_s: ExprId) -> ExprId {
-    let convert_vec = |v: &[ExprId]| v.iter().map(|e| convert_recurse(*e)).collect();
+pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
+    let convert_vec = |v: &[ExprNodeId]| v.iter().map(|e| convert_recurse(*e)).collect();
     let span = e_s.to_span();
     let res = match e_s.to_expr() {
         Expr::LetRec(id, body, then) => {

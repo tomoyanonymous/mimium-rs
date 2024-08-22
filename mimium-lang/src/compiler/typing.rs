@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprId, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, ExprNodeId, Literal, Symbol, ToSymbol};
 use crate::compiler::intrinsics;
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
@@ -294,9 +294,9 @@ pub fn lookup(name: &Symbol, ctx: &mut InferContext, span: &Span) -> Result<Type
     )
 }
 
-pub fn infer_type(e_meta: ExprId, ctx: &mut InferContext) -> Result<Type, Error> {
+pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Error> {
     let span = e_meta.to_span().clone();
-    let infer_vec = |e: &[ExprId], ctx: &mut InferContext| {
+    let infer_vec = |e: &[ExprNodeId], ctx: &mut InferContext| {
         e.iter()
             .map(|e| infer_type(*e, ctx))
             .collect::<Result<Vec<_>, Error>>()

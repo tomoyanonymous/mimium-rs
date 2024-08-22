@@ -4,7 +4,7 @@ use id_arena::Arena;
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{
-    ast::{self, Expr, ExprId, Symbol, ToSymbol},
+    ast::{self, Expr, ExprNodeId, Symbol, ToSymbol},
     compiler::{Error as CompileError, ErrorKind},
     integer, numeric,
     pattern::{TypedId, TypedPattern},
@@ -31,8 +31,8 @@ pub enum Value {
     String(String),
     Tuple(Vec<Value>),
     //Function value holds return type
-    Function(Vec<TypedId>, ExprId, Context, Option<Type>),
-    FixPoint(TypedId, ExprId),
+    Function(Vec<TypedId>, ExprNodeId, Context, Option<Type>),
+    FixPoint(TypedId, ExprNodeId),
     External(Symbol),
 }
 impl PValue {
@@ -97,29 +97,29 @@ const EXTERN_SYMS: [&str; 28] = [
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
     pub expr_storage: Arena<Expr>,
-    pub span_storage: BTreeMap<ExprId, Span>,
+    pub span_storage: BTreeMap<ExprNodeId, Span>,
 }
 
 impl SessionGlobals {
-    fn store_expr(&mut self, expr: Expr) -> ExprId {
-        ExprId(self.expr_storage.alloc(expr))
+    fn store_expr(&mut self, expr: Expr) -> ExprNodeId {
+        ExprNodeId(self.expr_storage.alloc(expr))
     }
 
-    fn store_span(&mut self, expr_id: ExprId, span: Span) {
+    fn store_span(&mut self, expr_id: ExprNodeId, span: Span) {
         self.span_storage.insert(expr_id, span);
     }
 
-    pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprId {
+    pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
         let expr_id = self.store_expr(expr);
         self.store_span(expr_id, span);
         expr_id
     }
 
-    pub fn get_expr(&self, expr_id: ExprId) -> &Expr {
+    pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {
         self.expr_storage.get(expr_id.0).expect("Unknown ExprID")
     }
 
-    pub fn get_span(&self, expr_id: ExprId) -> &Span {
+    pub fn get_span(&self, expr_id: ExprNodeId) -> &Span {
         self.span_storage.get(&expr_id).expect("Unknown ExprID")
     }
 }
@@ -153,7 +153,7 @@ fn eval_literal(e: &ast::Literal) -> Value {
     }
 }
 
-fn eval_condition<'a>(e: ExprId, ctx: &mut Context) -> Result<bool, CompileError> {
+fn eval_condition<'a>(e: ExprNodeId, ctx: &mut Context) -> Result<bool, CompileError> {
     let c_v = eval_ast(e, ctx)?;
 
     match c_v.clone() {
@@ -179,7 +179,7 @@ fn getcell<'a, 'ctx: 'a>(ctx: &'ctx mut Context) -> &'a mut PValue {
 }
 
 fn eval_with_new_env(
-    e_meta: ExprId,
+    e_meta: ExprNodeId,
     ctx: &mut Context,
     names: &mut Vec<(Symbol, Value)>,
 ) -> Result<Value, CompileError> {
@@ -277,7 +277,7 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
     }
 }
 
-pub fn eval_ast(e_meta: ExprId, ctx: &mut Context) -> Result<Value, CompileError> {
+pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileError> {
     let env = &mut ctx.env;
     let span = e_meta.to_span();
     match e_meta.to_expr() {

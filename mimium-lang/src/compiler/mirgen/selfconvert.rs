@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprId, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, ExprNodeId, Literal, Symbol, ToSymbol};
 use crate::utils::{error::ReportableError, metadata::Span};
 use std::fmt;
 
@@ -7,8 +7,8 @@ pub enum Error {
     NoParentSelf(Span),
 }
 
-type ConvertResult = Result<ExprId, ExprId>;
-fn get_content(e: ConvertResult) -> ExprId {
+type ConvertResult = Result<ExprNodeId, ExprNodeId>;
+fn get_content(e: ConvertResult) -> ExprNodeId {
     match e {
         Ok(e) | Err(e) => e,
     }
@@ -48,9 +48,9 @@ fn get_feedvar_name(fid: i64) -> Symbol {
     format!("feed_id{}", fid).to_symbol()
 }
 
-fn convert_self(e_id: ExprId, feedctx: FeedId) -> Result<ConvertResult, Error> {
-    let cls = |e: ExprId| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
-    let opt_cls = |opt_e: Option<ExprId>| -> Result<Option<ConvertResult>, Error> {
+fn convert_self(e_id: ExprNodeId, feedctx: FeedId) -> Result<ConvertResult, Error> {
+    let cls = |e: ExprNodeId| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
+    let opt_cls = |opt_e: Option<ExprNodeId>| -> Result<Option<ConvertResult>, Error> {
         opt_e.map(cls).transpose()
     };
     let span = e_id.to_span().clone();
@@ -63,7 +63,7 @@ fn convert_self(e_id: ExprId, feedctx: FeedId) -> Result<ConvertResult, Error> {
         },
         Expr::Tuple(v) => {
             let elems: Vec<ConvertResult> = v.into_iter().map(&cls).try_collect()?;
-            let elems_mapped: Vec<ExprId> = elems.iter().map(|e| get_content(*e)).collect();
+            let elems_mapped: Vec<ExprNodeId> = elems.iter().map(|e| get_content(*e)).collect();
             if elems.iter().any(|e| e.is_err()) {
                 Ok(ConvertResult::Err(Expr::Tuple(elems_mapped).into_id(span)))
             } else {
@@ -112,7 +112,7 @@ fn convert_self(e_id: ExprId, feedctx: FeedId) -> Result<ConvertResult, Error> {
         Expr::Apply(fun, callee) => {
             let fun = cls(fun)?;
             let elems: Vec<ConvertResult> = callee.into_iter().map(cls).try_collect()?;
-            let elems_mapped: Vec<ExprId> = elems.iter().map(|e| get_content(*e)).collect();
+            let elems_mapped: Vec<ExprNodeId> = elems.iter().map(|e| get_content(*e)).collect();
             let content = Expr::Apply(fun.unwrap(), elems_mapped).into_id(span);
             if fun.is_ok() && !elems.iter().any(|e| e.is_err()) {
                 Ok(ConvertResult::Ok(content))
@@ -152,7 +152,7 @@ fn convert_self(e_id: ExprId, feedctx: FeedId) -> Result<ConvertResult, Error> {
     }
 }
 
-pub fn convert_self_top(expr: ExprId) -> Result<ExprId, Error> {
+pub fn convert_self_top(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
     let res = convert_self(expr, FeedId::Global)?;
     Ok(get_content(res))
 }

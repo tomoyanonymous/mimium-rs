@@ -58,9 +58,9 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord)]
-pub struct ExprId(pub Id<Expr>);
+pub struct ExprNodeId(pub Id<Expr>);
 
-impl ExprId {
+impl ExprNodeId {
     pub fn to_expr(&self) -> &Expr {
         with_session_globals(|session_globals| unsafe {
             // This transmute is needed to convince the borrow checker. Since
@@ -77,30 +77,30 @@ impl ExprId {
     }
 }
 
-// ExprId needs to implement Ord in order to be a key of BTreeMap. To implement
+// ExprNodeId needs to implement Ord in order to be a key of BTreeMap. To implement
 // Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
 // implemented manually so that the actual expressions and spans are compared.
 
-impl PartialEq for ExprId {
+impl PartialEq for ExprNodeId {
     fn eq(&self, other: &Self) -> bool {
         self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
     }
 }
 
-impl Eq for ExprId {}
+impl Eq for ExprNodeId {}
 
 impl Expr {
-    fn into_id_inner(self, span: Option<Span>) -> ExprId {
+    fn into_id_inner(self, span: Option<Span>) -> ExprNodeId {
         let span = span.unwrap_or(0..0);
         with_session_globals(|session_globals| session_globals.store_expr_with_span(self, span))
     }
 
-    pub fn into_id(self, span: Span) -> ExprId {
+    pub fn into_id(self, span: Span) -> ExprNodeId {
         self.into_id_inner(Some(span))
     }
 
     // For testing purposes
-    pub fn into_id_without_span(self) -> ExprId {
+    pub fn into_id_without_span(self) -> ExprNodeId {
         self.into_id_inner(None)
     }
 }
@@ -109,20 +109,20 @@ impl Expr {
 pub enum Expr {
     Literal(Literal),
     Var(Symbol, Option<Time>),
-    Block(Option<ExprId>),
-    Tuple(Vec<ExprId>),
-    Proj(ExprId, i64),
-    Apply(ExprId, Vec<ExprId>),
-    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprId), //lambda, maybe information for internal state is needed
-    Assign(Symbol, ExprId),
-    Then(ExprId, ExprId),
-    Feed(Symbol, ExprId), //feedback connection primitive operation. This will be shown only after self-removal stage
-    Let(WithMeta<TypedPattern>, ExprId, Option<ExprId>),
-    LetRec(TypedId, ExprId, Option<ExprId>),
-    If(ExprId, ExprId, Option<ExprId>),
+    Block(Option<ExprNodeId>),
+    Tuple(Vec<ExprNodeId>),
+    Proj(ExprNodeId, i64),
+    Apply(ExprNodeId, Vec<ExprNodeId>),
+    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprNodeId), //lambda, maybe information for internal state is needed
+    Assign(Symbol, ExprNodeId),
+    Then(ExprNodeId, ExprNodeId),
+    Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage
+    Let(WithMeta<TypedPattern>, ExprNodeId, Option<ExprNodeId>),
+    LetRec(TypedId, ExprNodeId, Option<ExprNodeId>),
+    If(ExprNodeId, ExprNodeId, Option<ExprNodeId>),
     //exprimental macro system using multi-stage computation
-    Bracket(ExprId),
-    Escape(ExprId),
+    Bracket(ExprNodeId),
+    Escape(ExprNodeId),
 
     Error,
 }
@@ -156,13 +156,13 @@ fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
     }
 }
 
-impl MiniPrint for ExprId {
+impl MiniPrint for ExprNodeId {
     fn simple_print(&self) -> String {
         self.to_expr().simple_print()
     }
 }
 
-impl MiniPrint for Option<ExprId> {
+impl MiniPrint for Option<ExprNodeId> {
     fn simple_print(&self) -> String {
         match self {
             Some(e) => e.to_expr().simple_print(),

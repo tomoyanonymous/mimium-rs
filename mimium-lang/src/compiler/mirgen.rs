@@ -13,7 +13,7 @@ use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Span, WithMeta};
 
-use crate::ast::{Expr, ExprId, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, ExprNodeId, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -70,7 +70,7 @@ impl Context {
         let i = self.get_ctxdata().func_i;
         &mut self.program.functions[i]
     }
-    fn make_delay(&mut self, f: &VPtr, args: &[ExprId]) -> Result<Option<VPtr>, CompileError> {
+    fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
         let (max, src, time) = match args {
             [max, src, time] => (max, src, time),
             _ => return Ok(None),
@@ -355,7 +355,7 @@ impl Context {
         }
         res
     }
-    fn eval_args(&mut self, args: &[ExprId]) -> Result<Vec<(VPtr, Type)>, CompileError> {
+    fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, Type)>, CompileError> {
         args.iter()
             .map(|a_meta| -> Result<_, CompileError> {
                 let (v, t) = self.eval_expr(*a_meta)?;
@@ -371,7 +371,7 @@ impl Context {
             })
             .try_collect::<Vec<_>>()
     }
-    pub fn eval_expr(&mut self, e_meta: ExprId) -> Result<(VPtr, Type), CompileError> {
+    pub fn eval_expr(&mut self, e_meta: ExprNodeId) -> Result<(VPtr, Type), CompileError> {
         let span = e_meta.to_span();
         match e_meta.to_expr() {
             Expr::Literal(lit) => {
@@ -824,7 +824,7 @@ impl ReportableError for CompileError {
     }
 }
 
-pub fn compile(root_expr_id: ExprId) -> Result<Mir, Box<dyn ReportableError>> {
+pub fn compile(root_expr_id: ExprNodeId) -> Result<Mir, Box<dyn ReportableError>> {
     let ast2 = recursecheck::convert_recurse(root_expr_id);
     let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);

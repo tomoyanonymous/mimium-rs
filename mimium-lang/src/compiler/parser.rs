@@ -84,12 +84,12 @@ fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple
     with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
 }
 
-fn expr_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
+fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser();
     let pattern = pattern_parser();
     let val = val_parser();
     let expr_group = recursive(|expr_group| {
-        let expr = recursive(|expr: Recursive<Token, ExprId, Simple<Token>>| {
+        let expr = recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
             let parenexpr = expr
                 .clone()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
@@ -155,7 +155,7 @@ fn expr_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
                 .clone()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                 .repeated();
-            let folder = |f: ExprId, args: Vec<ExprId>| {
+            let folder = |f: ExprNodeId, args: Vec<ExprNodeId>| {
                 let f_span = f.to_span();
                 // TODO: this doesn't include the span of the closing parenthesis
                 let span_end = match args.as_slice() {
@@ -179,7 +179,7 @@ fn expr_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
                 })
                 .labelled("unary");
 
-            let op_cls = |x: ExprId, y: ExprId, op: Op, opspan: Span| {
+            let op_cls = |x: ExprNodeId, y: ExprNodeId, op: Op, opspan: Span| {
                 Expr::Apply(
                     Expr::Var(op.get_associated_fn_name(), None).into_id(opspan),
                     vec![x, y],
@@ -270,7 +270,7 @@ fn expr_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
             .clone()
             .padded_by(just(Token::LineBreak).or_not())
             .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
-            .map(|e: ExprId| Expr::Block(Some(e)));
+            .map(|e: ExprNodeId| Expr::Block(Some(e)));
 
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
@@ -295,7 +295,7 @@ fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
     select! {Token::Comment(Comment::SingleLine(_t))=>(),
     Token::Comment(Comment::MultiLine(_t))=>()}
 }
-fn func_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
+fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
     let lvar = lvar_parser();
     let blockstart = just(Token::BlockBegin)
@@ -376,7 +376,7 @@ fn func_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
     // expr_parser().then_ignore(end())
 }
 
-fn parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
+fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let ignored = comment_parser()
         .or(just(Token::LineBreak).ignored())
         .or(just(Token::SemiColon).ignored());
@@ -385,7 +385,7 @@ fn parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
         .then_ignore(end())
 }
 
-pub(crate) fn add_global_context(ast: ExprId) -> ExprId {
+pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
     let span = ast.to_span();
     let res = Expr::Let(
         WithMeta(
@@ -400,7 +400,7 @@ pub(crate) fn add_global_context(ast: ExprId) -> ExprId {
     );
     res.into_id(span.clone())
 }
-pub fn parse(src: &str) -> Result<ExprId, Vec<Box<dyn ReportableError>>> {
+pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
