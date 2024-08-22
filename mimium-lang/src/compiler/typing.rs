@@ -168,7 +168,7 @@ impl InferContext {
                         .map_or(false, |r| self.occur_check(id2, r.clone()))
                 }
             }
-            Type::Array(a) => cls(*a),
+            Type::Array(a) => cls(a.to_type().clone()),
             Type::Tuple(t) => vec_cls(t),
             Type::Function(p, r, s) => {
                 vec_cls(p) && cls(*r) && cls(*s.unwrap_or(Box::new(Type::Unknown)))
@@ -218,9 +218,10 @@ impl InferContext {
                 self.subst_map.insert(i, t.clone());
                 Ok(t)
             }
-            (Type::Array(box a1), Type::Array(box a2)) => {
-                Ok(Type::Array(Box::new(self.unify_types(a1, a2)?)))
-            }
+            (Type::Array(a1), Type::Array(a2)) => Ok(Type::Array(
+                self.unify_types(a1.to_type().clone(), a2.to_type().clone())?
+                    .into_id_without_span(),
+            )),
             (Type::Ref(box x1), Type::Ref(box x2)) => {
                 Ok(Type::Ref(Box::new(self.unify_types(x1, x2)?)))
             }

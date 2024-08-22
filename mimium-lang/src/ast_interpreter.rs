@@ -105,7 +105,7 @@ fn eval_literal(e: &ast::Literal) -> Value {
     }
 }
 
-fn eval_condition<'a>(e: ExprNodeId, ctx: &mut Context) -> Result<bool, CompileError> {
+fn eval_condition(e: ExprNodeId, ctx: &mut Context) -> Result<bool, CompileError> {
     let c_v = eval_ast(e, ctx)?;
 
     match c_v.clone() {

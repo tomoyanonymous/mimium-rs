@@ -1,6 +1,11 @@
 use std::fmt;
 
-use crate::{ast::Symbol, format_vec};
+use crate::{
+    ast::Symbol,
+    format_vec,
+    interner::{with_session_globals, TypeNodeId},
+    utils::metadata::Span,
+};
 
 /// Basic types that are not boxed.
 /// They should be splitted semantically as the type of `feed x.e`cannot take function type.
@@ -15,7 +20,7 @@ pub enum PType {
 pub enum Type {
     Primitive(PType),
     //aggregate types
-    Array(Box<Self>),
+    Array(TypeNodeId),
     Tuple(Vec<Self>),
     Struct(Vec<(Symbol, Box<Self>)>),
     //Function that has a vector of parameters, return type, and type for internal states.
@@ -49,10 +54,12 @@ impl Type {
         F: Fn(Self) -> Self,
     {
         let apply_box = |a: &Self| -> Box<Self> { Box::new(closure(a.clone())) };
+        let apply_scalar =
+            |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id_without_span() };
         let apply_vec =
             |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
         match self {
-            Type::Array(a) => Type::Array(apply_box(a)),
+            Type::Array(a) => Type::Array(apply_scalar(*a)),
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
             Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => {
@@ -77,6 +84,19 @@ impl Type {
             _ => None,
         }
     }
+
+    fn into_id_inner(self, span: Option<Span>) -> TypeNodeId {
+        let span = span.unwrap_or(0..0);
+        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
+    }
+
+    pub fn into_id(self, span: Span) -> TypeNodeId {
+        self.into_id_inner(Some(span))
+    }
+
+    pub fn into_id_without_span(self) -> TypeNodeId {
+        self.into_id_inner(None)
+    }
 }
 impl fmt::Display for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -93,7 +113,7 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Type::Primitive(p) => write!(f, "{p}"),
-            Type::Array(a) => write!(f, "[{a}]"),
+            Type::Array(a) => write!(f, "[{}]", a.to_type()),
             Type::Tuple(v) => {
                 let vf = format_vec!(v, ",");
                 write!(f, "({vf})")
