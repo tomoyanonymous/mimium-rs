@@ -412,12 +412,10 @@ impl Machine {
     }
     fn close_upvalues(&mut self, iret: Reg, nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
         for (base_ptr_cls, clsidx) in local_closures.iter() {
-            let start = iret + self.base_pointer as u8 + iret;
-            // let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
-            let is_escaping = true; //TODO
+            let start = iret;
+            let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
             if is_escaping {
                 let cls = self.get_local_closure(*clsidx);
-
                 let newupvls = cls
                     .upvalues
                     .iter()
@@ -433,8 +431,8 @@ impl Machine {
                     .collect::<Vec<_>>();
                 self.get_local_closure_mut(*clsidx).upvalues = newupvls;
             } else {
-                //todo: release closure
-                // self.closures[clsidx.0] = ;
+                log::trace!("release closure {:?}",clsidx.0);
+                self.closures.remove(clsidx.0);
             }
         }
     }
