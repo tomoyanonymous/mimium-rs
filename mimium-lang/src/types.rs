@@ -2,7 +2,12 @@ use std::fmt;
 
 use id_arena::Id;
 
-use crate::{ast::Symbol, format_vec};
+use crate::{
+    ast::{NodeId, Symbol, ToNodeId},
+    ast_interpreter::with_session_globals,
+    format_vec,
+    utils::metadata::Span,
+};
 
 use super::utils::miniprint::MiniPrint;
 
@@ -29,6 +34,41 @@ pub enum Type {
     Code(Box<Self>),
     Intermediate(i64),
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
+pub struct TypeNodeId(pub Id<Type>);
+
+impl TypeNodeId {
+    pub fn to_type(&self) -> &Type {
+        with_session_globals(|session_globals| unsafe {
+            std::mem::transmute::<&Type, &Type>(session_globals.get_type(*self))
+        })
+    }
+
+    pub fn to_span(&self) -> &Span {
+        with_session_globals(|session_globals| unsafe {
+            std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
+        })
+    }
+}
+
+// ExprNodeId needs to implement Ord in order to be a key of BTreeMap. To implement
+// Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
+// implemented manually so that the actual expressions and spans are compared.
+
+impl PartialEq for TypeNodeId {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_type() == other.to_type() && self.to_span() == self.to_span()
+    }
+}
+
+impl Eq for TypeNodeId {}
+
+impl ToNodeId for TypeNodeId {
+    fn to_node_id(&self) -> NodeId {
+        NodeId::TypeArena(self.0.index())
+    }
 }
 
 // currently, this refers to the number of registers
