@@ -82,15 +82,7 @@ fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple
             .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
-    with_type_annotation(pat).map_with_span(|(pat, ty), s| {
-        WithMeta(
-            TypedPattern {
-                pat,
-                ty: ty.map(|x| x.to_type().clone()),
-            },
-            s,
-        )
-    })
+    with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
 }
 
 fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {

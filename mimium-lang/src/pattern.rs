@@ -52,7 +52,7 @@ impl MiniPrint for TypedId {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedPattern {
     pub pat: Pattern,
-    pub ty: Option<Type>,
+    pub ty: Option<TypeNodeId>,
 }
 #[derive(Debug)]
 pub struct ConversionError;
@@ -70,7 +70,7 @@ impl From<TypedId> for TypedPattern {
     fn from(value: TypedId) -> Self {
         TypedPattern {
             pat: Pattern::Single(value.id),
-            ty: value.ty.map(|x| x.to_type().clone()),
+            ty: value.ty,
         }
     }
 }
@@ -79,10 +79,7 @@ impl TryFrom<TypedPattern> for TypedId {
 
     fn try_from(value: TypedPattern) -> Result<Self, Self::Error> {
         match value.pat {
-            Pattern::Single(id) => Ok(TypedId {
-                id,
-                ty: value.ty.map(|x| x.into_id()),
-            }),
+            Pattern::Single(id) => Ok(TypedId { id, ty: value.ty }),
             Pattern::Tuple(_) => Err(ConversionError),
         }
     }
@@ -91,7 +88,7 @@ impl TryFrom<TypedPattern> for TypedId {
 impl MiniPrint for TypedPattern {
     fn simple_print(&self) -> String {
         match &self.ty {
-            Some(t) => format!("(tpat {} {})", self.pat, t), //todo:type
+            Some(t) => format!("(tpat {} {})", self.pat, t.to_type()), //todo:type
             None => self.pat.to_string(),
         }
     }
@@ -99,7 +96,7 @@ impl MiniPrint for TypedPattern {
 impl std::fmt::Display for TypedPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.ty {
-            Some(t) => write!(f, "{} :{t}", self.pat),
+            Some(t) => write!(f, "{} :{}", self.pat, t.to_type()),
             None => write!(f, "{}", self.pat),
         }
     }

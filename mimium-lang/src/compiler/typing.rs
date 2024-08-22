@@ -283,7 +283,7 @@ impl InferContext {
                         let p = WithMeta(
                             TypedPattern {
                                 pat: p.clone(),
-                                ty: Some(ity.clone()),
+                                ty: Some(ity.clone().into_id()),
                             },
                             span.clone(),
                         );
@@ -388,7 +388,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(*body, c)?;
-            let idt = match tpat.0.ty.as_ref() {
+            let idt = match tpat.0.ty.map(|x| x.to_type().clone()) {
                 Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
                     &atypes
                         .iter()

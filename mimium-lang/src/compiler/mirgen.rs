@@ -675,7 +675,7 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
-                let idt = match pat.0.ty.as_ref() {
+                let idt = match pat.0.ty.map(|x| x.to_type().clone()) {
                     Some(Type::Function(atypes, rty, s)) => self.typeenv.convert_unknown_function(
                         &atypes
                             .iter()
