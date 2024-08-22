@@ -46,26 +46,29 @@ impl PValue {
     }
 }
 impl Value {
-    fn get_type(&self) -> Type {
+    fn get_type_id(&self) -> TypeNodeId {
         match self {
-            Value::Primitive(p) => p.get_type(),
-            Value::String(_) => string_t!(),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()),
+            Value::Primitive(p) => p.get_type_id(),
+            Value::String(_) => string_t!().into_id(),
+            Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()).into_id(),
             Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
-                    .map(|TypedId { ty, id: _ }| ty.clone().expect("function argument untyped"))
+                    .map(|TypedId { ty, id: _ }| {
+                        ty.expect("function argument untyped").to_type().clone()
+                    })
                     .collect(),
                 r_type.expect("Return type cannot inferred"), //todo!
                 None,
-            ),
-            Value::FixPoint(TypedId { ty, id: _ }, _) => ty.clone().unwrap_or(unit!()),
+            )
+            .into_id(),
+            Value::FixPoint(TypedId { ty, id: _ }, _) => ty.unwrap_or(unit!().into_id()),
             //todo!
-            Value::External(_id) => Type::Unknown,
+            Value::External(_id) => Type::Unknown.into_id(),
         }
     }
 
-    pub fn get_type_id(&self) -> TypeNodeId {
-        self.get_type().into_id()
+    fn get_type(&self) -> Type {
+        self.get_type_id().to_type().clone()
     }
 }
 

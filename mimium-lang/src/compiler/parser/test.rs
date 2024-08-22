@@ -166,11 +166,14 @@ fn test_macroexpand() {
 fn test_fndef() {
     let ans = Expr::LetRec(
         TypedId {
-            ty: Some(Type::Function(
-                vec![Type::Unknown, Type::Unknown],
-                Type::Unknown.into_id(),
-                None,
-            )),
+            ty: Some(
+                Type::Function(
+                    vec![Type::Unknown, Type::Unknown],
+                    Type::Unknown.into_id(),
+                    None,
+                )
+                .into_id(),
+            ),
             id: "hoge".to_symbol(),
         },
         Expr::Lambda(

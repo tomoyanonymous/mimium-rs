@@ -359,7 +359,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
             let ptypes: Vec<Type> = p
                 .iter()
                 .map(|WithMeta(id, _s)| {
-                    let pt = id.ty.clone().unwrap_or(ctx.gen_intermediate_type());
+                    let pt = match id.ty {
+                        Some(ty) => ty.to_type().clone(),
+                        None => ctx.gen_intermediate_type(),
+                    };
                     ctx.env.add_bind(&[(id.id, pt.clone())]);
                     pt
                 })
@@ -396,9 +399,9 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
-            let idt = match id.ty.as_ref() {
+            let idt = match id.ty.map(|x| x.to_type().clone()) {
                 Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
-                    atypes,
+                    &atypes,
                     rty.to_type(),
                     &s.map(|x| Box::new(x.to_type().clone())),
                 ),

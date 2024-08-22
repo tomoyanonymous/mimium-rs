@@ -1,4 +1,5 @@
 use crate::ast::Symbol;
+use crate::interner::TypeNodeId;
 //todo! need to replace with interned string.
 use crate::types::Type;
 use crate::utils::miniprint::MiniPrint;
@@ -28,12 +29,12 @@ impl std::fmt::Display for Pattern {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedId {
     pub id: Symbol,
-    pub ty: Option<Type>,
+    pub ty: Option<TypeNodeId>,
 }
 impl std::fmt::Display for TypedId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.ty {
-            Some(t) => write!(f, "{} :{t}", self.id),
+            Some(t) => write!(f, "{} :{}", self.id, t.to_type()),
             None => write!(f, "{}", self.id),
         }
     }
@@ -42,7 +43,7 @@ impl std::fmt::Display for TypedId {
 impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
         match &self.ty {
-            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
+            Some(t) => format!("(tid {} {})", self.id, t.to_type()), //todo:type
             None => self.id.to_string(),
         }
     }
@@ -69,7 +70,7 @@ impl From<TypedId> for TypedPattern {
     fn from(value: TypedId) -> Self {
         TypedPattern {
             pat: Pattern::Single(value.id),
-            ty: value.ty,
+            ty: value.ty.map(|x| x.to_type().clone()),
         }
     }
 }
@@ -78,7 +79,10 @@ impl TryFrom<TypedPattern> for TypedId {
 
     fn try_from(value: TypedPattern) -> Result<Self, Self::Error> {
         match value.pat {
-            Pattern::Single(id) => Ok(TypedId { id, ty: value.ty }),
+            Pattern::Single(id) => Ok(TypedId {
+                id,
+                ty: value.ty.map(|x| x.into_id()),
+            }),
             Pattern::Tuple(_) => Err(ConversionError),
         }
     }

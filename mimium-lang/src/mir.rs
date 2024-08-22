@@ -12,7 +12,7 @@ pub mod print;
 // pub struct Global(VPtr);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Argument(pub Symbol, pub Type);
+pub struct Argument(pub Symbol, pub TypeNodeId);
 
 pub type VReg = u64;
 #[derive(Debug, PartialEq)]

@@ -71,7 +71,10 @@ where
 }
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(select! { Token::Ident(s) => s })
-        .map(|(s, t)| TypedId { id: s, ty: t })
+        .map(|(s, t)| TypedId {
+            id: s,
+            ty: t.map(|x| x.into_id()),
+        })
         .labelled("lvar")
 }
 fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple<Token>> + Clone {
@@ -328,14 +331,20 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
                 let atypes = ids
                     .iter()
-                    .map(|WithMeta(TypedId { ty, id: _ }, _)| ty.clone().unwrap_or(Type::Unknown))
+                    .map(|WithMeta(TypedId { ty, id: _ }, _)| match ty {
+                        Some(ty) => ty.to_type().clone(),
+                        None => Type::Unknown,
+                    })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
-                    ty: Some(Type::Function(
-                        atypes,
-                        r_type.clone().unwrap_or(Type::Unknown).into_id(),
-                        None,
-                    )),
+                    ty: Some(
+                        Type::Function(
+                            atypes,
+                            r_type.clone().unwrap_or(Type::Unknown).into_id(),
+                            None,
+                        )
+                        .into_id(),
+                    ),
                     id: fname.id.clone(),
                 };
                 Expr::LetRec(

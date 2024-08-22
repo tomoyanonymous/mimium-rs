@@ -539,13 +539,13 @@ impl Context {
                         let label = name.0.id.clone();
                         let t = name.0.ty.clone().unwrap_or_else(|| {
                             let tenv = &mut self.typeenv;
-                            tenv.gen_intermediate_type()
+                            tenv.gen_intermediate_type().into_id()
                         });
-                        let a = Argument(label, t.clone());
+                        let a = Argument(label, t);
                         let res = (
                             label.clone(),
                             Arc::new(Value::Argument(idx, Arc::new(a))),
-                            t,
+                            t.to_type().clone(),
                         );
                         res
                     })
@@ -708,9 +708,9 @@ impl Context {
                 self.fn_label = Some(id.id.clone());
                 let t = {
                     let tenv = &mut self.typeenv;
-                    let idt = match id.ty.as_ref() {
+                    let idt = match id.ty.map(|x| x.to_type().clone()) {
                         Some(Type::Function(atypes, rty, s)) => tenv.convert_unknown_function(
-                            atypes,
+                            &atypes,
                             rty.to_type(),
                             &s.map(|x| Box::new(x.to_type().clone())),
                         ),

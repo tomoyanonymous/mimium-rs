@@ -784,7 +784,7 @@ mod test {
         let mut src = mir::Mir::default();
         let arg = Arc::new(mir::Value::Argument(
             0,
-            Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown)),
+            Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown.into_id())),
         ));
         let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
         func.return_type.get_or_init(|| numeric!());

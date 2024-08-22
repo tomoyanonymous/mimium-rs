@@ -133,6 +133,6 @@ impl PartialEq for ExprNodeId {
 
 impl PartialEq for TypeNodeId {
     fn eq(&self, other: &Self) -> bool {
-        self.to_type() == other.to_type() && self.to_span() == self.to_span()
+        self.to_type() == other.to_type()
     }
 }
