@@ -130,7 +130,7 @@ fn closuretest() {
         ("makecounter".to_symbol(), makecounter_f),
         ("inner".to_symbol(), inner_f),
     ];
-    let mut machine = Machine::new();
+    let mut machine: Machine = Machine::new();
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
@@ -188,4 +188,62 @@ fn rust_closure_test() {
     // let mut feedstate = FeedState::default();
     let res = machine.execute_main(&prog);
     assert_eq!(res, 0);
+}
+
+fn prep_closure_gc_program(is_closed: bool) -> Program {
+    let inner_insts = vec![
+        Instruction::MoveConst(0, 0),
+        Instruction::Return(0, 1), // return just 0
+    ];
+    let cls_f = FuncProto {
+        nparam: 0,
+        nret: 1,
+        upindexes: vec![],
+        bytecodes: inner_insts,
+        constants: vec![0], //13,7, makecounter, print_f
+        delay_sizes: vec![],
+        state_size: 0,
+    };
+    let mut inner_insts = vec![
+        Instruction::MoveConst(0, 0), //load closure
+        Instruction::Closure(0, 0),
+        Instruction::CallCls(0, 0, 1),
+        Instruction::Return0, // return single value at 1
+    ];
+    if is_closed {
+        inner_insts.insert(3, Instruction::Close(0, 0))
+    }
+    let main_f = FuncProto {
+        nparam: 0,
+        nret: 1,
+        upindexes: vec![],
+        bytecodes: inner_insts,
+        constants: vec![1], //13,7, makecounter, print_f
+        delay_sizes: vec![],
+        state_size: 0,
+    };
+    let global_fn_table = vec![("main".to_symbol(), main_f), ("cls".to_symbol(), cls_f)];
+    let prog = Program {
+        global_fn_table,
+        ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
+        ext_cls_table: vec![],
+        global_vals: vec![],
+    };
+    prog
+}
+#[test]
+fn closure_gc_open() {
+    let prog = prep_closure_gc_program(false);
+    let mut machine: Machine = Machine::new();
+    machine.execute_main(&prog);
+    //open closure should be released.
+    assert_eq!(machine.closures.len(), 0);
+}
+#[test]
+fn closure_gc_closed() {
+    let prog = prep_closure_gc_program(true);
+    let mut machine: Machine = Machine::new();
+    machine.execute_main(&prog);
+    //closed closure should be kept.
+    assert_eq!(machine.closures.len(), 1);
 }

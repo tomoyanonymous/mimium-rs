@@ -417,8 +417,8 @@ impl Machine {
             .iter()
             .filter(|(stack_pos, _)| (src == *stack_pos as u8))
             .for_each(|(_, clsidx)| {
-                let cls = self.get_local_closure(*clsidx);
-                let newupvls = cls
+                let newupvls = self
+                    .get_local_closure(*clsidx)
                     .upvalues
                     .iter()
                     .map(|upv| {
@@ -438,11 +438,12 @@ impl Machine {
     }
     #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[(usize, ClosureIdx)]) {
-        let _ = local_closures.iter().filter_map(|(_, clsidx)| {
-            self.get_local_closure(*clsidx)
-                .is_closed.not()
-                .then(|| self.closures.remove(clsidx.0))
-        });
+        for (_, clsidx) in local_closures.iter() {
+            let cls = self.get_local_closure(*clsidx);
+            if !cls.is_closed {
+                self.closures.remove(clsidx.0);
+            }
+        }
     }
     /// Execute function, return retcode.
     pub fn execute(
