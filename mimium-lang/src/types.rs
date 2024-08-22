@@ -25,7 +25,7 @@ pub enum Type {
     Struct(Vec<(Symbol, Box<Self>)>),
     //Function that has a vector of parameters, return type, and type for internal states.
     Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
-    Ref(Box<Self>),
+    Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(Box<Self>),
     Intermediate(i64),
@@ -65,7 +65,7 @@ impl Type {
             Type::Function(p, r, s) => {
                 Type::Function(apply_vec(p), apply_box(r), s.as_ref().map(|a| apply_box(a)))
             }
-            Type::Ref(x) => Type::Ref(apply_box(x)),
+            Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
             _ => self.clone(),
@@ -125,7 +125,7 @@ impl fmt::Display for Type {
                 let args = format_vec!(p, ",");
                 write!(f, "({args})->{r}")
             }
-            Type::Ref(x) => write!(f, "&{x}"),
+            Type::Ref(x) => write!(f, "&{}", x.to_type()),
 
             Type::Code(c) => write!(f, "<{c}>"),
             Type::Intermediate(id) => {

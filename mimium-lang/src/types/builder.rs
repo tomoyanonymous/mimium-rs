@@ -36,7 +36,7 @@ macro_rules! function {
 #[macro_export]
 macro_rules! refer {
     ($t:expr) => {
-        Type::Ref(Box::new($t))
+        Type::Ref($t.into_id_without_span())
     };
 }
 
@@ -58,11 +58,14 @@ mod typemacro_test {
             string_t!()
         );
         let answer = Type::Tuple(vec![
-            Type::Ref(Box::new(Type::Function(
-                vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
-                Box::new(Type::Primitive(PType::Numeric)),
-                None,
-            ))),
+            Type::Ref(
+                Type::Function(
+                    vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
+                    Box::new(Type::Primitive(PType::Numeric)),
+                    None,
+                )
+                .into_id_without_span(),
+            ),
             Type::Primitive(PType::String),
         ]);
         assert_eq!(t, answer);

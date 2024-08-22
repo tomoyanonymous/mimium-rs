@@ -222,9 +222,10 @@ impl InferContext {
                 self.unify_types(a1.to_type().clone(), a2.to_type().clone())?
                     .into_id_without_span(),
             )),
-            (Type::Ref(box x1), Type::Ref(box x2)) => {
-                Ok(Type::Ref(Box::new(self.unify_types(x1, x2)?)))
-            }
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(
+                self.unify_types(x1.to_type().clone(), x2.to_type().clone())?
+                    .into_id_without_span(),
+            )),
             (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?)),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, box r1, s1), Type::Function(p2, box r2, s2)) => Ok(Type::Function(
