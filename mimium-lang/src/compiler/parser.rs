@@ -156,7 +156,13 @@ fn expr_parser() -> impl Parser<Token, ExprId, Error = Simple<Token>> + Clone {
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
                 .repeated();
             let folder = |f: ExprId, args: Vec<ExprId>| {
-                let span = f.to_span().start..args.last().unwrap().to_span().end;
+                let f_span = f.to_span();
+                // TODO: this doesn't include the span of the closing parenthesis
+                let span_end = match args.as_slice() {
+                    [.., end] => end.to_span().end,
+                    _ => f_span.end,
+                };
+                let span = f_span.start..span_end;
                 Expr::Apply(f, args).into_id(span)
             };
             let apply = atom.then(parenitems).foldl(folder).labelled("apply");
