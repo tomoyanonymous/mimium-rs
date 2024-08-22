@@ -28,7 +28,7 @@ pub enum Value {
     String(String),
     Tuple(Vec<Value>),
     //Function value holds return type
-    Function(Vec<TypedId>, ExprNodeId, Context, Option<Type>),
+    Function(Vec<TypedId>, ExprNodeId, Context, Option<TypeNodeId>),
     FixPoint(TypedId, ExprNodeId),
     External(Symbol),
 }
@@ -154,48 +154,49 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
     use builtin_fn::get_builtin_fns;
     let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
 
-    if let Some((_, ty, ptr)) = get_builtin_fns().iter().find(|(name, ty, _ptr)| {
-        let ty_same = if let Type::Function(tv2, _rt, _) = ty {
-            tv.eq(tv2)
+    // TODO: clean up code later
+    if let Some((rt, ptr)) = get_builtin_fns().iter().find_map(|(name, ty, ptr)| {
+        let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty {
+            (tv.eq(tv2), rt.to_type())
         } else {
-            false
+            return None;
         };
-        n == name.to_symbol() && ty_same
+        if n == name.to_symbol() && ty_same {
+            Some((rt, ptr))
+        } else {
+            None
+        }
     }) {
         match argv.len() {
             1 => {
                 let v = argv.get(0).unwrap();
-                match (ty, v) {
+                match (rt, v) {
                     //f64 -> f64
-                    (
-                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
-                        Value::Primitive(PValue::Numeric(fv)),
-                    ) if v.get_type() == Type::Primitive(PType::Numeric) => {
+                    (Type::Primitive(PType::Numeric), Value::Primitive(PValue::Numeric(fv)))
+                        if v.get_type() == Type::Primitive(PType::Numeric) =>
+                    {
                         let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> f64>(*ptr) };
                         Ok(Value::Primitive(PValue::Numeric(f(*fv))))
                     }
                     //i64 -> i64
-                    (
-                        Type::Function(_atv, box Type::Primitive(PType::Int), _),
-                        Value::Primitive(PValue::Integer(iv)),
-                    ) if v.get_type() == Type::Primitive(PType::Int) => {
+                    (Type::Primitive(PType::Int), Value::Primitive(PValue::Integer(iv)))
+                        if v.get_type() == Type::Primitive(PType::Int) =>
+                    {
                         let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> i64>(*ptr) };
                         Ok(Value::Primitive(PValue::Integer(f(*iv))))
                     }
                     //f64 -> ()
-                    (
-                        Type::Function(_atv, box Type::Primitive(PType::Unit), _),
-                        Value::Primitive(PValue::Numeric(fv)),
-                    ) if v.get_type() == Type::Primitive(PType::Numeric) => {
+                    (Type::Primitive(PType::Unit), Value::Primitive(PValue::Numeric(fv)))
+                        if v.get_type() == Type::Primitive(PType::Numeric) =>
+                    {
                         let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> ()>(*ptr) };
                         f(*fv);
                         Ok(Value::Primitive(PValue::Unit))
                     }
                     //i64 -> ()
-                    (
-                        Type::Function(_atv, box Type::Primitive(PType::Unit), _),
-                        Value::Primitive(PValue::Integer(fv)),
-                    ) if v.get_type() == Type::Primitive(PType::Int) => {
+                    (Type::Primitive(PType::Unit), Value::Primitive(PValue::Integer(fv)))
+                        if v.get_type() == Type::Primitive(PType::Int) =>
+                    {
                         let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> ()>(*ptr) };
                         f(*fv);
                         Ok(Value::Primitive(PValue::Unit))
@@ -206,10 +207,10 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
             2 => {
                 let v1 = argv.get(0).unwrap();
                 let v2 = argv.get(1).unwrap();
-                match (ty, v1, v2) {
+                match (rt, v1, v2) {
                     // (f64,f64)->f64
                     (
-                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
+                        Type::Primitive(PType::Numeric),
                         Value::Primitive(PValue::Numeric(fv1)),
                         Value::Primitive(PValue::Numeric(fv2)),
                     ) => {
@@ -219,7 +220,7 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
                     }
                     // (i64,i64)->i64
                     (
-                        Type::Function(_atv, box Type::Primitive(PType::Numeric), _),
+                        Type::Primitive(PType::Numeric),
                         Value::Primitive(PValue::Integer(iv1)),
                         Value::Primitive(PValue::Integer(iv2)),
                     ) => {
@@ -308,7 +309,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
             *e,
             ctx.clone(), //todo! do not copy
-            r.clone(),
+            r.clone().map(|x| x.into_id_without_span()),
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);

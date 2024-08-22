@@ -24,7 +24,7 @@ pub enum Type {
     Tuple(Vec<TypeNodeId>),
     Struct(Vec<(Symbol, TypeNodeId)>),
     //Function that has a vector of parameters, return type, and type for internal states.
-    Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
+    Function(Vec<Self>, TypeNodeId, Option<TypeNodeId>),
     Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(TypeNodeId),
@@ -53,7 +53,6 @@ impl Type {
     where
         F: Fn(Self) -> Self,
     {
-        let apply_box = |a: &Self| -> Box<Self> { Box::new(closure(a.clone())) };
         let apply_scalar =
             |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id_without_span() };
         let apply_vec_old =
@@ -69,8 +68,8 @@ impl Type {
             Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => Type::Function(
                 apply_vec_old(p),
-                apply_box(r),
-                s.as_ref().map(|a| apply_box(a)),
+                apply_scalar(*r),
+                s.map(|a| apply_scalar(a)),
             ),
             Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
@@ -87,7 +86,7 @@ impl Type {
 
     pub fn get_as_tuple(&self) -> Option<&[TypeNodeId]> {
         match self {
-            Type::Tuple(types) => Some(&types),
+            Type::Tuple(types) => Some(types),
             _ => None,
         }
     }
@@ -133,7 +132,7 @@ impl fmt::Display for Type {
             }
             Type::Function(p, r, _s) => {
                 let args = format_vec!(p, ",");
-                write!(f, "({args})->{r}")
+                write!(f, "({args})->{}", r.to_type())
             }
             Type::Ref(x) => write!(f, "&{}", x.to_type()),
 

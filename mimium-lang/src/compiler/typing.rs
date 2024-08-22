@@ -150,7 +150,11 @@ impl InferContext {
             .map(|a| self.convert_unknown_to_intermediate(a))
             .collect();
         let r = self.convert_unknown_to_intermediate(rty);
-        Type::Function(a, Box::new(r), s.clone())
+        Type::Function(
+            a,
+            r.into_id_without_span(),
+            s.clone().map(|x| x.into_id_without_span()),
+        )
     }
     // return true when the circular loop of intermediate variable exists.
     pub fn occur_check(&self, id1: i64, t2: Type) -> bool {
@@ -171,7 +175,9 @@ impl InferContext {
             Type::Array(a) => cls(a.to_type().clone()),
             Type::Tuple(t) => vec_cls(t.iter().map(|t| t.to_type().clone()).collect::<Vec<_>>()),
             Type::Function(p, r, s) => {
-                vec_cls(p) && cls(*r) && cls(*s.unwrap_or(Box::new(Type::Unknown)))
+                vec_cls(p)
+                    && cls(r.to_type().clone())
+                    && cls(s.map(|x| x.to_type().clone()).unwrap_or(Type::Unknown))
             }
             Type::Struct(_s) => todo!(),
             _ => false,
@@ -236,11 +242,15 @@ impl InferContext {
                 .collect(),
             )),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
-            (Type::Function(p1, box r1, s1), Type::Function(p2, box r2, s2)) => Ok(Type::Function(
+            (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
-                Box::new(self.unify_types(r1, r2)?),
+                self.unify_types(r1.to_type().clone(), r2.to_type().clone())?
+                    .into_id_without_span(),
                 match (s1, s2) {
-                    (Some(box e1), Some(box e2)) => Some(Box::new(self.unify_types(e1, e2)?)),
+                    (Some(e1), Some(e2)) => Some(
+                        self.unify_types(e1.to_type().clone(), e2.to_type().clone())?
+                            .into_id_without_span(),
+                    ),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
@@ -366,15 +376,17 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                 infer_type(*body, ctx)?
             };
             ctx.env.to_outer();
-            Ok(Type::Function(ptypes, Box::new(bty), None))
+            Ok(Type::Function(ptypes, bty.into_id_without_span(), None))
         }
         Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(*body, c)?;
             let idt = match tpat.0.ty.as_ref() {
-                Some(Type::Function(atypes, box rty, s)) => {
-                    c.convert_unknown_function(atypes, rty, s)
-                }
+                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
+                    atypes,
+                    rty.to_type(),
+                    &s.map(|x| Box::new(x.to_type().clone())),
+                ),
                 Some(t) => t.clone(),
                 None => c.gen_intermediate_type(),
             };
@@ -390,9 +402,11 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         Expr::LetRec(id, body, then) => {
             let c = ctx;
             let idt = match id.ty.as_ref() {
-                Some(Type::Function(atypes, box rty, s)) => {
-                    c.convert_unknown_function(atypes, rty, s)
-                }
+                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
+                    atypes,
+                    rty.to_type(),
+                    &s.map(|x| Box::new(x.to_type().clone())),
+                ),
                 _ => panic!("type for letrec is limited to function type in mimium."),
             };
 
@@ -412,10 +426,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
             let fnl = infer_type(*fun, ctx)?;
             let callee_t = infer_vec(callee.as_slice(), ctx)?;
             let res_t = ctx.gen_intermediate_type();
-            let fntype = Type::Function(callee_t, Box::new(res_t), None);
+            let fntype = Type::Function(callee_t, res_t.into_id_without_span(), None);
             let restype = ctx.unify_types(fnl, fntype)?;
             if let Type::Function(_, r, _) = restype {
-                Ok(*r)
+                Ok(r.to_type().clone())
             } else {
                 unreachable!();
             }

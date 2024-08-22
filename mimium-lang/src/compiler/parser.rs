@@ -44,7 +44,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .then(just(Token::Arrow).ignore_then(ty.clone()))
-            .map(|(a, e)| Type::Function(a, e.into(), None))
+            .map(|(a, e)| Type::Function(a, e.into_id_without_span(), None))
             .boxed()
             .labelled("function");
 
@@ -337,7 +337,10 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 let fname = TypedId {
                     ty: Some(Type::Function(
                         atypes,
-                        Box::new(r_type.clone().unwrap_or(Type::Unknown)),
+                        r_type
+                            .clone()
+                            .unwrap_or(Type::Unknown)
+                            .into_id_without_span(),
                         None,
                     )),
                     id: fname.id.clone(),

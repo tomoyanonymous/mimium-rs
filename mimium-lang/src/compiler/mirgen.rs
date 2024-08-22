@@ -453,11 +453,11 @@ impl Context {
                 } else {
                     let atvvec = self.eval_args(&args)?;
                     let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
-                    let rt = self.typeenv.gen_intermediate_type();
+                    let rt = self.typeenv.gen_intermediate_type().into_id_without_span();
                     let ftype = self
                         .typeenv
-                        .unify_types(ft, Type::Function(atvec, Box::new(rt), None))?;
-                    let rt = if let Type::Function(_, box rt, _) = ftype {
+                        .unify_types(ft, Type::Function(atvec, rt, None))?;
+                    let rt = if let Type::Function(_, rt, _) = ftype {
                         Ok(rt.clone())
                     } else {
                         Err(CompileError(
@@ -470,12 +470,12 @@ impl Context {
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
                             Value::Function(idx, statesize, _rty) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, &rt)
+                                self.emit_fncall(*idx as u64, *statesize, a_regs, rt.to_type())
                             }
                             Value::Register(_) => self.push_inst(Instruction::CallCls(
                                 v.clone(),
                                 a_regs.clone(),
-                                rt.clone(),
+                                rt.to_type().clone(),
                             )),
                             Value::FixPoint(fnid) => {
                                 let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
@@ -483,7 +483,7 @@ impl Context {
                                 self.push_inst(Instruction::CallCls(
                                     cls,
                                     a_regs.clone(),
-                                    rt.clone(),
+                                    rt.to_type().clone(),
                                 ))
                             }
                             _ => {
@@ -496,14 +496,18 @@ impl Context {
                             let res = self.push_inst(Instruction::CallCls(
                                 f.clone(),
                                 a_regs.clone(),
-                                rt.clone(),
+                                rt.to_type().clone(),
                             ));
                             res
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt.clone()))
+                            self.push_inst(Instruction::CallCls(
+                                cls,
+                                a_regs.clone(),
+                                rt.to_type().clone(),
+                            ))
                         }
 
                         Value::Function(idx, statesize, ret_t) => {
@@ -524,7 +528,7 @@ impl Context {
                         Value::None => unreachable!(),
                         _ => todo!(),
                     };
-                    Ok((res, rt))
+                    Ok((res, rt.to_type().clone()))
                 }
             }
             Expr::Lambda(ids, rett, body) => {
@@ -607,7 +611,7 @@ impl Context {
                     .iter()
                     .map(|(_name, _a, t)| t.clone())
                     .collect::<Vec<_>>();
-                let fty = Type::Function(atypes, Box::new(res_type), None);
+                let fty = Type::Function(atypes, res_type.into_id_without_span(), None);
                 Ok((res, fty))
             }
             Expr::Feed(id, expr) => {
@@ -649,9 +653,11 @@ impl Context {
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
                 let idt = match pat.0.ty.as_ref() {
-                    Some(Type::Function(atypes, box rty, s)) => {
-                        self.typeenv.convert_unknown_function(atypes, rty, s)
-                    }
+                    Some(Type::Function(atypes, rty, s)) => self.typeenv.convert_unknown_function(
+                        atypes,
+                        rty.to_type(),
+                        &s.map(|x| Box::new(x.to_type().clone())),
+                    ),
                     Some(t) => t.clone(),
                     None => self.typeenv.gen_intermediate_type(),
                 };
@@ -703,9 +709,11 @@ impl Context {
                 let t = {
                     let tenv = &mut self.typeenv;
                     let idt = match id.ty.as_ref() {
-                        Some(Type::Function(atypes, box rty, s)) => {
-                            tenv.convert_unknown_function(atypes, rty, s)
-                        }
+                        Some(Type::Function(atypes, rty, s)) => tenv.convert_unknown_function(
+                            atypes,
+                            rty.to_type(),
+                            &s.map(|x| Box::new(x.to_type().clone())),
+                        ),
                         Some(t) => t.clone(),
                         None => tenv.gen_intermediate_type(),
                     };

@@ -29,7 +29,7 @@ macro_rules! string_t {
 #[macro_export]
 macro_rules! function {
     ($params:expr, $return:expr) => {
-        Type::Function($params, Box::new($return), None)
+        Type::Function($params, $return.into_id_without_span(), None)
     };
 }
 
@@ -61,7 +61,7 @@ mod typemacro_test {
             Type::Ref(
                 Type::Function(
                     vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
-                    Box::new(Type::Primitive(PType::Numeric)),
+                    Type::Primitive(PType::Numeric).into_id_without_span(),
                     None,
                 )
                 .into_id_without_span(),
