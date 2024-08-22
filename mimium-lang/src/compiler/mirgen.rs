@@ -587,6 +587,7 @@ impl Context {
                                 let _ = ctx.push_inst(Instruction::Return(cls, res_type.clone()));
                             }
                             (_, _) => {
+                                //TODO: if the return type is the agreggated type that contains function such as tuple of closures, such cases are not handled correctly.
                                 if res_type.is_function() {
                                     let newres =
                                         ctx.push_inst(Instruction::CloseUpValue(res.clone()));
@@ -678,11 +679,18 @@ impl Context {
                 ) {
                     (true, false, Some(then_e)) => {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
-                        let _greg = self.push_inst(Instruction::SetGlobal(
-                            gv.clone(),
-                            bodyv.clone(),
-                            t.clone(),
-                        ));
+                        if t.is_function() {
+                            //globally allocated closures are immidiately closed, not to be disposed
+                            let b = self.push_inst(Instruction::CloseUpValue(bodyv.clone()));
+                            let _greg =
+                                self.push_inst(Instruction::SetGlobal(gv.clone(), b, t.clone()));
+                        } else {
+                            let _greg = self.push_inst(Instruction::SetGlobal(
+                                gv.clone(),
+                                bodyv.clone(),
+                                t.clone(),
+                            ));
+                        }
                         self.add_bind_pattern(pat, gv, &t)?;
                         self.eval_expr(then_e)
                     }

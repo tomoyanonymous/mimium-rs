@@ -410,10 +410,9 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
-    fn close_upvalues(&mut self, iret: Reg, nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
-        for (base_ptr_cls, clsidx) in local_closures.iter() {
-            let start = iret;
-            let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
+    fn close_upvalues(&mut self, src: Reg, local_closures: &[(usize, ClosureIdx)]) {
+        for (stack_pos, clsidx) in local_closures.iter() {
+            let is_escaping = *stack_pos as u8 == src;
             if is_escaping {
                 let cls = self.get_local_closure(*clsidx);
                 let newupvls = cls
@@ -431,7 +430,7 @@ impl Machine {
                     .collect::<Vec<_>>();
                 self.get_local_closure_mut(*clsidx).upvalues = newupvls;
             } else {
-                log::trace!("release closure {:?}",clsidx.0);
+                log::trace!("release closure {:?}", clsidx.0);
                 self.closures.remove(clsidx.0);
             }
         }
@@ -536,11 +535,15 @@ impl Machine {
                     local_closures.push((dst as usize, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
+                Instruction::Close(dst, src) => {
+                    self.close_upvalues(src, &local_closures);
+                    self.set_stack(dst as _, self.get_stack(src as _));
+                }
                 Instruction::Return0 => {
+                    self.stack.truncate((self.base_pointer - 1) as usize);
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    self.close_upvalues(iret, nret, &local_closures);
                     let _ = self.return_general(iret, nret);
                     return nret.into();
                 }
