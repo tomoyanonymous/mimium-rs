@@ -210,7 +210,10 @@ impl ByteCodeGenerator {
         match ty {
             Type::Primitive(_) => 1,
             Type::Array(_ty) => todo!(),
-            Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(t)).sum(),
+            Type::Tuple(types) => types
+                .iter()
+                .map(|t| Self::word_size_for_type(t.to_type()))
+                .sum(),
             Type::Struct(types) => types
                 .iter()
                 .map(|(_s, t)| Self::word_size_for_type(t.to_type()))
@@ -389,7 +392,7 @@ impl ByteCodeGenerator {
                 let tvec = ty.get_as_tuple().unwrap();
                 let t_offset: u64 = tvec[0..(*tuple_offset as _)]
                     .iter()
-                    .map(|t| Self::word_size_for_type(t) as u64)
+                    .map(|t| Self::word_size_for_type(t.to_type()) as u64)
                     .sum();
                 let offset = t_size as u64 * *array_idx + t_offset as u64;
                 if offset != 0 {

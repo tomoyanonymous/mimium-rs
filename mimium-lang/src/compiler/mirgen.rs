@@ -178,7 +178,7 @@ impl Context {
             Pattern::Tuple(patterns) => {
                 let interm_vec = patterns
                     .iter()
-                    .map(|_| self.typeenv.gen_intermediate_type())
+                    .map(|_| self.typeenv.gen_intermediate_type().into_id_without_span())
                     .collect::<Vec<_>>();
                 let tvec = self
                     .typeenv
@@ -188,7 +188,7 @@ impl Context {
                     span.clone(),
                 )))?;
                 for (i, pat) in patterns.iter().enumerate() {
-                    let cty = &tvec[i];
+                    let cty = tvec[i].to_type();
                     let v = if i == 0 {
                         v.clone()
                     } else {
@@ -413,7 +413,7 @@ impl Context {
                         })
                     };
                     self.push_inst(Instruction::Store(ptr, v, ty.clone()));
-                    types.push(ty);
+                    types.push(ty.into_id_without_span());
                 }
                 let tup_t = Type::Tuple(types.clone());
                 for inst_i in inst_refs.iter() {

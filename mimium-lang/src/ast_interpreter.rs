@@ -2,7 +2,7 @@ use crate::{
     ast::{self, Symbol, ToSymbol},
     compiler::{Error as CompileError, ErrorKind},
     integer,
-    interner::ExprNodeId,
+    interner::{ExprNodeId, TypeNodeId},
     numeric,
     pattern::{TypedId, TypedPattern},
     runtime::builtin_fn,
@@ -40,13 +40,17 @@ impl PValue {
             PValue::Integer(_) => integer!(),
         }
     }
+
+    pub fn get_type_id(&self) -> TypeNodeId {
+        self.get_type().into_id_without_span()
+    }
 }
 impl Value {
     pub fn get_type(&self) -> Type {
         match self {
             Value::Primitive(p) => p.get_type(),
             Value::String(_) => string_t!(),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type()).collect()),
+            Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()),
             Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
                     .map(|TypedId { ty, id: _ }| ty.clone().expect("function argument untyped"))
@@ -62,6 +66,10 @@ impl Value {
             //todo!
             Value::External(_id) => Type::Unknown,
         }
+    }
+
+    pub fn get_type_id(&self) -> TypeNodeId {
+        self.get_type().into_id_without_span()
     }
 }
 

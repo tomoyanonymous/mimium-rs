@@ -169,7 +169,7 @@ impl InferContext {
                 }
             }
             Type::Array(a) => cls(a.to_type().clone()),
-            Type::Tuple(t) => vec_cls(t),
+            Type::Tuple(t) => vec_cls(t.iter().map(|t| t.to_type().clone()).collect::<Vec<_>>()),
             Type::Function(p, r, s) => {
                 vec_cls(p) && cls(*r) && cls(*s.unwrap_or(Box::new(Type::Unknown)))
             }
@@ -226,7 +226,15 @@ impl InferContext {
                 self.unify_types(x1.to_type().clone(), x2.to_type().clone())?
                     .into_id_without_span(),
             )),
-            (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?)),
+            (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(
+                unify_vec(
+                    a1.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
+                    a2.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
+                )?
+                .iter()
+                .map(|x| x.clone().into_id_without_span())
+                .collect(),
+            )),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, box r1, s1), Type::Function(p2, box r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
@@ -265,6 +273,7 @@ impl InferContext {
                             span.clone(),
                         );
                         self.bind_pattern(&ity, &p)
+                            .map(|x| x.into_id_without_span())
                     })
                     .try_collect::<Vec<_>>()?;
 
@@ -307,7 +316,12 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
 
     match e_meta.to_expr() {
         Expr::Literal(l) => infer_type_literal(l),
-        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e.as_slice(), ctx)?)),
+        Expr::Tuple(e) => Ok(Type::Tuple(
+            infer_vec(e.as_slice(), ctx)?
+                .iter()
+                .map(|x| x.clone().into_id_without_span())
+                .collect(),
+        )),
         Expr::Proj(e, idx) => {
             let tup = infer_type(*e, ctx)?;
             match tup {
@@ -318,7 +332,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                             e.to_span().clone(),
                         ))
                     } else {
-                        Ok(vec[*idx as usize].clone())
+                        Ok(vec[*idx as usize].to_type().clone())
                     }
                 }
                 _ => Err(Error(ErrorKind::IndexForNonTuple, e.to_span().clone())),

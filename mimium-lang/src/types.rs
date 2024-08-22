@@ -21,7 +21,7 @@ pub enum Type {
     Primitive(PType),
     //aggregate types
     Array(TypeNodeId),
-    Tuple(Vec<Self>),
+    Tuple(Vec<TypeNodeId>),
     Struct(Vec<(Symbol, TypeNodeId)>),
     //Function that has a vector of parameters, return type, and type for internal states.
     Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
@@ -56,15 +56,22 @@ impl Type {
         let apply_box = |a: &Self| -> Box<Self> { Box::new(closure(a.clone())) };
         let apply_scalar =
             |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id_without_span() };
-        let apply_vec =
+        let apply_vec_old =
             |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
+        let apply_vec = |v: &Vec<TypeNodeId>| -> Vec<TypeNodeId> {
+            v.iter()
+                .map(|a| closure(a.to_type().clone()).into_id_without_span())
+                .collect()
+        };
         match self {
             Type::Array(a) => Type::Array(apply_scalar(*a)),
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
             Type::Struct(_s) => todo!(),
-            Type::Function(p, r, s) => {
-                Type::Function(apply_vec(p), apply_box(r), s.as_ref().map(|a| apply_box(a)))
-            }
+            Type::Function(p, r, s) => Type::Function(
+                apply_vec_old(p),
+                apply_box(r),
+                s.as_ref().map(|a| apply_box(a)),
+            ),
             Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
@@ -78,7 +85,7 @@ impl Type {
         todo!()
     }
 
-    pub fn get_as_tuple(&self) -> Option<&[Type]> {
+    pub fn get_as_tuple(&self) -> Option<&[TypeNodeId]> {
         match self {
             Type::Tuple(types) => Some(&types),
             _ => None,
@@ -115,7 +122,10 @@ impl fmt::Display for Type {
             Type::Primitive(p) => write!(f, "{p}"),
             Type::Array(a) => write!(f, "[{}]", a.to_type()),
             Type::Tuple(v) => {
-                let vf = format_vec!(v, ",");
+                let vf = format_vec!(
+                    v.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
+                    ","
+                );
                 write!(f, "({vf})")
             }
             Type::Struct(v) => {

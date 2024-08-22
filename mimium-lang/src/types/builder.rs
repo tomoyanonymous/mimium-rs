@@ -54,8 +54,8 @@ mod typemacro_test {
     #[test]
     fn buildertest() {
         let t = tuple!(
-            refer!(function!(vec![integer!(), integer!()], numeric!())),
-            string_t!()
+            refer!(function!(vec![integer!(), integer!()], numeric!())).into_id_without_span(),
+            string_t!().into_id_without_span()
         );
         let answer = Type::Tuple(vec![
             Type::Ref(
@@ -65,8 +65,9 @@ mod typemacro_test {
                     None,
                 )
                 .into_id_without_span(),
-            ),
-            Type::Primitive(PType::String),
+            )
+            .into_id_without_span(),
+            Type::Primitive(PType::String).into_id_without_span(),
         ]);
         assert_eq!(t, answer);
     }

@@ -27,7 +27,13 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(Type::Tuple)
+            .map(|t: Vec<Type>| {
+                Type::Tuple(
+                    t.iter()
+                        .map(|t| t.clone().into_id_without_span())
+                        .collect::<Vec<_>>(),
+                )
+            })
             .boxed()
             .labelled("Tuple");
 
