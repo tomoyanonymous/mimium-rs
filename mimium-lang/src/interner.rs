@@ -78,10 +78,10 @@ pub enum NodeId {
     TypeArena(usize),
 }
 
-#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExprNodeId(pub Id<Expr>);
 
-#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy)]
 pub struct TypeNodeId(pub Id<Type>);
 
 impl ExprNodeId {
@@ -115,20 +115,6 @@ impl TypeNodeId {
     }
 }
 
-impl PartialEq for TypeNodeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_type() == other.to_type() && self.to_span() == self.to_span()
-    }
-}
-
-impl Eq for TypeNodeId {}
-
-impl ToNodeId for TypeNodeId {
-    fn to_node_id(&self) -> NodeId {
-        NodeId::TypeArena(self.0.index())
-    }
-}
-
 pub trait ToNodeId {
     fn to_node_id(&self) -> NodeId;
 }
@@ -139,9 +125,11 @@ impl ToNodeId for ExprNodeId {
     }
 }
 
-// ExprNodeId needs to implement Ord in order to be a key of BTreeMap. To implement
-// Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
-// implemented manually so that the actual expressions and spans are compared.
+impl ToNodeId for TypeNodeId {
+    fn to_node_id(&self) -> NodeId {
+        NodeId::TypeArena(self.0.index())
+    }
+}
 
 impl PartialEq for ExprNodeId {
     fn eq(&self, other: &Self) -> bool {
@@ -149,4 +137,8 @@ impl PartialEq for ExprNodeId {
     }
 }
 
-impl Eq for ExprNodeId {}
+impl PartialEq for TypeNodeId {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_type() == other.to_type() && self.to_span() == self.to_span()
+    }
+}
