@@ -77,6 +77,22 @@ impl ExprNodeId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NodeId {
+    ExprArena(usize),
+    TypeArena(usize),
+}
+
+pub trait ToNodeId {
+    fn to_node_id(&self) -> NodeId;
+}
+
+impl ToNodeId for ExprNodeId {
+    fn to_node_id(&self) -> NodeId {
+        NodeId::ExprArena(self.0.index())
+    }
+}
+
 // ExprNodeId needs to implement Ord in order to be a key of BTreeMap. To implement
 // Ord, Rust requires PartialEq, Eq, and PartialOrd. PartialEq needs to be
 // implemented manually so that the actual expressions and spans are compared.

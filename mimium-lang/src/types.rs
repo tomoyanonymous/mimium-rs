@@ -1,5 +1,7 @@
 use std::fmt;
 
+use id_arena::Id;
+
 use crate::{ast::Symbol, format_vec};
 
 use super::utils::miniprint::MiniPrint;

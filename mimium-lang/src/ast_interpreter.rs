@@ -4,7 +4,7 @@ use id_arena::Arena;
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{
-    ast::{self, Expr, ExprNodeId, Symbol, ToSymbol},
+    ast::{self, Expr, ExprNodeId, NodeId, Symbol, ToNodeId, ToSymbol},
     compiler::{Error as CompileError, ErrorKind},
     integer, numeric,
     pattern::{TypedId, TypedPattern},
@@ -97,7 +97,7 @@ const EXTERN_SYMS: [&str; 28] = [
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
     pub expr_storage: Arena<Expr>,
-    pub span_storage: BTreeMap<ExprNodeId, Span>,
+    pub span_storage: BTreeMap<NodeId, Span>,
 }
 
 impl SessionGlobals {
@@ -105,8 +105,8 @@ impl SessionGlobals {
         ExprNodeId(self.expr_storage.alloc(expr))
     }
 
-    fn store_span(&mut self, expr_id: ExprNodeId, span: Span) {
-        self.span_storage.insert(expr_id, span);
+    fn store_span<T: ToNodeId>(&mut self, node_id: T, span: Span) {
+        self.span_storage.insert(node_id.to_node_id(), span);
     }
 
     pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
@@ -116,11 +116,13 @@ impl SessionGlobals {
     }
 
     pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {
-        self.expr_storage.get(expr_id.0).expect("Unknown ExprID")
+        self.expr_storage.get(expr_id.0).expect("Unknown NodeID")
     }
 
-    pub fn get_span(&self, expr_id: ExprNodeId) -> &Span {
-        self.span_storage.get(&expr_id).expect("Unknown ExprID")
+    pub fn get_span<T: ToNodeId>(&self, node_id: T) -> &Span {
+        self.span_storage
+            .get(&node_id.to_node_id())
+            .expect("Unknown NodeID")
     }
 }
 
