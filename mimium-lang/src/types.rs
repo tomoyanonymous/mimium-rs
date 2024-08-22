@@ -22,12 +22,12 @@ pub enum Type {
     //aggregate types
     Array(TypeNodeId),
     Tuple(Vec<Self>),
-    Struct(Vec<(Symbol, Box<Self>)>),
+    Struct(Vec<(Symbol, TypeNodeId)>),
     //Function that has a vector of parameters, return type, and type for internal states.
     Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
     Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
-    Code(Box<Self>),
+    Code(TypeNodeId),
     Intermediate(i64),
     Unknown,
 }
@@ -127,7 +127,7 @@ impl fmt::Display for Type {
             }
             Type::Ref(x) => write!(f, "&{}", x.to_type()),
 
-            Type::Code(c) => write!(f, "<{c}>"),
+            Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
                 write!(f, "intermediate[{}]", id,)
             }

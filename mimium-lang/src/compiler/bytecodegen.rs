@@ -213,7 +213,7 @@ impl ByteCodeGenerator {
             Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(t)).sum(),
             Type::Struct(types) => types
                 .iter()
-                .map(|(_s, t)| Self::word_size_for_type(t))
+                .map(|(_s, t)| Self::word_size_for_type(t.to_type()))
                 .sum(),
             Type::Function(_, _, _) => 1,
             Type::Ref(_) => 1,
