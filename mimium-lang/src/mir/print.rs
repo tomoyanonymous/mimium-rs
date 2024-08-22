@@ -6,7 +6,7 @@ impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
             let af = format_vec!(fun.args, ",");
-            let _ = write!(f, "fn {} [{af}]\n", fun.label.0);
+            let _ = write!(f, "fn {} [{af}]\n", fun.label);
             let upi = format_vec!(fun.upindexes, ",");
             let _ = write!(f, "upindexes:[{upi}]");
             if let Some(upper_i) = fun.upperfn_i {
