@@ -35,9 +35,9 @@ pub enum Value {
 impl PValue {
     pub fn get_type(&self) -> Type {
         match self {
-            PValue::Unit => unit!(),
-            PValue::Numeric(_) => numeric!(),
-            PValue::Integer(_) => integer!(),
+            PValue::Unit => unit!().to_type().clone(),
+            PValue::Numeric(_) => numeric!().to_type().clone(),
+            PValue::Integer(_) => integer!().to_type().clone(),
         }
     }
 
@@ -49,19 +49,17 @@ impl Value {
     fn get_type_id(&self) -> TypeNodeId {
         match self {
             Value::Primitive(p) => p.get_type_id(),
-            Value::String(_) => string_t!().into_id(),
+            Value::String(_) => string_t!(),
             Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()).into_id(),
             Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
-                    .map(|TypedId { ty, id: _ }| {
-                        ty.expect("function argument untyped").to_type().clone()
-                    })
+                    .map(|TypedId { ty, .. }| ty.expect("function argument untyped"))
                     .collect(),
                 r_type.expect("Return type cannot inferred"), //todo!
                 None,
             )
             .into_id(),
-            Value::FixPoint(TypedId { ty, id: _ }, _) => ty.unwrap_or(unit!().into_id()),
+            Value::FixPoint(TypedId { ty, .. }, _) => ty.unwrap_or(unit!()),
             //todo!
             Value::External(_id) => Type::Unknown.into_id(),
         }
@@ -119,7 +117,7 @@ fn eval_condition(e: ExprNodeId, ctx: &mut Context) -> Result<bool, CompileError
         Value::Primitive(PValue::Numeric(f)) => Ok(f > 0.0),
         Value::Primitive(PValue::Integer(i)) => Ok(i > 0),
         _ => Err(CompileError(
-            ErrorKind::TypeMismatch(numeric!(), c_v.get_type()),
+            ErrorKind::TypeMismatch(numeric!().to_type().clone(), c_v.get_type()),
             e.to_span().clone(),
         )),
     }
@@ -151,11 +149,11 @@ fn eval_with_new_env(
 
 pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
     use builtin_fn::get_builtin_fns;
-    let tv = argv.iter().map(|v| v.get_type()).collect::<Vec<_>>();
+    let tv = argv.iter().map(|v| v.get_type_id()).collect::<Vec<_>>();
 
     // TODO: clean up code later
     if let Some((rt, ptr)) = get_builtin_fns().iter().find_map(|(name, ty, ptr)| {
-        let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty {
+        let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty.to_type() {
             (tv.eq(tv2), rt.to_type())
         } else {
             return None;
@@ -308,7 +306,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
             *e,
             ctx.clone(), //todo! do not copy
-            r.clone().map(|x| x.into_id()),
+            *r,
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);

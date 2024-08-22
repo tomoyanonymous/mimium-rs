@@ -1,6 +1,6 @@
 pub mod builder;
 
-use crate::interner::{with_session_globals, ExprNodeId};
+use crate::interner::{with_session_globals, ExprNodeId, TypeNodeId};
 use crate::pattern::{TypedId, TypedPattern};
 use crate::types::*;
 use crate::utils::metadata::{Span, WithMeta};
@@ -79,7 +79,7 @@ pub enum Expr {
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
     Apply(ExprNodeId, Vec<ExprNodeId>),
-    Lambda(Vec<WithMeta<TypedId>>, Option<Type>, ExprNodeId), //lambda, maybe information for internal state is needed
+    Lambda(Vec<WithMeta<TypedId>>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprNodeId),
     Then(ExprNodeId, ExprNodeId),
     Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage

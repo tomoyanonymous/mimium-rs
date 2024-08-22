@@ -130,7 +130,10 @@ fn closuretest() {
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
+        ext_fun_table: vec![(
+            "probe".to_symbol(),
+            function!(vec![numeric!()], numeric!()).to_type().clone(),
+        )],
         ext_cls_table: vec![],
         global_vals: vec![],
     };

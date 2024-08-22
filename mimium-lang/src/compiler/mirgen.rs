@@ -93,7 +93,7 @@ impl Context {
                     self.get_ctxdata().push_sum += coffset;
                 }
                 let args = self.eval_args(&[*src, *time])?;
-                let (args, _types): (Vec<VPtr>, Vec<Type>) = args.into_iter().unzip();
+                let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
                 let res = Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
                     args[0].clone(),
@@ -359,7 +359,7 @@ impl Context {
         }
         res
     }
-    fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, Type)>, CompileError> {
+    fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, TypeNodeId)>, CompileError> {
         args.iter()
             .map(|a_meta| -> Result<_, CompileError> {
                 let (v, t) = self.eval_expr(*a_meta)?;
@@ -371,7 +371,7 @@ impl Context {
                     }
                     _ => v.clone(),
                 };
-                Ok((res, t))
+                Ok((res, t.into_id()))
             })
             .try_collect::<Vec<_>>()
     }
@@ -389,7 +389,7 @@ impl Context {
                     self.eval_expr(*block)
                 } else {
                     //todo?
-                    Ok((Arc::new(Value::None), unit!()))
+                    Ok((Arc::new(Value::None), unit!().to_type().clone()))
                 }
             }
             Expr::Tuple(items) => {
@@ -455,7 +455,7 @@ impl Context {
                     Ok((d, Type::Primitive(PType::Numeric)))
                 } else {
                     let atvvec = self.eval_args(&args)?;
-                    let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
+                    let (a_regs, atvec): (Vec<VPtr>, Vec<TypeNodeId>) = atvvec.into_iter().unzip();
                     let rt = self.typeenv.gen_intermediate_type().into_id();
                     let ftype = self
                         .typeenv
@@ -535,7 +535,7 @@ impl Context {
                 }
             }
             Expr::Lambda(ids, rett, body) => {
-                let binds = ids
+                let binds_to_be_deleted = ids
                     .iter()
                     .enumerate()
                     .map(|(idx, name)| {
@@ -553,13 +553,33 @@ impl Context {
                         res
                     })
                     .collect::<Vec<_>>();
+
+                let binds = ids
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, name)| {
+                        let label = name.0.id.clone();
+                        let t = name.0.ty.clone().unwrap_or_else(|| {
+                            let tenv = &mut self.typeenv;
+                            tenv.gen_intermediate_type().into_id()
+                        });
+                        let a = Argument(label, t);
+                        let res = (
+                            label.clone(),
+                            Arc::new(Value::Argument(idx, Arc::new(a))),
+                            t,
+                        );
+                        res
+                    })
+                    .collect::<Vec<_>>();
+
                 let name = self.consume_fnlabel();
                 let (c_idx, f, res_type) =
-                    self.do_in_child_ctx(name, binds.as_slice(), |ctx, c_idx| {
+                    self.do_in_child_ctx(name, &binds_to_be_deleted, |ctx, c_idx| {
                         let (res, mut res_type) = ctx.eval_expr(*body)?;
                         res_type = if let Some(rt) = rett {
                             let tenv = &mut ctx.typeenv;
-                            tenv.unify_types(rt.clone(), res_type.clone())
+                            tenv.unify_types(rt.to_type().clone(), res_type.clone())
                                 .map_err(CompileError::from)?
                         } else {
                             res_type
@@ -657,7 +677,10 @@ impl Context {
                 //todo:need to boolean and insert cast
                 let idt = match pat.0.ty.as_ref() {
                     Some(Type::Function(atypes, rty, s)) => self.typeenv.convert_unknown_function(
-                        atypes,
+                        &atypes
+                            .iter()
+                            .map(|x| x.to_type().clone())
+                            .collect::<Vec<_>>(),
                         rty.to_type(),
                         &s.map(|x| Box::new(x.to_type().clone())),
                     ),
@@ -704,7 +727,7 @@ impl Context {
                         self.add_bind_pattern(pat, bodyv, &t)?;
                         self.eval_expr(*then_e)
                     }
-                    (_, _, None) => Ok((Arc::new(Value::None), unit!())),
+                    (_, _, None) => Ok((Arc::new(Value::None), unit!().to_type().clone())),
                 }
             }
             Expr::LetRec(id, body, then) => {
@@ -713,7 +736,10 @@ impl Context {
                     let tenv = &mut self.typeenv;
                     let idt = match id.ty.map(|x| x.to_type().clone()) {
                         Some(Type::Function(atypes, rty, s)) => tenv.convert_unknown_function(
-                            &atypes,
+                            &atypes
+                                .iter()
+                                .map(|x| x.to_type().clone())
+                                .collect::<Vec<_>>(),
                             rty.to_type(),
                             &s.map(|x| Box::new(x.to_type().clone())),
                         ),
@@ -745,13 +771,14 @@ impl Context {
                 if let Some(then_e) = then {
                     self.eval_expr(*then_e)
                 } else {
-                    Ok((Arc::new(Value::None), unit!()))
+                    Ok((Arc::new(Value::None), unit!().to_type().clone()))
                 }
             }
             Expr::If(cond, then, else_) => {
                 let (c, t_cond) = self.eval_expr(*cond)?;
                 //todo:need to boolean and insert cast
-                self.typeenv.unify_types(t_cond, numeric!())?;
+                self.typeenv
+                    .unify_types(t_cond, numeric!().to_type().clone())?;
 
                 let bbidx = self.get_ctxdata().current_bb;
                 let _ = self.push_inst(Instruction::JmpIf(
@@ -774,7 +801,7 @@ impl Context {
                 self.add_new_basicblock();
                 let (e, elset) = match else_ {
                     Some(e) => self.eval_expr(*e),
-                    None => Ok((Arc::new(Value::None), unit!())),
+                    None => Ok((Arc::new(Value::None), unit!().to_type().clone())),
                 }?;
                 //if returning non-closure function, make closure
                 let e = match e.as_ref() {

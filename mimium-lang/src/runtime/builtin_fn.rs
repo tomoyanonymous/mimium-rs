@@ -1,6 +1,6 @@
 use std::cell::LazyCell;
 
-use crate::{function, integer, numeric, types::*, unit};
+use crate::{function, integer, interner::TypeNodeId, numeric, types::*, unit};
 
 fn b_to_f(b: bool) -> f64 {
     if b {
@@ -183,7 +183,7 @@ mod intrinsic {
     }
 }
 
-type BuiltinFn = (&'static str, Type, *const ());
+type BuiltinFn = (&'static str, TypeNodeId, *const ());
 
 macro_rules! i_i {
     ($name:ident) => {

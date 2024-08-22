@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::interner::ExprNodeId;
+use crate::interner::{ExprNodeId, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
@@ -14,12 +14,12 @@ mod lexer;
 #[cfg(test)]
 mod test;
 
-fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
+fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clone {
     recursive(|ty| {
         let primitive = select! {
-           Token::FloatType => Type::Primitive(PType::Numeric),
-           Token::IntegerType => Type::Primitive(PType::Int),
-           Token::StringType => Type::Primitive(PType::String)
+           Token::FloatType => Type::Primitive(PType::Numeric).into_id(),
+           Token::IntegerType => Type::Primitive(PType::Int).into_id(),
+           Token::StringType => Type::Primitive(PType::String).into_id()
         };
 
         let tuple = ty
@@ -27,9 +27,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(|t: Vec<Type>| {
-                Type::Tuple(t.iter().map(|t| t.clone().into_id()).collect::<Vec<_>>())
-            })
+            .map(|t: Vec<TypeNodeId>| Type::Tuple(t).into_id())
             .boxed()
             .labelled("Tuple");
 
@@ -40,7 +38,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .then(just(Token::Arrow).ignore_then(ty.clone()))
-            .map(|(a, e)| Type::Function(a, e.into_id(), None))
+            .map(|(a, e)| Type::Function(a, e, None).into_id())
             .boxed()
             .labelled("function");
 
@@ -61,7 +59,7 @@ fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 }
 fn with_type_annotation<P, O>(
     parser: P,
-) -> impl Parser<Token, (O, Option<Type>), Error = Simple<Token>> + Clone
+) -> impl Parser<Token, (O, Option<TypeNodeId>), Error = Simple<Token>> + Clone
 where
     P: Parser<Token, O, Error = Simple<Token>> + Clone,
 {
@@ -71,10 +69,7 @@ where
 }
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(select! { Token::Ident(s) => s })
-        .map(|(s, t)| TypedId {
-            id: s,
-            ty: t.map(|x| x.into_id()),
-        })
+        .map(|(s, t)| TypedId { id: s, ty: t })
         .labelled("lvar")
 }
 fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple<Token>> + Clone {
@@ -87,7 +82,15 @@ fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple
             .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
-    with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
+    with_type_annotation(pat).map_with_span(|(pat, ty), s| {
+        WithMeta(
+            TypedPattern {
+                pat,
+                ty: ty.map(|x| x.to_type().clone()),
+            },
+            s,
+        )
+    })
 }
 
 fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
@@ -332,15 +335,15 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 let atypes = ids
                     .iter()
                     .map(|WithMeta(TypedId { ty, id: _ }, _)| match ty {
-                        Some(ty) => ty.to_type().clone(),
-                        None => Type::Unknown,
+                        Some(ty) => *ty,
+                        None => Type::Unknown.into_id(),
                     })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
                     ty: Some(
                         Type::Function(
                             atypes,
-                            r_type.clone().unwrap_or(Type::Unknown).into_id(),
+                            r_type.clone().unwrap_or(Type::Unknown.into_id()),
                             None,
                         )
                         .into_id(),

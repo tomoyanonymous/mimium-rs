@@ -767,6 +767,7 @@ pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn Reportable
     Ok(optimize(program))
 }
 
+#[cfg(test)]
 mod test {
     use crate::ast::ToSymbol;
 
@@ -784,13 +785,8 @@ mod test {
             0,
             Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown.into_id())),
         ));
-        let mut func = mir::Function::new(
-            "test".to_symbol(),
-            &[arg.clone()],
-            &[numeric!().into_id()],
-            None,
-        );
-        func.return_type.get_or_init(|| numeric!().into_id());
+        let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
+        func.return_type.get_or_init(|| numeric!());
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));
         block.0.push((resint.clone(), mir::Instruction::Integer(1)));

@@ -168,7 +168,7 @@ fn test_fndef() {
         TypedId {
             ty: Some(
                 Type::Function(
-                    vec![Type::Unknown, Type::Unknown],
+                    vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
                     Type::Unknown.into_id(),
                     None,
                 )

@@ -1,10 +1,11 @@
+use crate::interner::TypeNodeId;
 use crate::types::{PType, Type};
 use crate::{function, integer, numeric, unit};
 
 use std::cell::LazyCell;
 
 use super::{ExtFunType, Machine, ReturnCode};
-pub type BulitinInfo = (&'static str, ExtFunType, Type);
+pub type BulitinInfo = (&'static str, ExtFunType, TypeNodeId);
 
 pub fn probef(machine: &mut Machine) -> ReturnCode {
     let rv = machine.get_stack(0);

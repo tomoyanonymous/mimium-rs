@@ -1,6 +1,6 @@
 use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 use crate::compiler::intrinsics;
-use crate::interner::ExprNodeId;
+use crate::interner::{ExprNodeId, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
@@ -109,22 +109,24 @@ impl InferContext {
         ];
         let mut binds = binop_names
             .iter()
-            .map(|n| (n.to_symbol(), binop_ty.clone()))
+            .map(|n| (n.to_symbol(), binop_ty.to_type().clone()))
             .collect::<Vec<(Symbol, Type)>>();
         uniop_names
             .iter()
-            .map(|n| (n.to_symbol(), uniop_ty.clone()))
+            .map(|n| (n.to_symbol(), uniop_ty.to_type().clone()))
             .collect_into(&mut binds);
         binds.push((
             intrinsics::DELAY.to_symbol(),
-            function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
+            function!(vec![numeric!(), numeric!(), numeric!()], numeric!())
+                .to_type()
+                .clone(),
         ));
         env.add_bind(&binds);
     }
     fn register_builtin(env: &mut Environment<Type>) {
         let binds = builtin::get_builtin_fns()
             .iter()
-            .map(|(name, _, t)| (name.to_symbol(), t.clone()))
+            .map(|(name, _, t)| (name.to_symbol(), t.to_type().clone()))
             .collect::<Vec<_>>();
         env.add_bind(&binds);
     }
@@ -147,7 +149,7 @@ impl InferContext {
     ) -> Type {
         let a = atypes
             .iter()
-            .map(|a| self.convert_unknown_to_intermediate(a))
+            .map(|a| self.convert_unknown_to_intermediate(a).into_id())
             .collect();
         let r = self.convert_unknown_to_intermediate(rty);
         Type::Function(a, r.into_id(), s.clone().map(|x| x.into_id()))
@@ -156,7 +158,8 @@ impl InferContext {
     pub fn occur_check(&self, id1: i64, t2: Type) -> bool {
         let cls = |t2dash: Type| -> bool { self.occur_check(id1, t2dash) };
 
-        let vec_cls = |t: Vec<_>| -> bool { t.iter().all(|a: &Type| cls(a.clone())) };
+        let vec_cls =
+            |t: Vec<_>| -> bool { t.iter().all(|a: &TypeNodeId| cls(a.to_type().clone())) };
 
         match t2 {
             Type::Intermediate(id2) => {
@@ -169,7 +172,7 @@ impl InferContext {
                 }
             }
             Type::Array(a) => cls(a.to_type().clone()),
-            Type::Tuple(t) => vec_cls(t.iter().map(|t| t.to_type().clone()).collect::<Vec<_>>()),
+            Type::Tuple(t) => vec_cls(t),
             Type::Function(p, r, s) => {
                 vec_cls(p)
                     && cls(r.to_type().clone())
@@ -239,7 +242,13 @@ impl InferContext {
             )),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
-                unify_vec(p1, p2)?,
+                unify_vec(
+                    p1.iter().map(|x| x.to_type().clone()).collect(),
+                    p2.iter().map(|x| x.to_type().clone()).collect(),
+                )?
+                .iter()
+                .map(|x| x.clone().into_id())
+                .collect(),
                 self.unify_types(r1.to_type().clone(), r2.to_type().clone())?
                     .into_id(),
                 match (s1, s2) {
@@ -356,7 +365,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         }
         Expr::Lambda(p, rtype, body) => {
             ctx.env.extend();
-            let ptypes: Vec<Type> = p
+            let ptypes: Vec<TypeNodeId> = p
                 .iter()
                 .map(|WithMeta(id, _s)| {
                     let pt = match id.ty {
@@ -364,12 +373,12 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                         None => ctx.gen_intermediate_type(),
                     };
                     ctx.env.add_bind(&[(id.id, pt.clone())]);
-                    pt
+                    pt.into_id()
                 })
                 .collect();
             let bty = if let Some(r) = rtype {
                 let bty = infer_type(*body, ctx)?;
-                ctx.unify_types(r.clone(), bty)?
+                ctx.unify_types(r.to_type().clone(), bty)?
             } else {
                 infer_type(*body, ctx)?
             };
@@ -381,7 +390,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
             let bodyt = infer_type(*body, c)?;
             let idt = match tpat.0.ty.as_ref() {
                 Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
-                    atypes,
+                    &atypes
+                        .iter()
+                        .map(|x| x.to_type().clone())
+                        .collect::<Vec<_>>(),
                     rty.to_type(),
                     &s.map(|x| Box::new(x.to_type().clone())),
                 ),
@@ -401,7 +413,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
             let c = ctx;
             let idt = match id.ty.map(|x| x.to_type().clone()) {
                 Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
-                    &atypes,
+                    &atypes
+                        .iter()
+                        .map(|x| x.to_type().clone())
+                        .collect::<Vec<_>>(),
                     rty.to_type(),
                     &s.map(|x| Box::new(x.to_type().clone())),
                 ),
@@ -422,7 +437,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         Expr::Var(name, _time) => lookup(name, ctx, &span),
         Expr::Apply(fun, callee) => {
             let fnl = infer_type(*fun, ctx)?;
-            let callee_t = infer_vec(callee.as_slice(), ctx)?;
+            let callee_t = infer_vec(callee.as_slice(), ctx)?
+                .iter()
+                .map(|x| x.clone().into_id())
+                .collect();
             let res_t = ctx.gen_intermediate_type();
             let fntype = Type::Function(callee_t, res_t.into_id(), None);
             let restype = ctx.unify_types(fnl, fntype)?;
