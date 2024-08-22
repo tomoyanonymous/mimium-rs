@@ -82,8 +82,8 @@ fn closuretest() {
         Instruction::AddI(3, 0, 2),   // beg+1, n is in reg0
         Instruction::MoveConst(4, 1), //load posf in reg4
         Instruction::Closure(5, 4), // make closure of constant table 1(which is the function table 0)
-        // Instruction::Close(),       // convert n(at 0) and inc(at 1) into closed value
-        Instruction::Return(5, 1), // return 1 value
+        Instruction::Close(5, 5),   // convert n(at 0) and inc(at 1) into closed value
+        Instruction::Return(5, 1),  // return 1 value
     ];
     let makecounter_f = FuncProto {
         nparam: 2,
