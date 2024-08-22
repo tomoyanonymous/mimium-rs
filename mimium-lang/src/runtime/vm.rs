@@ -1,5 +1,5 @@
 use core::slice;
-use log;
+use slotmap::{DefaultKey, SlotMap};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -8,6 +8,7 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
@@ -61,7 +62,7 @@ impl StateStorage {
 }
 
 #[derive(Clone, Copy)]
-pub struct ClosureIdx(pub u64);
+pub struct ClosureIdx(pub slotmap::DefaultKey);
 
 #[derive(Clone, Default)]
 struct StateStorageStack(Vec<ClosureIdx>);
@@ -128,7 +129,7 @@ impl Default for RawValType {
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
-    closures: Vec<Closure>,
+    closures: SlotMap<DefaultKey, Closure>,
     pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
@@ -257,7 +258,7 @@ impl Machine {
         Self {
             stack: vec![],
             base_pointer: 0,
-            closures: vec![],
+            closures: Default::default(),
             ext_fun_table,
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
@@ -352,15 +353,15 @@ impl Machine {
         if self.states_stack.0.is_empty() {
             &mut self.global_states
         } else {
-            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked().0 as usize };
-            &mut self.closures[idx].state_storage
+            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked() };
+            &mut self.closures[idx.0].state_storage
         }
     }
     fn get_local_closure(&self, clsidx: ClosureIdx) -> &Closure {
-        &self.closures[clsidx.0 as usize]
+        &self.closures[clsidx.0]
     }
     fn get_local_closure_mut(&mut self, clsidx: ClosureIdx) -> &mut Closure {
-        &mut self.closures[clsidx.0 as usize]
+        &mut self.closures[clsidx.0]
     }
     fn return_general(&mut self, iret: Reg, nret: Reg) -> &[u64] {
         let base = self.base_pointer as usize;
@@ -486,7 +487,7 @@ impl Machine {
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
                     let cls_i = Self::get_as::<ClosureIdx>(addr);
-                    let cls = &self.closures[cls_i.0 as usize];
+                    let cls = &self.closures[cls_i.0];
                     let pos_of_f = cls.fn_proto_pos;
                     self.states_stack.push(cls_i);
                     self.call_function(func, nargs, nret_req, move |machine| {
@@ -528,9 +529,12 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    self.closures
-                        .push(Closure::new(prog, self.base_pointer, fn_proto_pos));
-                    let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
+
+                    let vaddr = ClosureIdx(self.closures.insert(Closure::new(
+                        prog,
+                        self.base_pointer,
+                        fn_proto_pos,
+                    )));
                     local_closures.push((dst as usize, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
@@ -545,7 +549,7 @@ impl Machine {
                 Instruction::GetUpValue(dst, index, size) => {
                     {
                         let up_i = cls_i.unwrap();
-                        let cls = &self.closures[up_i.0 as usize];
+                        let cls = &self.closures[up_i.0];
                         let upvalues = &cls.upvalues;
                         let rv = &upvalues[index as usize];
                         match rv {
@@ -576,7 +580,7 @@ impl Machine {
                 }
                 Instruction::SetUpValue(index, src, size) => {
                     let up_i = cls_i.unwrap();
-                    let cls = &self.closures[up_i.0 as usize];
+                    let cls = &self.closures[up_i.0];
                     let upper_base = cls.base_ptr as usize;
                     let upvalues = &cls.upvalues;
                     let rv: &UpValue = &upvalues[index as usize];

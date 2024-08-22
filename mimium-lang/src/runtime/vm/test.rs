@@ -7,6 +7,11 @@ use crate::{
 };
 
 #[test]
+fn ensure_closurekey_size() {
+    assert_eq!(size_of::<ClosureIdx>(), size_of::<RawVal>());
+}
+
+#[test]
 fn stack_set_vec_test1() {
     let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
     set_vec_range(&mut testvec, 2, &[6, 7]);
