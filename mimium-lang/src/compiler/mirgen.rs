@@ -587,8 +587,19 @@ impl Context {
                                 let _ = ctx.push_inst(Instruction::Return(cls, res_type.clone()));
                             }
                             (_, _) => {
-                                let _ = ctx
-                                    .push_inst(Instruction::Return(res.clone(), res_type.clone()));
+                                if res_type.is_function() {
+                                    let newres =
+                                        ctx.push_inst(Instruction::CloseUpValue(res.clone()));
+                                    let _ = ctx.push_inst(Instruction::Return(
+                                        newres.clone(),
+                                        res_type.clone(),
+                                    ));
+                                } else {
+                                    let _ = ctx.push_inst(Instruction::Return(
+                                        res.clone(),
+                                        res_type.clone(),
+                                    ));
+                                }
                             }
                         };
 
