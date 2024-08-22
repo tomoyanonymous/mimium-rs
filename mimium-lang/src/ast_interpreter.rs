@@ -42,7 +42,7 @@ impl PValue {
     }
 
     pub fn get_type_id(&self) -> TypeNodeId {
-        self.get_type().into_id_without_span()
+        self.get_type().into_id()
     }
 }
 impl Value {
@@ -69,7 +69,7 @@ impl Value {
     }
 
     pub fn get_type_id(&self) -> TypeNodeId {
-        self.get_type().into_id_without_span()
+        self.get_type().into_id()
     }
 }
 
@@ -309,7 +309,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
             *e,
             ctx.clone(), //todo! do not copy
-            r.clone().map(|x| x.into_id_without_span()),
+            r.clone().map(|x| x.into_id()),
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);

@@ -178,7 +178,7 @@ impl Context {
             Pattern::Tuple(patterns) => {
                 let interm_vec = patterns
                     .iter()
-                    .map(|_| self.typeenv.gen_intermediate_type().into_id_without_span())
+                    .map(|_| self.typeenv.gen_intermediate_type().into_id())
                     .collect::<Vec<_>>();
                 let tvec = self
                     .typeenv
@@ -413,7 +413,7 @@ impl Context {
                         })
                     };
                     self.push_inst(Instruction::Store(ptr, v, ty.clone()));
-                    types.push(ty.into_id_without_span());
+                    types.push(ty.into_id());
                 }
                 let tup_t = Type::Tuple(types.clone());
                 for inst_i in inst_refs.iter() {
@@ -453,7 +453,7 @@ impl Context {
                 } else {
                     let atvvec = self.eval_args(&args)?;
                     let (a_regs, atvec): (Vec<VPtr>, Vec<Type>) = atvvec.into_iter().unzip();
-                    let rt = self.typeenv.gen_intermediate_type().into_id_without_span();
+                    let rt = self.typeenv.gen_intermediate_type().into_id();
                     let ftype = self
                         .typeenv
                         .unify_types(ft, Type::Function(atvec, rt, None))?;
@@ -611,7 +611,7 @@ impl Context {
                     .iter()
                     .map(|(_name, _a, t)| t.clone())
                     .collect::<Vec<_>>();
-                let fty = Type::Function(atypes, res_type.into_id_without_span(), None);
+                let fty = Type::Function(atypes, res_type.into_id(), None);
                 Ok((res, fty))
             }
             Expr::Feed(id, expr) => {

@@ -17,10 +17,6 @@ impl SessionGlobals {
         ExprNodeId(self.expr_storage.alloc(expr))
     }
 
-    fn store_type(&mut self, ty: Type) -> TypeNodeId {
-        TypeNodeId(self.type_storage.alloc(ty))
-    }
-
     fn store_span<T: ToNodeId>(&mut self, node_id: T, span: Span) {
         self.span_storage.insert(node_id.to_node_id(), span);
     }
@@ -31,10 +27,8 @@ impl SessionGlobals {
         expr_id
     }
 
-    pub fn store_type_with_span(&mut self, ty: Type, span: Span) -> TypeNodeId {
-        let type_id = self.store_type(ty);
-        self.store_span(type_id, span);
-        type_id
+    pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
+        TypeNodeId(self.type_storage.alloc(ty))
     }
 
     pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {

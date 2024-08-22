@@ -168,7 +168,7 @@ fn test_fndef() {
         TypedId {
             ty: Some(Type::Function(
                 vec![Type::Unknown, Type::Unknown],
-                Type::Unknown.into_id_without_span(),
+                Type::Unknown.into_id(),
                 None,
             )),
             id: "hoge".to_symbol(),

@@ -150,11 +150,7 @@ impl InferContext {
             .map(|a| self.convert_unknown_to_intermediate(a))
             .collect();
         let r = self.convert_unknown_to_intermediate(rty);
-        Type::Function(
-            a,
-            r.into_id_without_span(),
-            s.clone().map(|x| x.into_id_without_span()),
-        )
+        Type::Function(a, r.into_id(), s.clone().map(|x| x.into_id()))
     }
     // return true when the circular loop of intermediate variable exists.
     pub fn occur_check(&self, id1: i64, t2: Type) -> bool {
@@ -226,11 +222,11 @@ impl InferContext {
             }
             (Type::Array(a1), Type::Array(a2)) => Ok(Type::Array(
                 self.unify_types(a1.to_type().clone(), a2.to_type().clone())?
-                    .into_id_without_span(),
+                    .into_id(),
             )),
             (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(
                 self.unify_types(x1.to_type().clone(), x2.to_type().clone())?
-                    .into_id_without_span(),
+                    .into_id(),
             )),
             (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(
                 unify_vec(
@@ -238,18 +234,18 @@ impl InferContext {
                     a2.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
                 )?
                 .iter()
-                .map(|x| x.clone().into_id_without_span())
+                .map(|x| x.clone().into_id())
                 .collect(),
             )),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
                 self.unify_types(r1.to_type().clone(), r2.to_type().clone())?
-                    .into_id_without_span(),
+                    .into_id(),
                 match (s1, s2) {
                     (Some(e1), Some(e2)) => Some(
                         self.unify_types(e1.to_type().clone(), e2.to_type().clone())?
-                            .into_id_without_span(),
+                            .into_id(),
                     ),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
@@ -282,8 +278,7 @@ impl InferContext {
                             },
                             span.clone(),
                         );
-                        self.bind_pattern(&ity, &p)
-                            .map(|x| x.into_id_without_span())
+                        self.bind_pattern(&ity, &p).map(|x| x.into_id())
                     })
                     .try_collect::<Vec<_>>()?;
 
@@ -329,7 +324,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         Expr::Tuple(e) => Ok(Type::Tuple(
             infer_vec(e.as_slice(), ctx)?
                 .iter()
-                .map(|x| x.clone().into_id_without_span())
+                .map(|x| x.clone().into_id())
                 .collect(),
         )),
         Expr::Proj(e, idx) => {
@@ -376,7 +371,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                 infer_type(*body, ctx)?
             };
             ctx.env.to_outer();
-            Ok(Type::Function(ptypes, bty.into_id_without_span(), None))
+            Ok(Type::Function(ptypes, bty.into_id(), None))
         }
         Expr::Let(tpat, body, then) => {
             let c = ctx;
@@ -426,7 +421,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
             let fnl = infer_type(*fun, ctx)?;
             let callee_t = infer_vec(callee.as_slice(), ctx)?;
             let res_t = ctx.gen_intermediate_type();
-            let fntype = Type::Function(callee_t, res_t.into_id_without_span(), None);
+            let fntype = Type::Function(callee_t, res_t.into_id(), None);
             let restype = ctx.unify_types(fnl, fntype)?;
             if let Type::Function(_, r, _) = restype {
                 Ok(r.to_type().clone())

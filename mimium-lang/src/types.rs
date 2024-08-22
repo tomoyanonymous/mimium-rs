@@ -53,13 +53,12 @@ impl Type {
     where
         F: Fn(Self) -> Self,
     {
-        let apply_scalar =
-            |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id_without_span() };
+        let apply_scalar = |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id() };
         let apply_vec_old =
             |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
         let apply_vec = |v: &Vec<TypeNodeId>| -> Vec<TypeNodeId> {
             v.iter()
-                .map(|a| closure(a.to_type().clone()).into_id_without_span())
+                .map(|a| closure(a.to_type().clone()).into_id())
                 .collect()
         };
         match self {
@@ -91,17 +90,8 @@ impl Type {
         }
     }
 
-    fn into_id_inner(self, span: Option<Span>) -> TypeNodeId {
-        let span = span.unwrap_or(0..0);
-        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
-    }
-
-    pub fn into_id(self, span: Span) -> TypeNodeId {
-        self.into_id_inner(Some(span))
-    }
-
-    pub fn into_id_without_span(self) -> TypeNodeId {
-        self.into_id_inner(None)
+    pub fn into_id(self) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type(self))
     }
 }
 impl fmt::Display for PType {

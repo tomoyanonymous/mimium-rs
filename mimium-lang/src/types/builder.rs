@@ -29,14 +29,14 @@ macro_rules! string_t {
 #[macro_export]
 macro_rules! function {
     ($params:expr, $return:expr) => {
-        Type::Function($params, $return.into_id_without_span(), None)
+        Type::Function($params, $return.into_id(), None)
     };
 }
 
 #[macro_export]
 macro_rules! refer {
     ($t:expr) => {
-        Type::Ref($t.into_id_without_span())
+        Type::Ref($t.into_id())
     };
 }
 
@@ -54,20 +54,20 @@ mod typemacro_test {
     #[test]
     fn buildertest() {
         let t = tuple!(
-            refer!(function!(vec![integer!(), integer!()], numeric!())).into_id_without_span(),
-            string_t!().into_id_without_span()
+            refer!(function!(vec![integer!(), integer!()], numeric!())).into_id(),
+            string_t!().into_id()
         );
         let answer = Type::Tuple(vec![
             Type::Ref(
                 Type::Function(
                     vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
-                    Type::Primitive(PType::Numeric).into_id_without_span(),
+                    Type::Primitive(PType::Numeric).into_id(),
                     None,
                 )
-                .into_id_without_span(),
+                .into_id(),
             )
-            .into_id_without_span(),
-            Type::Primitive(PType::String).into_id_without_span(),
+            .into_id(),
+            Type::Primitive(PType::String).into_id(),
         ]);
         assert_eq!(t, answer);
     }
