@@ -70,7 +70,7 @@ pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
             opt_else.map(convert_recurse),
         ),
         Expr::Lambda(ids, opt_type, body) => {
-            Expr::Lambda(ids.clone(), opt_type.clone(), convert_recurse(*body))
+            Expr::Lambda(ids.clone(), *opt_type, convert_recurse(*body))
         }
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         e => e.clone(),

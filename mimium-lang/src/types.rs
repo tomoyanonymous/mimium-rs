@@ -89,6 +89,19 @@ impl Type {
         with_session_globals(|session_globals| session_globals.store_type(self))
     }
 }
+
+impl TypeNodeId {
+    // TODO: clean up the roundtrip between Type and TypeNodeId
+    pub fn apply_fn<F>(&self, closure: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        self.to_type()
+            .apply_fn(|x| closure(x.into_id()).to_type().clone())
+            .into_id()
+    }
+}
+
 impl fmt::Display for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

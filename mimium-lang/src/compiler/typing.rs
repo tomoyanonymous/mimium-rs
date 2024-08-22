@@ -65,16 +65,16 @@ impl ReportableError for Error {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
     interm_idx: i64,
-    subst_map: HashMap<i64, Type>,
-    pub env: Environment<Type>, // interm_map:HashMap<i64,Type>
+    subst_map: HashMap<i64, TypeNodeId>,
+    pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
 
 impl InferContext {
     pub fn new() -> Self {
         let mut res = Self {
             interm_idx: 0,
-            subst_map: HashMap::<i64, Type>::new(),
-            env: Environment::<Type>::new(),
+            subst_map: HashMap::<i64, TypeNodeId>::new(),
+            env: Environment::<TypeNodeId>::new(),
         };
         res.env.extend();
         Self::register_intrinsics(&mut res.env);
@@ -82,7 +82,7 @@ impl InferContext {
 
         res
     }
-    fn register_intrinsics(env: &mut Environment<Type>) {
+    fn register_intrinsics(env: &mut Environment<TypeNodeId>) {
         let binop_ty = function!(vec![numeric!(), numeric!()], numeric!());
         let binop_names = vec![
             intrinsics::ADD,
@@ -109,158 +109,140 @@ impl InferContext {
         ];
         let mut binds = binop_names
             .iter()
-            .map(|n| (n.to_symbol(), binop_ty.to_type().clone()))
-            .collect::<Vec<(Symbol, Type)>>();
+            .map(|n| (n.to_symbol(), binop_ty))
+            .collect::<Vec<(Symbol, TypeNodeId)>>();
         uniop_names
             .iter()
-            .map(|n| (n.to_symbol(), uniop_ty.to_type().clone()))
+            .map(|n| (n.to_symbol(), uniop_ty))
             .collect_into(&mut binds);
         binds.push((
             intrinsics::DELAY.to_symbol(),
-            function!(vec![numeric!(), numeric!(), numeric!()], numeric!())
-                .to_type()
-                .clone(),
+            function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
         ));
         env.add_bind(&binds);
     }
-    fn register_builtin(env: &mut Environment<Type>) {
+    fn register_builtin(env: &mut Environment<TypeNodeId>) {
         let binds = builtin::get_builtin_fns()
             .iter()
-            .map(|(name, _, t)| (name.to_symbol(), t.to_type().clone()))
+            .map(|(name, _, t)| (name.to_symbol(), *t))
             .collect::<Vec<_>>();
         env.add_bind(&binds);
     }
-    pub fn gen_intermediate_type(&mut self) -> Type {
-        let res = Type::Intermediate(self.interm_idx);
+    pub fn gen_intermediate_type(&mut self) -> TypeNodeId {
+        let res = Type::Intermediate(self.interm_idx).into_id();
         self.interm_idx += 1;
         res
     }
-    pub fn convert_unknown_to_intermediate(&mut self, t: &Type) -> Type {
-        match t {
+    pub fn convert_unknown_to_intermediate(&mut self, t: TypeNodeId) -> TypeNodeId {
+        match t.to_type() {
             Type::Unknown => self.gen_intermediate_type(),
-            _ => t.clone(),
+            _ => t,
         }
     }
     pub fn convert_unknown_function(
         &mut self,
-        atypes: &[Type],
-        rty: &Type,
-        s: &Option<Box<Type>>,
-    ) -> Type {
+        atypes: &[TypeNodeId],
+        rty: TypeNodeId,
+        s: Option<TypeNodeId>,
+    ) -> TypeNodeId {
         let a = atypes
             .iter()
-            .map(|a| self.convert_unknown_to_intermediate(a).into_id())
+            .map(|a| self.convert_unknown_to_intermediate(*a))
             .collect();
         let r = self.convert_unknown_to_intermediate(rty);
-        Type::Function(a, r.into_id(), s.clone().map(|x| x.into_id()))
+        Type::Function(a, r, s).into_id()
     }
     // return true when the circular loop of intermediate variable exists.
-    pub fn occur_check(&self, id1: i64, t2: Type) -> bool {
-        let cls = |t2dash: Type| -> bool { self.occur_check(id1, t2dash) };
+    pub fn occur_check(&self, id1: i64, t2: TypeNodeId) -> bool {
+        let cls = |t2dash: TypeNodeId| -> bool { self.occur_check(id1, t2dash) };
 
-        let vec_cls =
-            |t: Vec<_>| -> bool { t.iter().all(|a: &TypeNodeId| cls(a.to_type().clone())) };
+        let vec_cls = |t: &[_]| -> bool { t.iter().all(|a| cls(*a)) };
 
-        match t2 {
+        match t2.to_type() {
             Type::Intermediate(id2) => {
-                if id1 == id2 {
+                if id1 == *id2 {
                     true
                 } else {
                     self.subst_map
                         .get(&id1)
-                        .map_or(false, |r| self.occur_check(id2, r.clone()))
+                        .map_or(false, |r| self.occur_check(*id2, *r))
                 }
             }
-            Type::Array(a) => cls(a.to_type().clone()),
+            Type::Array(a) => cls(*a),
             Type::Tuple(t) => vec_cls(t),
             Type::Function(p, r, s) => {
-                vec_cls(p)
-                    && cls(r.to_type().clone())
-                    && cls(s.map(|x| x.to_type().clone()).unwrap_or(Type::Unknown))
+                vec_cls(p) && cls(*r) && cls(s.map(|x| x).unwrap_or(Type::Unknown.into_id()))
             }
             Type::Struct(_s) => todo!(),
             _ => false,
         }
     }
 
-    fn substitute_intermediate_type(&self, id: i64) -> Option<Type> {
+    fn substitute_intermediate_type(&self, id: i64) -> Option<TypeNodeId> {
         match self.subst_map.get(&id) {
-            Some(t) => match t {
+            Some(t) => match t.to_type() {
                 Type::Intermediate(i) => self.substitute_intermediate_type(*i),
-                _ => Some(t.clone()),
+                _ => Some(*t),
             },
             None => None,
         }
     }
-    pub fn substitute_type(&self, t: Type) -> Option<Type> {
-        match t {
-            Type::Intermediate(id) => self.substitute_intermediate_type(id),
-            _ => Some(t.apply_fn(|e: Type| self.substitute_type(e).unwrap_or(Type::Unknown))),
+    pub fn substitute_type(&self, t: TypeNodeId) -> Option<TypeNodeId> {
+        match t.to_type() {
+            Type::Intermediate(id) => self.substitute_intermediate_type(*id),
+            _ => Some(t.apply_fn(|e| match self.substitute_type(e) {
+                Some(tid) => tid,
+                None => Type::Unknown.into_id(),
+            })),
         }
     }
 
-    pub fn unify_types(&mut self, t1: Type, t2: Type) -> Result<Type, Error> {
-        let mut unify_vec = |a1: Vec<Type>, a2: Vec<Type>| -> Result<Vec<_>, Error> {
+    pub fn unify_types(&mut self, t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
+        let mut unify_vec = |a1: Vec<TypeNodeId>, a2: Vec<TypeNodeId>| -> Result<Vec<_>, Error> {
             a1.clone()
                 .iter()
                 .zip(a2.iter())
-                .map(|(v1, v2)| self.unify_types(v1.clone(), v2.clone()))
+                .map(|(v1, v2)| self.unify_types(*v1, *v2))
                 .collect()
         };
-        match (t1.clone(), t2.clone()) {
+        match (t1.to_type(), t2.to_type()) {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
-                if self.occur_check(i1, t2.clone()) {
+                if self.occur_check(*i1, t2) {
                     Err(Error(ErrorKind::CircularType, 0..0)) //todo:span
                 } else if i1 < i2 {
-                    self.subst_map.insert(i1, t2);
+                    self.subst_map.insert(*i1, t2);
                     Ok(t1)
                 } else {
-                    self.subst_map.insert(i2, t1);
+                    self.subst_map.insert(*i2, t1);
                     Ok(t2)
                 }
             }
             (Type::Intermediate(i), t) | (t, Type::Intermediate(i)) => {
-                self.subst_map.insert(i, t.clone());
-                Ok(t)
+                let tid = t.clone().into_id();
+                self.subst_map.insert(*i, tid);
+                Ok(tid)
             }
-            (Type::Array(a1), Type::Array(a2)) => Ok(Type::Array(
-                self.unify_types(a1.to_type().clone(), a2.to_type().clone())?
-                    .into_id(),
-            )),
-            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(
-                self.unify_types(x1.to_type().clone(), x2.to_type().clone())?
-                    .into_id(),
-            )),
-            (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(
-                unify_vec(
-                    a1.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
-                    a2.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
-                )?
-                .iter()
-                .map(|x| x.clone().into_id())
-                .collect(),
-            )),
+            (Type::Array(a1), Type::Array(a2)) => {
+                Ok(Type::Array(self.unify_types(*a1, *a2)?).into_id())
+            }
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(self.unify_types(*x1, *x2)?).into_id()),
+            (Type::Tuple(a1), Type::Tuple(a2)) => {
+                Ok(Type::Tuple(unify_vec(a1.clone(), a2.clone())?).into_id())
+            }
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
-                unify_vec(
-                    p1.iter().map(|x| x.to_type().clone()).collect(),
-                    p2.iter().map(|x| x.to_type().clone()).collect(),
-                )?
-                .iter()
-                .map(|x| x.clone().into_id())
-                .collect(),
-                self.unify_types(r1.to_type().clone(), r2.to_type().clone())?
-                    .into_id(),
+                unify_vec(p1.clone(), p2.clone())?,
+                self.unify_types(*r1, *r2)?,
                 match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(
-                        self.unify_types(e1.to_type().clone(), e2.to_type().clone())?
-                            .into_id(),
-                    ),
+                    (Some(e1), Some(e2)) => Some(self.unify_types(*e1, *e2)?),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
-            )),
-            (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => Ok(Type::Primitive(p1)),
+            )
+            .into_id()),
+            (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => {
+                Ok(Type::Primitive(p1.clone()).into_id())
+            }
 
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
@@ -268,12 +250,16 @@ impl InferContext {
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
         }
     }
-    pub fn bind_pattern(&mut self, t: &Type, pat: &WithMeta<TypedPattern>) -> Result<Type, Error> {
+    pub fn bind_pattern(
+        &mut self,
+        t: TypeNodeId,
+        pat: &WithMeta<TypedPattern>,
+    ) -> Result<TypeNodeId, Error> {
         let WithMeta(TypedPattern { pat, ty: _ }, span) = pat;
         match pat {
             Pattern::Single(id) => {
-                self.env.add_bind(&[(*id, t.clone())]);
-                Ok(t.clone())
+                self.env.add_bind(&[(*id, t)]);
+                Ok(t)
             }
             Pattern::Tuple(pats) => {
                 let res = pats
@@ -283,21 +269,21 @@ impl InferContext {
                         let p = WithMeta(
                             TypedPattern {
                                 pat: p.clone(),
-                                ty: Some(ity.clone().into_id()),
+                                ty: Some(ity),
                             },
                             span.clone(),
                         );
-                        self.bind_pattern(&ity, &p).map(|x| x.into_id())
+                        self.bind_pattern(ity, &p)
                     })
                     .try_collect::<Vec<_>>()?;
 
-                Ok(Type::Tuple(res))
+                Ok(Type::Tuple(res).into_id())
             }
         }
     }
 }
 
-pub fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
+pub fn infer_type_literal(e: &Literal) -> Result<TypeNodeId, Error> {
     let pt = match e {
         Literal::Float(_s) => PType::Numeric,
         Literal::Int(_s) => PType::Int,
@@ -305,9 +291,9 @@ pub fn infer_type_literal(e: &Literal) -> Result<Type, Error> {
         Literal::Now => PType::Numeric,
         Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
     };
-    Ok(Type::Primitive(pt))
+    Ok(Type::Primitive(pt).into_id())
 }
-pub fn lookup(name: &Symbol, ctx: &mut InferContext, span: &Span) -> Result<Type, Error> {
+pub fn lookup(name: &Symbol, ctx: &mut InferContext, span: &Span) -> Result<TypeNodeId, Error> {
     ctx.env.lookup(name).map_or_else(
         || {
             println!("{:#?}", ctx.env);
@@ -316,11 +302,11 @@ pub fn lookup(name: &Symbol, ctx: &mut InferContext, span: &Span) -> Result<Type
                 span.clone(),
             ))
         }, //todo:Span
-        |v| Ok(v.clone()),
+        |v| Ok(*v),
     )
 }
 
-pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Error> {
+pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNodeId, Error> {
     let span = e_meta.to_span().clone();
     let infer_vec = |e: &[ExprNodeId], ctx: &mut InferContext| {
         e.iter()
@@ -330,15 +316,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
 
     match e_meta.to_expr() {
         Expr::Literal(l) => infer_type_literal(l),
-        Expr::Tuple(e) => Ok(Type::Tuple(
-            infer_vec(e.as_slice(), ctx)?
-                .iter()
-                .map(|x| x.clone().into_id())
-                .collect(),
-        )),
+        Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e.as_slice(), ctx)?).into_id()),
         Expr::Proj(e, idx) => {
             let tup = infer_type(*e, ctx)?;
-            match tup {
+            match tup.to_type() {
                 Type::Tuple(vec) => {
                     if vec.len() < *idx as usize {
                         Err(Error(
@@ -346,7 +327,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                             e.to_span().clone(),
                         ))
                     } else {
-                        Ok(vec[*idx as usize].to_type().clone())
+                        Ok(vec[*idx as usize])
                     }
                 }
                 _ => Err(Error(ErrorKind::IndexForNonTuple, e.to_span().clone())),
@@ -354,10 +335,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
         }
         Expr::Feed(id, body) => {
             let feedv = ctx.gen_intermediate_type();
-            ctx.env.add_bind(&[(*id, feedv.clone())]);
+            ctx.env.add_bind(&[(*id, feedv)]);
             let b = infer_type(*body, ctx);
             let res = ctx.unify_types(b?, feedv)?;
-            if res.is_primitive() {
+            if res.to_type().is_primitive() {
                 Ok(res)
             } else {
                 Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
@@ -369,57 +350,45 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
                 .iter()
                 .map(|WithMeta(id, _s)| {
                     let pt = match id.ty {
-                        Some(ty) => ty.to_type().clone(),
+                        Some(ty) => ty,
                         None => ctx.gen_intermediate_type(),
                     };
-                    ctx.env.add_bind(&[(id.id, pt.clone())]);
-                    pt.into_id()
+                    ctx.env.add_bind(&[(id.id, pt)]);
+                    pt
                 })
                 .collect();
             let bty = if let Some(r) = rtype {
                 let bty = infer_type(*body, ctx)?;
-                ctx.unify_types(r.to_type().clone(), bty)?
+                ctx.unify_types(*r, bty)?
             } else {
                 infer_type(*body, ctx)?
             };
             ctx.env.to_outer();
-            Ok(Type::Function(ptypes, bty.into_id(), None))
+            Ok(Type::Function(ptypes, bty, None).into_id())
         }
         Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(*body, c)?;
-            let idt = match tpat.0.ty.map(|x| x.to_type().clone()) {
-                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
-                    &atypes
-                        .iter()
-                        .map(|x| x.to_type().clone())
-                        .collect::<Vec<_>>(),
-                    rty.to_type(),
-                    &s.map(|x| Box::new(x.to_type().clone())),
-                ),
-                Some(t) => t.clone(),
+            let idt = match &tpat.0.ty {
+                Some(tid) => match tid.to_type() {
+                    Type::Function(atypes, rty, s) => c.convert_unknown_function(atypes, *rty, *s),
+                    _ => *tid,
+                },
                 None => c.gen_intermediate_type(),
             };
 
             let bodyt_u = c.unify_types(idt, bodyt)?;
-            let _ = c.bind_pattern(&bodyt_u, tpat)?;
+            let _ = c.bind_pattern(bodyt_u, tpat)?;
             let res = match then {
                 Some(e) => infer_type(*e, c),
-                None => Ok(Type::Primitive(PType::Unit)),
+                None => Ok(Type::Primitive(PType::Unit).into_id()),
             };
             res
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
             let idt = match id.ty.map(|x| x.to_type().clone()) {
-                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(
-                    &atypes
-                        .iter()
-                        .map(|x| x.to_type().clone())
-                        .collect::<Vec<_>>(),
-                    rty.to_type(),
-                    &s.map(|x| Box::new(x.to_type().clone())),
-                ),
+                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(&atypes, rty, s),
                 _ => panic!("type for letrec is limited to function type in mimium."),
             };
 
@@ -430,38 +399,38 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<Type, Er
 
             let res = match then {
                 Some(e) => infer_type(*e, c),
-                None => Ok(Type::Primitive(PType::Unit)),
+                None => Ok(Type::Primitive(PType::Unit).into_id()),
             };
             res
         }
         Expr::Var(name, _time) => lookup(name, ctx, &span),
         Expr::Apply(fun, callee) => {
             let fnl = infer_type(*fun, ctx)?;
-            let callee_t = infer_vec(callee.as_slice(), ctx)?
-                .iter()
-                .map(|x| x.clone().into_id())
-                .collect();
+            let callee_t = infer_vec(callee.as_slice(), ctx)?;
             let res_t = ctx.gen_intermediate_type();
-            let fntype = Type::Function(callee_t, res_t.into_id(), None);
+            let fntype = Type::Function(callee_t, res_t, None).into_id();
             let restype = ctx.unify_types(fnl, fntype)?;
-            if let Type::Function(_, r, _) = restype {
-                Ok(r.to_type().clone())
+            if let Type::Function(_, r, _) = restype.to_type() {
+                Ok(*r)
             } else {
                 unreachable!();
             }
         }
         Expr::If(cond, then, opt_else) => {
             let condt = infer_type(*cond, ctx)?;
-            let _bt = ctx.unify_types(Type::Primitive(PType::Int), condt); //todo:boolean type
+            let _bt = ctx.unify_types(Type::Primitive(PType::Int).into_id(), condt); //todo:boolean type
             let thent = infer_type(*then, ctx)?;
-            let elset =
-                opt_else.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e, ctx))?;
+            let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
+                infer_type(e, ctx)
+            })?;
             ctx.unify_types(thent, elset)
         }
-        Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit)), |e| infer_type(e, ctx)),
+        Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
+            infer_type(e, ctx)
+        }),
         _ => {
             // todo!();
-            Ok(Type::Primitive(PType::Unit))
+            Ok(Type::Primitive(PType::Unit).into_id())
         }
     }
 }
