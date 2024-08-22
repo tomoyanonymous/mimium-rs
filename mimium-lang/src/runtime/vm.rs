@@ -4,7 +4,7 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::HashMap,
-    ops::Range,
+    ops::{Not, Range},
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -92,6 +92,7 @@ impl From<OpenUpValue> for UpValue {
 pub(crate) struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
     pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
+    pub is_closed: bool,
     pub upvalues: Vec<UpValue>,
     state_storage: StateStorage,
 }
@@ -108,6 +109,7 @@ impl Closure {
         Self {
             fn_proto_pos: fn_i,
             upvalues,
+            is_closed: false,
             base_ptr,
             state_storage,
         }
@@ -411,9 +413,10 @@ impl Machine {
         nret
     }
     fn close_upvalues(&mut self, src: Reg, local_closures: &[(usize, ClosureIdx)]) {
-        for (stack_pos, clsidx) in local_closures.iter() {
-            let is_escaping = *stack_pos as u8 == src;
-            if is_escaping {
+        local_closures
+            .iter()
+            .filter(|(stack_pos, _)| (src == *stack_pos as u8))
+            .for_each(|(_, clsidx)| {
                 let cls = self.get_local_closure(*clsidx);
                 let newupvls = cls
                     .upvalues
@@ -428,12 +431,18 @@ impl Machine {
                         }
                     })
                     .collect::<Vec<_>>();
-                self.get_local_closure_mut(*clsidx).upvalues = newupvls;
-            } else {
-                log::trace!("release closure {:?}", clsidx.0);
-                self.closures.remove(clsidx.0);
-            }
-        }
+                let cls = self.get_local_closure_mut(*clsidx);
+                cls.upvalues = newupvls;
+                cls.is_closed = true;
+            });
+    }
+    #[allow(clippy::filter_map_bool_then)]
+    fn release_open_closures(&mut self, local_closures: &[(usize, ClosureIdx)]) {
+        let _ = local_closures.iter().filter_map(|(_, clsidx)| {
+            self.get_local_closure(*clsidx)
+                .is_closed.not()
+                .then(|| self.closures.remove(clsidx.0))
+        });
     }
     /// Execute function, return retcode.
     pub fn execute(
@@ -541,10 +550,12 @@ impl Machine {
                 }
                 Instruction::Return0 => {
                     self.stack.truncate((self.base_pointer - 1) as usize);
+                    self.release_open_closures(&local_closures);
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
                     let _ = self.return_general(iret, nret);
+                    self.release_open_closures(&local_closures);
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index, size) => {
