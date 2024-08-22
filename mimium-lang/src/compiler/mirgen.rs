@@ -73,13 +73,7 @@ impl Context {
     fn make_delay(&mut self, f: &VPtr, args: &[ExprId]) -> Result<Option<VPtr>, CompileError> {
         let (max, src, time) = match args {
             [max, src, time] => (max, src, time),
-            _ => {
-                let span = match args.first() {
-                    Some(e) => e.to_span().clone(),
-                    None => 0..0, // something is wrong
-                };
-                return Err(CompileError(CompileErrorKind::UnboundedDelay, span));
-            }
+            _ => return Ok(None),
         };
 
         match (f.as_ref(), max.to_expr()) {
