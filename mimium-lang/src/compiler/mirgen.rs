@@ -72,14 +72,10 @@ impl Context {
         &mut self.program.functions[i]
     }
     fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
-        let (name, rt) = match f.as_ref() {
-            Value::ExtFunction(name, rt) => (name, rt),
+        let rt = match f.as_ref() {
+            Value::ExtFunction(name, rt) if *name != "delay".to_symbol() => rt,
             _ => return Ok(None),
         };
-
-        if *name == "delay".to_symbol() {
-            return Ok(None);
-        }
 
         let (max, src, time) = match args {
             [max, src, time] => (max, src, time),
