@@ -9,6 +9,7 @@ edition = "2021"
 
 
 [dependencies]
+mimium-macros = { version = "0.0.1", path = "../mimium-macros/" }
 
 chumsky = "0.9"
 ariadne = "0.1.5"

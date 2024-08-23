@@ -2,6 +2,7 @@ use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
+use crate::predefined::symbols::special_fn;
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -77,7 +78,7 @@ impl Context {
             _ => return Ok(None),
         };
 
-        if *name == "delay".to_symbol() {
+        if *name == special_fn::DELAY {
             return Ok(None);
         }
 

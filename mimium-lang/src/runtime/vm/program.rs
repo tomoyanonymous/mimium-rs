@@ -1,6 +1,7 @@
 use super::{Instruction, RawVal};
 use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::mir;
+use crate::predefined::symbols::entry_point;
 pub use mir::OpenUpValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -48,7 +49,7 @@ impl Program {
             .position(|(label, _f)| label == name)
     }
     pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
-        self.get_fun_index(&"dsp".to_symbol())
+        self.get_fun_index(&entry_point::DSP)
             .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
     }
 }

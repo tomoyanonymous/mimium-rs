@@ -15,6 +15,7 @@ pub mod compiler;
 pub mod runtime;
 
 pub mod interner;
+pub mod predefined;
 
 pub mod ast_interpreter;
 pub mod mir_interpreter;

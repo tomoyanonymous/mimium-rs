@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
+use crate::predefined::symbols::{builtin_fn, entry_point};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
@@ -187,7 +188,7 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 .foldr(|(_op, op_span), rhs| {
                     let rhs_span = rhs.to_span();
                     let neg_op =
-                        Expr::Var("neg".to_symbol(), None).into_id(op_span.start..rhs_span.start);
+                        Expr::Var(builtin_fn::NEG, None).into_id(op_span.start..rhs_span.start);
                     Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
                 })
                 .labelled("unary");
@@ -408,7 +409,7 @@ pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
     let span = ast.to_span();
     let res = Expr::Let(
         TypedPattern {
-            pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
+            pat: Pattern::Single(entry_point::GLOBAL),
             ty: Type::Unknown.into_id_with_span(span.clone()),
         },
         Expr::Lambda(vec![], None, ast).into_id(span.clone()),
