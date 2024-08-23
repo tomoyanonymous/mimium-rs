@@ -1,8 +1,8 @@
 use crate::{
-    ast::{self, Symbol, ToSymbol},
+    ast::{self},
     compiler::{Error as CompileError, ErrorKind},
     integer,
-    interner::{ExprNodeId, TypeNodeId},
+    interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId},
     numeric,
     pattern::{TypedId, TypedPattern},
     runtime::builtin_fn,

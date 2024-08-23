@@ -1,9 +1,8 @@
 use std::fmt;
 
 use crate::{
-    ast::Symbol,
     format_vec,
-    interner::{with_session_globals, TypeNodeId},
+    interner::{with_session_globals, Symbol, TypeNodeId},
     utils::metadata::Span,
 };
 

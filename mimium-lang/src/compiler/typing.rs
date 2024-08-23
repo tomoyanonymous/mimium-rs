@@ -1,6 +1,6 @@
-use crate::ast::{Expr, Literal, Symbol, ToSymbol};
+use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
-use crate::interner::{ExprNodeId, TypeNodeId};
+use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};

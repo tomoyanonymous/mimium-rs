@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::compiler::intrinsics;
+use crate::interner::{Symbol, ToSymbol};
 
-use super::{Symbol, ToSymbol};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Comment {
     SingleLine(String),

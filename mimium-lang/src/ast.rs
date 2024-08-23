@@ -1,49 +1,11 @@
 pub mod builder;
 
-use crate::interner::{with_session_globals, ExprNodeId, TypeNodeId};
+use crate::interner::{with_session_globals, ExprNodeId, Symbol, TypeNodeId};
 use crate::pattern::{TypedId, TypedPattern};
 use crate::utils::metadata::Span;
 use crate::utils::miniprint::MiniPrint;
-use std::fmt::{self, Display};
+use std::fmt::{self};
 pub type Time = i64;
-
-#[derive(Default, Copy, Clone, PartialEq, Debug, Hash, Eq)]
-pub struct Symbol(pub usize); //Symbol Trait is implemented on usize
-
-pub trait ToSymbol {
-    fn to_symbol(&self) -> Symbol;
-}
-
-impl<T: AsRef<str>> ToSymbol for T {
-    fn to_symbol(&self) -> Symbol {
-        Symbol(with_session_globals(|session_globals| {
-            session_globals.symbol_interner.get_or_intern(self.as_ref())
-        }))
-    }
-}
-
-impl Symbol {
-    pub fn as_str(&self) -> &str {
-        with_session_globals(|session_globals| unsafe {
-            // This transmute is needed to convince the borrow checker. Since
-            // the session_global should exist until the end of the session,
-            // this &str should live sufficiently long.
-            std::mem::transmute::<&str, &str>(
-                session_globals
-                    .symbol_interner
-                    .resolve(self.0)
-                    .expect("invalid symbol"),
-            )
-        })
-    }
-}
-
-// Note: to_string() is auto-implemented by this
-impl Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Literal {

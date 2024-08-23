@@ -1,7 +1,7 @@
 use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, Stream, StreamConfig};
-use mimium_lang::ast::ToSymbol;
+use mimium_lang::interner::ToSymbol;
 use mimium_lang::runtime::vm;
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};

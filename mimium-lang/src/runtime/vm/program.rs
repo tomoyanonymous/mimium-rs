@@ -1,6 +1,5 @@
 use super::{Instruction, RawVal};
-use crate::ast::{Symbol, ToSymbol};
-use crate::interner::TypeNodeId;
+use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::mir;
 pub use mir::OpenUpValue;
 

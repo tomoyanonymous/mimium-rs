@@ -3,7 +3,7 @@ pub use crate::ast::{Expr, Literal};
 use super::Symbol;
 
 pub fn str_to_symbol<T: ToString>(x: T) -> Symbol {
-    use crate::ast::ToSymbol;
+    use crate::interner::ToSymbol;
     x.to_string().to_symbol()
 }
 

@@ -1,5 +1,4 @@
-use crate::ast::Symbol;
-use crate::interner::TypeNodeId;
+use crate::interner::{Symbol, TypeNodeId};
 //todo! need to replace with interned string.
 use crate::types::Type;
 use crate::utils::metadata::Span;

@@ -1,5 +1,8 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
-use crate::{ast::Symbol, interner::TypeNodeId, types::TypeSize};
+use crate::{
+    interner::{Symbol, TypeNodeId},
+    types::TypeSize,
+};
 use std::{cell::OnceCell, sync::Arc};
 
 pub mod print;

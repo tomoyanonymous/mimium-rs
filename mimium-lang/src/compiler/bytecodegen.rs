@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::ast::Symbol;
-use crate::interner::TypeNodeId;
+use crate::interner::{Symbol, TypeNodeId};
 use crate::mir::{self, Mir};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
@@ -770,7 +769,7 @@ pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn Reportable
 
 #[cfg(test)]
 mod test {
-    use crate::ast::ToSymbol;
+    use crate::interner::ToSymbol;
 
     #[test]
     fn build() {

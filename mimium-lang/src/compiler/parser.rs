@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::interner::{ExprNodeId, TypeNodeId};
+use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
