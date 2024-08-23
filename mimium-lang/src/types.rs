@@ -1,8 +1,10 @@
 use std::fmt;
 
-use crate::{ast::Symbol, format_vec};
-
-use super::utils::miniprint::MiniPrint;
+use crate::{
+    format_vec,
+    interner::{with_session_globals, Symbol, TypeNodeId},
+    utils::metadata::Span,
+};
 
 /// Basic types that are not boxed.
 /// They should be splitted semantically as the type of `feed x.e`cannot take function type.
@@ -17,14 +19,14 @@ pub enum PType {
 pub enum Type {
     Primitive(PType),
     //aggregate types
-    Array(Box<Self>),
-    Tuple(Vec<Self>),
-    Struct(Vec<(Symbol, Box<Self>)>),
+    Array(TypeNodeId),
+    Tuple(Vec<TypeNodeId>),
+    Struct(Vec<(Symbol, TypeNodeId)>),
     //Function that has a vector of parameters, return type, and type for internal states.
-    Function(Vec<Self>, Box<Self>, Option<Box<Self>>),
-    Ref(Box<Self>),
+    Function(Vec<TypeNodeId>, TypeNodeId, Option<TypeNodeId>),
+    Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
-    Code(Box<Self>),
+    Code(TypeNodeId),
     Intermediate(i64),
     Unknown,
 }
@@ -50,17 +52,20 @@ impl Type {
     where
         F: Fn(Self) -> Self,
     {
-        let apply_box = |a: &Self| -> Box<Self> { Box::new(closure(a.clone())) };
-        let apply_vec =
-            |v: &Vec<Self>| -> Vec<Self> { v.iter().map(|a| closure(a.clone())).collect() };
+        let apply_scalar = |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id() };
+        let apply_vec = |v: &Vec<TypeNodeId>| -> Vec<TypeNodeId> {
+            v.iter()
+                .map(|a| closure(a.to_type().clone()).into_id())
+                .collect()
+        };
         match self {
-            Type::Array(a) => Type::Array(apply_box(a)),
+            Type::Array(a) => Type::Array(apply_scalar(*a)),
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
             Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => {
-                Type::Function(apply_vec(p), apply_box(r), s.as_ref().map(|a| apply_box(a)))
+                Type::Function(apply_vec(p), apply_scalar(*r), s.map(|a| apply_scalar(a)))
             }
-            Type::Ref(x) => Type::Ref(apply_box(x)),
+            Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(*id),
             _ => self.clone(),
@@ -73,13 +78,34 @@ impl Type {
         todo!()
     }
 
-    pub fn get_as_tuple(&self) -> Option<&[Type]> {
+    pub fn get_as_tuple(&self) -> Option<&[TypeNodeId]> {
         match self {
-            Type::Tuple(types) => Some(&types),
+            Type::Tuple(types) => Some(types),
             _ => None,
         }
     }
+
+    pub fn into_id(self) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type(self))
+    }
+
+    pub fn into_id_with_span(self, span: Span) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
+    }
 }
+
+impl TypeNodeId {
+    // TODO: clean up the roundtrip between Type and TypeNodeId
+    pub fn apply_fn<F>(&self, closure: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        self.to_type()
+            .apply_fn(|x| closure(x.into_id()).to_type().clone())
+            .into_id()
+    }
+}
+
 impl fmt::Display for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -95,21 +121,27 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Type::Primitive(p) => write!(f, "{p}"),
-            Type::Array(a) => write!(f, "[{a}]"),
+            Type::Array(a) => write!(f, "[{}]", a.to_type()),
             Type::Tuple(v) => {
-                let vf = format_vec!(v, ",");
+                let vf = format_vec!(
+                    v.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
+                    ","
+                );
                 write!(f, "({vf})")
             }
             Type::Struct(v) => {
                 write!(f, "{v:?}")
             }
             Type::Function(p, r, _s) => {
-                let args = format_vec!(p, ",");
-                write!(f, "({args})->{r}")
+                let args = format_vec!(
+                    p.iter().map(|x| x.to_type().clone()).collect::<Vec<_>>(),
+                    ","
+                );
+                write!(f, "({args})->{}", r.to_type())
             }
-            Type::Ref(x) => write!(f, "&{x}"),
+            Type::Ref(x) => write!(f, "&{}", x.to_type()),
 
-            Type::Code(c) => write!(f, "<{c}>"),
+            Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
                 write!(f, "intermediate[{}]", id,)
             }

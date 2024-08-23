@@ -1,7 +1,6 @@
 use super::{Instruction, RawVal};
-use crate::ast::{Symbol, ToSymbol};
+use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::mir;
-use crate::types::Type;
 pub use mir::OpenUpValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -38,8 +37,8 @@ impl FuncProto {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
     pub global_fn_table: Vec<(Symbol, FuncProto)>,
-    pub ext_fun_table: Vec<(Symbol, Type)>,
-    pub ext_cls_table: Vec<(Symbol, Type)>,
+    pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
+    pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
     pub global_vals: Vec<RawVal>,
 }
 impl Program {

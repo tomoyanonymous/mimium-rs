@@ -20,7 +20,7 @@ use program::OpenUpValue;
 pub use program::{FuncProto, Program};
 
 use crate::{
-    ast::{Symbol, ToSymbol},
+    interner::{Symbol, ToSymbol},
     types::TypeSize,
 };
 pub type RawVal = u64;
