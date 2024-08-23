@@ -1,5 +1,5 @@
 use crate::ast::Symbol;
-use crate::interner::{with_session_globals, SessionGlobals, TypeNodeId};
+use crate::interner::TypeNodeId;
 //todo! need to replace with interned string.
 use crate::types::Type;
 use crate::utils::metadata::Span;
@@ -33,31 +33,34 @@ pub struct TypedId {
     // TypeNodeId is always issued even if the expression doesn't have the type
     // specification at all. This can be used for querying for the span.
     pub ty: TypeNodeId,
-    // TODO: this is a convenient shortcut to know the type inference state
-    // without converting the Node ID back to the actual type.
-    pub unknown: bool,
 }
 
 impl TypedId {
     pub fn to_span(&self) -> &Span {
         self.ty.to_span()
     }
+
+    pub fn is_unknown(&self) -> bool {
+        self.ty.to_type() == &Type::Unknown
+    }
 }
 
 impl std::fmt::Display for TypedId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.unknown {
-            false => write!(f, "{} :{}", self.id, self.ty.to_type()),
-            true => write!(f, "{}", self.id),
+        if !self.is_unknown() {
+            write!(f, "{} :{}", self.id, self.ty.to_type())
+        } else {
+            write!(f, "{}", self.id)
         }
     }
 }
 
 impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
-        match self.unknown {
-            false => format!("(tid {} {})", self.id, self.ty.to_type()), //todo:type
-            true => self.id.to_string(),
+        if !self.is_unknown() {
+            format!("(tid {} {})", self.id, self.ty.to_type())
+        } else {
+            self.id.to_string()
         }
     }
 }
@@ -66,14 +69,15 @@ impl MiniPrint for TypedId {
 pub struct TypedPattern {
     pub pat: Pattern,
     pub ty: TypeNodeId,
-    // TODO: this is a convenient shortcut to know the type inference state
-    // without converting the Node ID back to the actual type.
-    pub unknown: bool,
 }
 
 impl TypedPattern {
     pub fn to_span(&self) -> &Span {
         self.ty.to_span()
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        self.ty.to_type() == &Type::Unknown
     }
 }
 
@@ -94,7 +98,6 @@ impl From<TypedId> for TypedPattern {
         TypedPattern {
             pat: Pattern::Single(value.id),
             ty: value.ty,
-            unknown: value.unknown,
         }
     }
 }
@@ -103,11 +106,7 @@ impl TryFrom<TypedPattern> for TypedId {
 
     fn try_from(value: TypedPattern) -> Result<Self, Self::Error> {
         match value.pat {
-            Pattern::Single(id) => Ok(TypedId {
-                id,
-                ty: value.ty,
-                unknown: value.unknown,
-            }),
+            Pattern::Single(id) => Ok(TypedId { id, ty: value.ty }),
             Pattern::Tuple(_) => Err(ConversionError),
         }
     }
@@ -115,17 +114,19 @@ impl TryFrom<TypedPattern> for TypedId {
 
 impl MiniPrint for TypedPattern {
     fn simple_print(&self) -> String {
-        match self.unknown {
-            false => format!("(tpat {} {})", self.pat, self.ty.to_type()), //todo:type
-            true => self.pat.to_string(),
+        if !self.is_unknown() {
+            format!("(tpat {} {})", self.pat, self.ty.to_type())
+        } else {
+            self.pat.to_string()
         }
     }
 }
 impl std::fmt::Display for TypedPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.unknown {
-            false => write!(f, "{} :{}", self.pat, self.ty.to_type()),
-            true => write!(f, "{}", self.pat),
+        if !self.is_unknown() {
+            write!(f, "{} :{}", self.pat, self.ty.to_type())
+        } else {
+            write!(f, "{}", self.pat)
         }
     }
 }

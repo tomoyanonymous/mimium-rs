@@ -24,7 +24,6 @@ fn test_let() {
         TypedPattern {
             pat: Pattern::Single("goge".to_symbol()),
             ty: Type::Unknown.into_id_with_span(4..8),
-            unknown: true,
         },
         Expr::Literal(Literal::Int(36)).into_id(11..13),
         Some(Expr::Var("goge".to_symbol(), None).into_id(15..19)),
@@ -41,7 +40,6 @@ fn test_lettuple() {
                 Pattern::Single("b".to_symbol()),
             ]),
             ty: Type::Unknown.into_id_with_span(4..9),
-            unknown: true,
         },
         Expr::Tuple(vec![
             Expr::Literal(Literal::Int(36)).into_id(13..15),
@@ -91,7 +89,6 @@ fn test_block() {
             TypedPattern {
                 pat: Pattern::Single("hoge".to_symbol()),
                 ty: Type::Unknown.into_id_with_span(5..9),
-                unknown: true,
             },
             Expr::Literal(Literal::Int(100)).into_id(12..15),
             Some(Expr::Var("hoge".to_symbol(), None).into_id(16..20)),
@@ -168,19 +165,16 @@ fn test_fndef() {
             .into_id(),
 
             id: "hoge".to_symbol(),
-            unknown: false,
         },
         Expr::Lambda(
             vec![
                 TypedId {
                     id: "input".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(8..13),
-                    unknown: true,
                 },
                 TypedId {
                     id: "gue".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(14..17),
-                    unknown: true,
                 },
             ],
             None,
@@ -198,19 +192,16 @@ fn test_macrodef() {
         TypedId {
             id: "hoge".to_symbol(),
             ty: Type::Unknown.into_id(),
-            unknown: true,
         },
         Expr::Lambda(
             vec![
                 TypedId {
                     id: "input".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(11..16),
-                    unknown: true,
                 },
                 TypedId {
                     id: "gue".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(17..20),
-                    unknown: true,
                 },
             ],
             None,

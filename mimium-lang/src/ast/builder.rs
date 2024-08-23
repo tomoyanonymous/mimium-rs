@@ -50,7 +50,6 @@ macro_rules! lambda_args {
             .map(|a| TypedId {
                 id: $crate::ast::builder::str_to_symbol(a),
                 ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
-                unknown: true,
             })
             .collect::<Vec<_>>()
     };
@@ -65,7 +64,6 @@ macro_rules! lambda {
                 .map(|a: &&'static str| $crate::pattern::TypedId {
                     id: $crate::ast::builder::str_to_symbol(a),
                     ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
-                    unknown: true,
                 })
                 .collect::<Vec<_>>(),
             None,
@@ -82,7 +80,6 @@ macro_rules! let_ {
             $crate::pattern::TypedPattern {
                 pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
                 ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
-                unknown: true,
             },
             $body,
             Some($then),
@@ -94,7 +91,6 @@ macro_rules! let_ {
             $crate::pattern::TypedPattern {
                 pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
                 ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
-                unknown: true,
             },
             Box::new($body),
             None,
@@ -110,7 +106,6 @@ macro_rules! letrec {
             TypedId {
                 id: $crate::ast::builder::str_to_symbol($id),
                 ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
-                unknown: true,
             },
             $body,
             $then,

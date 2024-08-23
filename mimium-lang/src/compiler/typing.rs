@@ -271,7 +271,6 @@ impl InferContext {
                         let p = TypedPattern {
                             pat: p.clone(),
                             ty: ity,
-                            unknown: false,
                         };
                         self.bind_pattern(ity, &p)
                     })
@@ -349,9 +348,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             let ptypes: Vec<TypeNodeId> = p
                 .iter()
                 .map(|id| {
-                    let pt = match id.unknown {
-                        false => id.ty,
-                        true => ctx.gen_intermediate_type(),
+                    let pt = if !id.is_unknown() {
+                        id.ty
+                    } else {
+                        ctx.gen_intermediate_type()
                     };
                     ctx.env.add_bind(&[(id.id, pt)]);
                     pt
@@ -369,12 +369,13 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
         Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(*body, c)?;
-            let idt = match tpat.unknown {
-                false => match tpat.ty.to_type() {
+            let idt = if !tpat.is_unknown() {
+                match tpat.ty.to_type() {
                     Type::Function(atypes, rty, s) => c.convert_unknown_function(atypes, *rty, *s),
                     _ => tpat.ty,
-                },
-                true => c.gen_intermediate_type(),
+                }
+            } else {
+                c.gen_intermediate_type()
             };
 
             let bodyt_u = c.unify_types(idt, bodyt)?;
@@ -387,7 +388,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
-            let idt = match (id.unknown, id.ty.to_type()) {
+            let idt = match (id.is_unknown(), id.ty.to_type()) {
                 (false, Type::Function(atypes, rty, s)) => {
                     c.convert_unknown_function(atypes, *rty, *s)
                 }

@@ -213,7 +213,6 @@ impl Context {
                     let tpat = TypedPattern {
                         pat: pat.clone(),
                         ty: tid,
-                        unknown: true,
                     };
                     self.add_bind_pattern(&tpat, v, cty)?;
                 }
@@ -538,7 +537,7 @@ impl Context {
                     .enumerate()
                     .map(|(idx, name)| {
                         let label = name.id;
-                        let t = if !name.unknown {
+                        let t = if !name.is_unknown() {
                             name.ty
                         } else {
                             let tenv = &mut self.typeenv;
@@ -555,7 +554,7 @@ impl Context {
                     .enumerate()
                     .map(|(idx, name)| {
                         let label = name.id;
-                        let t = if !name.unknown {
+                        let t = if !name.is_unknown() {
                             name.ty
                         } else {
                             let tenv = &mut self.typeenv;
@@ -660,14 +659,15 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
-                let idt = match pat.unknown {
-                    false => match pat.ty.to_type() {
+                let idt = if !pat.is_unknown() {
+                    match pat.ty.to_type() {
                         Type::Function(atypes, rty, s) => {
                             self.typeenv.convert_unknown_function(atypes, *rty, *s)
                         }
                         _ => pat.ty,
-                    },
-                    true => self.typeenv.gen_intermediate_type(),
+                    }
+                } else {
+                    self.typeenv.gen_intermediate_type()
                 };
                 self.typeenv.unify_types(idt, t)?;
 
@@ -707,14 +707,15 @@ impl Context {
                 self.fn_label = Some(id.id);
                 let t = {
                     let tenv = &mut self.typeenv;
-                    let idt = match id.unknown {
-                        false => match id.ty.to_type() {
+                    let idt = if !id.is_unknown() {
+                        match id.ty.to_type() {
                             Type::Function(atypes, rty, s) => {
                                 tenv.convert_unknown_function(atypes, *rty, *s)
                             }
                             _ => id.ty,
-                        },
-                        true => tenv.gen_intermediate_type(),
+                        }
+                    } else {
+                        tenv.gen_intermediate_type()
                     };
                     tenv.env.add_bind(&[(id.id, idt)]);
                     idt

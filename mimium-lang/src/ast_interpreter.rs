@@ -50,22 +50,22 @@ impl Value {
             Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()).into_id(),
             Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
-                    .map(|TypedId { ty, unknown, .. }| {
-                        if *unknown {
+                    .map(|tid| {
+                        if tid.is_unknown() {
                             panic!("function argument untyped");
                         }
-                        *ty
+                        tid.ty
                     })
                     .collect(),
                 r_type.expect("Return type cannot inferred"), //todo!
                 None,
             )
             .into_id(),
-            Value::FixPoint(TypedId { ty, unknown, .. }, _) => {
-                if *unknown {
+            Value::FixPoint(tid, _) => {
+                if tid.is_unknown() {
                     unit!()
                 } else {
-                    *ty
+                    tid.ty
                 }
             }
             //todo!

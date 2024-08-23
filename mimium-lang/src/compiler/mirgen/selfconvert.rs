@@ -173,13 +173,11 @@ mod test {
             TypedPattern {
                 pat: Pattern::Single("lowpass".to_symbol()),
                 ty: Type::Unknown.into_id_with_span(0..1),
-                unknown: true,
             },
             Expr::Lambda(
                 vec![TypedId {
                     id: "input".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(0..1),
-                    unknown: true,
                 }],
                 None,
                 Expr::Literal(Literal::SelfLit).into_id(0..1),
@@ -194,13 +192,11 @@ mod test {
             TypedPattern {
                 pat: Pattern::Single("lowpass".to_symbol()),
                 ty: Type::Unknown.into_id_with_span(0..1),
-                unknown: true,
             },
             Expr::Lambda(
                 vec![TypedId {
                     id: "input".to_symbol(),
                     ty: Type::Unknown.into_id_with_span(0..1),
-                    unknown: true,
                 }],
                 None,
                 Expr::Feed(

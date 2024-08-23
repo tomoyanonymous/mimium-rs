@@ -71,15 +71,10 @@ where
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(select! { Token::Ident(s) => s })
         .map_with_span(|(sym, t), span| match t {
-            Some(ty) => TypedId {
-                id: sym,
-                ty,
-                unknown: false,
-            },
+            Some(ty) => TypedId { id: sym, ty },
             None => TypedId {
                 id: sym,
                 ty: Type::Unknown.into_id_with_span(span),
-                unknown: true,
             },
         })
         .labelled("lvar")
@@ -95,15 +90,10 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
-        Some(ty) => TypedPattern {
-            pat,
-            ty,
-            unknown: false,
-        },
+        Some(ty) => TypedPattern { pat, ty },
         None => TypedPattern {
             pat,
             ty: Type::Unknown.into_id_with_span(s),
-            unknown: true,
         },
     })
 }
@@ -347,9 +337,12 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
                 let atypes = ids
                     .iter()
-                    .map(|TypedId { ty, unknown, .. }| match unknown {
-                        false => *ty,
-                        true => Type::Unknown.into_id(),
+                    .map(|tid| {
+                        if !tid.is_unknown() {
+                            tid.ty
+                        } else {
+                            Type::Unknown.into_id()
+                        }
                     })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
@@ -360,7 +353,6 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                         None,
                     )
                     .into_id(),
-                    unknown: false,
                 };
                 Expr::LetRec(
                     fname,
@@ -418,7 +410,6 @@ pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
         TypedPattern {
             pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
             ty: Type::Unknown.into_id_with_span(span.clone()),
-            unknown: true,
         },
         Expr::Lambda(vec![], None, ast).into_id(span.clone()),
         None,
