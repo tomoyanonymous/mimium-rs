@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 use id_arena::{Arena, Id};
 use string_interner::{backend::StringBackend, StringInterner};
 
-use crate::{ast::Expr, types::Type, utils::metadata::Span};
+use crate::{ast::Expr, dummy_span, types::Type, utils::metadata::Span};
 
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
@@ -21,14 +21,20 @@ impl SessionGlobals {
         self.span_storage.insert(node_id.to_node_id(), span);
     }
 
+    pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
+        TypeNodeId(self.type_storage.alloc(ty))
+    }
+
     pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
         let expr_id = self.store_expr(expr);
         self.store_span(expr_id, span);
         expr_id
     }
 
-    pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
-        TypeNodeId(self.type_storage.alloc(ty))
+    pub fn store_type_with_span(&mut self, ty: Type, span: Span) -> TypeNodeId {
+        let type_id = self.store_type(ty);
+        self.store_span(type_id, span);
+        type_id
     }
 
     pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {
@@ -43,10 +49,8 @@ impl SessionGlobals {
             .expect("Unknown TypeNodeId")
     }
 
-    pub fn get_span<T: ToNodeId>(&self, node_id: T) -> &Span {
-        self.span_storage
-            .get(&node_id.to_node_id())
-            .expect("Unknown NodeID")
+    pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Span> {
+        self.span_storage.get(&node_id.to_node_id())
     }
 }
 
@@ -90,7 +94,9 @@ impl ExprNodeId {
 
     pub fn to_span(&self) -> &Span {
         with_session_globals(|session_globals| unsafe {
-            std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
+            std::mem::transmute::<&Span, &Span>(
+                session_globals.get_span(*self).expect("Unknown ID"),
+            )
         })
     }
 }
@@ -103,8 +109,9 @@ impl TypeNodeId {
     }
 
     pub fn to_span(&self) -> &Span {
-        with_session_globals(|session_globals| unsafe {
-            std::mem::transmute::<&Span, &Span>(session_globals.get_span(*self))
+        with_session_globals(|session_globals| match session_globals.get_span(*self) {
+            Some(span) => unsafe { std::mem::transmute::<&Span, &Span>(span) },
+            None => &dummy_span!(),
         })
     }
 }

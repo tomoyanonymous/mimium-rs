@@ -4,6 +4,7 @@ use crate::{
     ast::Symbol,
     format_vec,
     interner::{with_session_globals, TypeNodeId},
+    utils::metadata::Span,
 };
 
 /// Basic types that are not boxed.
@@ -87,6 +88,10 @@ impl Type {
 
     pub fn into_id(self) -> TypeNodeId {
         with_session_globals(|session_globals| session_globals.store_type(self))
+    }
+
+    pub fn into_id_with_span(self, span: Span) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
     }
 }
 

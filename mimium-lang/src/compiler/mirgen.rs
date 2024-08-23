@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::{Span, WithMeta};
+use crate::utils::metadata::Span;
 
 use crate::ast::{Expr, Literal, Symbol, ToSymbol};
 // pub mod closure_convert;
@@ -173,11 +173,12 @@ impl Context {
     }
     fn add_bind_pattern(
         &mut self,
-        pattern: &WithMeta<TypedPattern>,
+        pattern: &TypedPattern,
         v: VPtr,
         ty: TypeNodeId,
     ) -> Result<(), CompileError> {
-        let WithMeta(TypedPattern { pat, ty: _ }, span) = pattern;
+        let TypedPattern { pat, .. } = pattern;
+        let span = pattern.to_span();
         match pat {
             Pattern::Single(id) => Ok(self.add_bind((*id, v))),
             Pattern::Tuple(patterns) => {
@@ -208,13 +209,12 @@ impl Context {
                         })
                     };
 
-                    let tpat = WithMeta(
-                        TypedPattern {
-                            pat: pat.clone(),
-                            ty: None,
-                        },
-                        span.clone(),
-                    );
+                    let tid = Type::Unknown.into_id_with_span(span.clone());
+                    let tpat = TypedPattern {
+                        pat: pat.clone(),
+                        ty: tid,
+                        unknown: true,
+                    };
                     self.add_bind_pattern(&tpat, v, cty)?;
                 }
                 Ok(())
@@ -537,11 +537,13 @@ impl Context {
                     .iter()
                     .enumerate()
                     .map(|(idx, name)| {
-                        let label = name.0.id;
-                        let t = name.0.ty.unwrap_or_else(|| {
+                        let label = name.id;
+                        let t = if !name.unknown {
+                            name.ty
+                        } else {
                             let tenv = &mut self.typeenv;
                             tenv.gen_intermediate_type()
-                        });
+                        };
                         let a = Argument(label, t);
                         let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))), t);
                         res
@@ -552,11 +554,13 @@ impl Context {
                     .iter()
                     .enumerate()
                     .map(|(idx, name)| {
-                        let label = name.0.id;
-                        let t = name.0.ty.unwrap_or_else(|| {
+                        let label = name.id;
+                        let t = if !name.unknown {
+                            name.ty
+                        } else {
                             let tenv = &mut self.typeenv;
                             tenv.gen_intermediate_type()
-                        });
+                        };
                         let a = Argument(label, t);
                         let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))), t);
                         res
@@ -645,7 +649,7 @@ impl Context {
                 Ok((Arc::new(Value::State(retv)), t))
             }
             Expr::Let(pat, body, then) => {
-                if let Ok(tid) = TypedId::try_from(pat.0.clone()) {
+                if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
                 };
                 let insert_pos = if self.program.functions.is_empty() {
@@ -656,14 +660,14 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
-                let idt = match &pat.0.ty {
-                    Some(tid) => match tid.to_type() {
+                let idt = match pat.unknown {
+                    false => match pat.ty.to_type() {
                         Type::Function(atypes, rty, s) => {
                             self.typeenv.convert_unknown_function(atypes, *rty, *s)
                         }
-                        _ => *tid,
+                        _ => pat.ty,
                     },
-                    None => self.typeenv.gen_intermediate_type(),
+                    true => self.typeenv.gen_intermediate_type(),
                 };
                 self.typeenv.unify_types(idt, t)?;
 
@@ -703,14 +707,14 @@ impl Context {
                 self.fn_label = Some(id.id);
                 let t = {
                     let tenv = &mut self.typeenv;
-                    let idt = match &id.ty {
-                        Some(tid) => match tid.to_type() {
+                    let idt = match id.unknown {
+                        false => match id.ty.to_type() {
                             Type::Function(atypes, rty, s) => {
                                 tenv.convert_unknown_function(atypes, *rty, *s)
                             }
-                            _ => *tid,
+                            _ => id.ty,
                         },
-                        None => tenv.gen_intermediate_type(),
+                        true => tenv.gen_intermediate_type(),
                     };
                     tenv.env.add_bind(&[(id.id, idt)]);
                     idt

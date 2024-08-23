@@ -9,10 +9,7 @@ use crate::{
     string_t,
     types::{PType, Type},
     unit,
-    utils::{
-        environment::Environment,
-        metadata::{Span, WithMeta},
-    },
+    utils::{environment::Environment, metadata::Span},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -53,13 +50,24 @@ impl Value {
             Value::Tuple(v) => Type::Tuple(v.iter().map(|t| t.get_type_id()).collect()).into_id(),
             Value::Function(a, _e, _ctx, r_type) => Type::Function(
                 a.iter()
-                    .map(|TypedId { ty, .. }| ty.expect("function argument untyped"))
+                    .map(|TypedId { ty, unknown, .. }| {
+                        if *unknown {
+                            panic!("function argument untyped");
+                        }
+                        *ty
+                    })
                     .collect(),
                 r_type.expect("Return type cannot inferred"), //todo!
                 None,
             )
             .into_id(),
-            Value::FixPoint(TypedId { ty, .. }, _) => ty.unwrap_or(unit!()),
+            Value::FixPoint(TypedId { ty, unknown, .. }, _) => {
+                if *unknown {
+                    unit!()
+                } else {
+                    *ty
+                }
+            }
             //todo!
             Value::External(_id) => Type::Unknown.into_id(),
         }
@@ -287,11 +295,11 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
                     let mut argvec: Vec<_> = argv
                         .iter()
                         .zip(params.iter())
-                        .map(|(v, TypedId { ty: _, id })| (id.clone(), v.clone()))
+                        .map(|(v, TypedId { id, .. })| (id.clone(), v.clone()))
                         .collect();
                     eval_with_new_env(b, &mut n_ctx, &mut argvec)
                 }
-                Value::FixPoint(TypedId { id, ty: _ }, e) => {
+                Value::FixPoint(TypedId { id, .. }, e) => {
                     eval_with_new_env(e, ctx, &mut vec![(id, func)])
                 }
                 Value::External(n) => {
@@ -303,7 +311,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             res
         }
         ast::Expr::Lambda(a, r, e) => Ok(Value::Function(
-            a.iter().map(|WithMeta(tid, _s)| tid.clone()).collect(),
+            a.iter().map(|tid| tid.clone()).collect(),
             *e,
             ctx.clone(), //todo! do not copy
             *r,
@@ -319,7 +327,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             ctx.history.0 += 1;
             Ok(res)
         }
-        ast::Expr::Let(WithMeta(TypedPattern { pat, ty: _t }, _s), e, then) => {
+        ast::Expr::Let(TypedPattern { pat, .. }, e, then) => {
             let e_v = eval_ast(*e, ctx)?;
             todo!()
             // match then {

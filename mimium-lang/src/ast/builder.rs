@@ -47,14 +47,10 @@ macro_rules! lambda_args {
         //expect vec![id]
         $args
             .iter()
-            .map(|a| {
-                WithMeta(
-                    TypedId {
-                        ty: None,
-                        id: $crate::ast::builder::str_to_symbol(a),
-                    },
-                    0..0,
-                )
+            .map(|a| TypedId {
+                id: $crate::ast::builder::str_to_symbol(a),
+                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                unknown: true,
             })
             .collect::<Vec<_>>()
     };
@@ -66,14 +62,10 @@ macro_rules! lambda {
         Expr::Lambda(
             $args
                 .iter()
-                .map(|a: &&'static str| {
-                    WithMeta(
-                        $crate::pattern::TypedId {
-                            ty: None,
-                            id: $crate::ast::builder::str_to_symbol(a),
-                        },
-                        0..0,
-                    )
+                .map(|a: &&'static str| $crate::pattern::TypedId {
+                    id: $crate::ast::builder::str_to_symbol(a),
+                    ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                    unknown: true,
                 })
                 .collect::<Vec<_>>(),
             None,
@@ -87,13 +79,11 @@ macro_rules! lambda {
 macro_rules! let_ {
     ($id:literal,$body:expr,$then:expr) => {
         Expr::Let(
-            WithMeta(
-                $crate::pattern::TypedPattern {
-                    ty: None,
-                    pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
-                },
-                0..0,
-            ),
+            $crate::pattern::TypedPattern {
+                pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
+                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                unknown: true,
+            },
             $body,
             Some($then),
         )
@@ -101,13 +91,11 @@ macro_rules! let_ {
     };
     ($id:literal,$body:expr) => {
         Expr::Let(
-            WithMeta(
-                $crate::pattern::TypedPattern {
-                    ty: None,
-                    pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
-                },
-                0..0,
-            ),
+            $crate::pattern::TypedPattern {
+                pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
+                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                unknown: true,
+            },
             Box::new($body),
             None,
         )
@@ -120,8 +108,9 @@ macro_rules! letrec {
     ($id:literal,$body:expr,$then:expr) => {
         Expr::LetRec(
             TypedId {
-                ty: None,
                 id: $crate::ast::builder::str_to_symbol($id),
+                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                unknown: true,
             },
             $body,
             $then,

@@ -162,7 +162,7 @@ pub fn convert_self_top(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
 mod test {
     use crate::{
         pattern::{Pattern, TypedId, TypedPattern},
-        utils::metadata::WithMeta,
+        types::Type,
     };
 
     use super::*;
@@ -170,21 +170,17 @@ mod test {
     #[test]
     pub fn test_selfconvert() {
         let src = Expr::Let(
-            WithMeta(
-                TypedPattern {
-                    pat: Pattern::Single("lowpass".to_symbol()),
-                    ty: None,
-                },
-                0..1,
-            ),
+            TypedPattern {
+                pat: Pattern::Single("lowpass".to_symbol()),
+                ty: Type::Unknown.into_id_with_span(0..1),
+                unknown: true,
+            },
             Expr::Lambda(
-                vec![WithMeta::<_>(
-                    TypedId {
-                        id: "input".to_symbol(),
-                        ty: None,
-                    },
-                    0..1,
-                )],
+                vec![TypedId {
+                    id: "input".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(0..1),
+                    unknown: true,
+                }],
                 None,
                 Expr::Literal(Literal::SelfLit).into_id(0..1),
             )
@@ -195,21 +191,17 @@ mod test {
         let res = convert_self_top(src).unwrap();
 
         let ans = Expr::Let(
-            WithMeta(
-                TypedPattern {
-                    pat: Pattern::Single("lowpass".to_symbol()),
-                    ty: None,
-                },
-                0..1,
-            ),
+            TypedPattern {
+                pat: Pattern::Single("lowpass".to_symbol()),
+                ty: Type::Unknown.into_id_with_span(0..1),
+                unknown: true,
+            },
             Expr::Lambda(
-                vec![WithMeta::<_>(
-                    TypedId {
-                        ty: None,
-                        id: "input".to_symbol(),
-                    },
-                    0..1,
-                )],
+                vec![TypedId {
+                    id: "input".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(0..1),
+                    unknown: true,
+                }],
                 None,
                 Expr::Feed(
                     "feed_id0".to_symbol(),

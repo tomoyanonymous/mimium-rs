@@ -2,8 +2,7 @@ pub mod builder;
 
 use crate::interner::{with_session_globals, ExprNodeId, TypeNodeId};
 use crate::pattern::{TypedId, TypedPattern};
-use crate::types::*;
-use crate::utils::metadata::{Span, WithMeta};
+use crate::utils::metadata::Span;
 use crate::utils::miniprint::MiniPrint;
 use std::fmt::{self, Display};
 pub type Time = i64;
@@ -79,11 +78,11 @@ pub enum Expr {
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
     Apply(ExprNodeId, Vec<ExprNodeId>),
-    Lambda(Vec<WithMeta<TypedId>>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
+    Lambda(Vec<TypedId>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprNodeId),
     Then(ExprNodeId, ExprNodeId),
     Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage
-    Let(WithMeta<TypedPattern>, ExprNodeId, Option<ExprNodeId>),
+    Let(TypedPattern, ExprNodeId, Option<ExprNodeId>),
     LetRec(TypedId, ExprNodeId, Option<ExprNodeId>),
     If(ExprNodeId, ExprNodeId, Option<ExprNodeId>),
     //exprimental macro system using multi-stage computation
@@ -162,7 +161,7 @@ impl MiniPrint for Expr {
                 format!("(app {} ({}))", e1.simple_print(), concat_vec(&es))
             }
             Expr::Lambda(params, _, body) => {
-                let paramstr = params.iter().map(|e| e.0.clone()).collect::<Vec<_>>();
+                let paramstr = params.iter().map(|e| e.clone()).collect::<Vec<_>>();
                 format!(
                     "(lambda ({}) {})",
                     concat_vec(&paramstr),
@@ -172,7 +171,7 @@ impl MiniPrint for Expr {
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.simple_print()),
             Expr::Let(id, body, then) => format!(
                 "(let {} {} {})",
-                id.0,
+                id,
                 body.simple_print(),
                 then.simple_print()
             ),

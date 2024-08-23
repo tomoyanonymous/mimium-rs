@@ -3,7 +3,6 @@ use crate::{
     ast::{Expr, Symbol},
     interner::ExprNodeId,
     pattern::TypedPattern,
-    utils::metadata::WithMeta,
 };
 
 fn try_find_recurse(e_s: &ExprNodeId, name: &Symbol) -> bool {
@@ -43,7 +42,7 @@ pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
         Expr::LetRec(id, body, then) => {
             if !try_find_recurse(body, &id.id) {
                 Expr::Let(
-                    WithMeta(TypedPattern::from(id.clone()), span.clone()),
+                    TypedPattern::from(id.clone()),
                     convert_recurse(*body),
                     then.map(convert_recurse),
                 )

@@ -17,17 +17,18 @@ mod test;
 fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clone {
     recursive(|ty| {
         let primitive = select! {
-           Token::FloatType => Type::Primitive(PType::Numeric).into_id(),
-           Token::IntegerType => Type::Primitive(PType::Int).into_id(),
-           Token::StringType => Type::Primitive(PType::String).into_id()
-        };
+           Token::FloatType => Type::Primitive(PType::Numeric),
+           Token::IntegerType => Type::Primitive(PType::Int),
+           Token::StringType => Type::Primitive(PType::String)
+        }
+        .map_with_span(|t, s| t.into_id_with_span(s));
 
         let tuple = ty
             .clone()
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(|t: Vec<TypeNodeId>| Type::Tuple(t).into_id())
+            .map_with_span(|t: Vec<TypeNodeId>, s: Span| Type::Tuple(t).into_id_with_span(s))
             .boxed()
             .labelled("Tuple");
 
@@ -38,7 +39,7 @@ fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clon
             .separated_by(just(Token::Comma))
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .then(just(Token::Arrow).ignore_then(ty.clone()))
-            .map(|(a, e)| Type::Function(a, e, None).into_id())
+            .map_with_span(|(a, e), s| Type::Function(a, e, None).into_id_with_span(s))
             .boxed()
             .labelled("function");
 
@@ -69,10 +70,21 @@ where
 }
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(select! { Token::Ident(s) => s })
-        .map(|(s, t)| TypedId { id: s, ty: t })
+        .map_with_span(|(sym, t), span| match t {
+            Some(ty) => TypedId {
+                id: sym,
+                ty,
+                unknown: false,
+            },
+            None => TypedId {
+                id: sym,
+                ty: Type::Unknown.into_id_with_span(span),
+                unknown: true,
+            },
+        })
         .labelled("lvar")
 }
-fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple<Token>> + Clone {
+fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> + Clone {
     let pat = recursive(|pat| {
         pat.clone()
             .separated_by(just(Token::Comma))
@@ -82,7 +94,18 @@ fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple
             .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
-    with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
+    with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
+        Some(ty) => TypedPattern {
+            pat,
+            ty,
+            unknown: false,
+        },
+        None => TypedPattern {
+            pat,
+            ty: Type::Unknown.into_id_with_span(s),
+            unknown: true,
+        },
+    })
 }
 
 fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
@@ -107,7 +130,6 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
 
             let lambda = lvar
                 .clone()
-                .map_with_span(|id, span| WithMeta::<TypedId>(id, span))
                 .separated_by(just(Token::Comma))
                 .delimited_by(
                     just(Token::LambdaArgBeginEnd),
@@ -307,7 +329,6 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         .ignore_then(just(Token::BlockEnd));
     let fnparams = lvar
         .clone()
-        .map_with_span(|e, s| WithMeta(e, s))
         .separated_by(just(Token::Comma))
         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
         .labelled("fnparams");
@@ -326,21 +347,20 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
                 let atypes = ids
                     .iter()
-                    .map(|WithMeta(TypedId { ty, id: _ }, _)| match ty {
-                        Some(ty) => *ty,
-                        None => Type::Unknown.into_id(),
+                    .map(|TypedId { ty, unknown, .. }| match unknown {
+                        false => *ty,
+                        true => Type::Unknown.into_id(),
                     })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
-                    ty: Some(
-                        Type::Function(
-                            atypes,
-                            r_type.clone().unwrap_or(Type::Unknown.into_id()),
-                            None,
-                        )
-                        .into_id(),
-                    ),
                     id: fname.id.clone(),
+                    ty: Type::Function(
+                        atypes,
+                        r_type.clone().unwrap_or(Type::Unknown.into_id()),
+                        None,
+                    )
+                    .into_id(),
+                    unknown: false,
                 };
                 Expr::LetRec(
                     fname,
@@ -395,13 +415,11 @@ fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
 pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
     let span = ast.to_span();
     let res = Expr::Let(
-        WithMeta(
-            TypedPattern {
-                pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
-                ty: None,
-            },
-            span.clone(),
-        ),
+        TypedPattern {
+            pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
+            ty: Type::Unknown.into_id_with_span(span.clone()),
+            unknown: true,
+        },
         Expr::Lambda(vec![], None, ast).into_id(span.clone()),
         None,
     );

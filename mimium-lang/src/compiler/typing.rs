@@ -4,11 +4,7 @@ use crate::interner::{ExprNodeId, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
-use crate::utils::{
-    environment::Environment,
-    error::ReportableError,
-    metadata::{Span, WithMeta},
-};
+use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, numeric};
 use std::collections::HashMap;
 use std::fmt;
@@ -133,6 +129,11 @@ impl InferContext {
         self.interm_idx += 1;
         res
     }
+    pub fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
+        let res = Type::Intermediate(self.interm_idx).into_id_with_span(span);
+        self.interm_idx += 1;
+        res
+    }
     pub fn convert_unknown_to_intermediate(&mut self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Unknown => self.gen_intermediate_type(),
@@ -253,9 +254,10 @@ impl InferContext {
     pub fn bind_pattern(
         &mut self,
         t: TypeNodeId,
-        pat: &WithMeta<TypedPattern>,
+        ty_pat: &TypedPattern,
     ) -> Result<TypeNodeId, Error> {
-        let WithMeta(TypedPattern { pat, ty: _ }, span) = pat;
+        let TypedPattern { pat, .. } = ty_pat;
+        let span = ty_pat.to_span();
         match pat {
             Pattern::Single(id) => {
                 self.env.add_bind(&[(*id, t)]);
@@ -265,14 +267,12 @@ impl InferContext {
                 let res = pats
                     .iter()
                     .map(|p| {
-                        let ity = self.gen_intermediate_type();
-                        let p = WithMeta(
-                            TypedPattern {
-                                pat: p.clone(),
-                                ty: Some(ity),
-                            },
-                            span.clone(),
-                        );
+                        let ity = self.gen_intermediate_type_with_span(span.clone());
+                        let p = TypedPattern {
+                            pat: p.clone(),
+                            ty: ity,
+                            unknown: false,
+                        };
                         self.bind_pattern(ity, &p)
                     })
                     .try_collect::<Vec<_>>()?;
@@ -348,10 +348,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             ctx.env.extend();
             let ptypes: Vec<TypeNodeId> = p
                 .iter()
-                .map(|WithMeta(id, _s)| {
-                    let pt = match id.ty {
-                        Some(ty) => ty,
-                        None => ctx.gen_intermediate_type(),
+                .map(|id| {
+                    let pt = match id.unknown {
+                        false => id.ty,
+                        true => ctx.gen_intermediate_type(),
                     };
                     ctx.env.add_bind(&[(id.id, pt)]);
                     pt
@@ -369,12 +369,12 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
         Expr::Let(tpat, body, then) => {
             let c = ctx;
             let bodyt = infer_type(*body, c)?;
-            let idt = match &tpat.0.ty {
-                Some(tid) => match tid.to_type() {
+            let idt = match tpat.unknown {
+                false => match tpat.ty.to_type() {
                     Type::Function(atypes, rty, s) => c.convert_unknown_function(atypes, *rty, *s),
-                    _ => *tid,
+                    _ => tpat.ty,
                 },
-                None => c.gen_intermediate_type(),
+                true => c.gen_intermediate_type(),
             };
 
             let bodyt_u = c.unify_types(idt, bodyt)?;
@@ -387,8 +387,10 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
         }
         Expr::LetRec(id, body, then) => {
             let c = ctx;
-            let idt = match id.ty.map(|x| x.to_type().clone()) {
-                Some(Type::Function(atypes, rty, s)) => c.convert_unknown_function(&atypes, rty, s),
+            let idt = match (id.unknown, id.ty.to_type()) {
+                (false, Type::Function(atypes, rty, s)) => {
+                    c.convert_unknown_function(atypes, *rty, *s)
+                }
                 _ => panic!("type for letrec is limited to function type in mimium."),
             };
 

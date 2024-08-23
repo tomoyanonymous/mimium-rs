@@ -21,13 +21,11 @@ macro_rules! test_string {
 #[test]
 fn test_let() {
     let ans = Expr::Let(
-        WithMeta(
-            TypedPattern {
-                pat: Pattern::Single("goge".to_symbol()),
-                ty: None,
-            },
-            4..8,
-        ),
+        TypedPattern {
+            pat: Pattern::Single("goge".to_symbol()),
+            ty: Type::Unknown.into_id_with_span(4..8),
+            unknown: true,
+        },
         Expr::Literal(Literal::Int(36)).into_id(11..13),
         Some(Expr::Var("goge".to_symbol(), None).into_id(15..19)),
     )
@@ -37,16 +35,14 @@ fn test_let() {
 #[test]
 fn test_lettuple() {
     let ans = Expr::Let(
-        WithMeta(
-            TypedPattern {
-                pat: Pattern::Tuple(vec![
-                    Pattern::Single("a".to_symbol()),
-                    Pattern::Single("b".to_symbol()),
-                ]),
-                ty: None,
-            },
-            4..9,
-        ),
+        TypedPattern {
+            pat: Pattern::Tuple(vec![
+                Pattern::Single("a".to_symbol()),
+                Pattern::Single("b".to_symbol()),
+            ]),
+            ty: Type::Unknown.into_id_with_span(4..9),
+            unknown: true,
+        },
         Expr::Tuple(vec![
             Expr::Literal(Literal::Int(36)).into_id(13..15),
             Expr::Literal(Literal::Int(89)).into_id(16..18),
@@ -92,13 +88,11 @@ fn test_string() {
 fn test_block() {
     let ans = Expr::Block(Some(
         Expr::Let(
-            WithMeta(
-                TypedPattern {
-                    pat: Pattern::Single("hoge".to_symbol()),
-                    ty: None,
-                },
-                5..9,
-            ),
+            TypedPattern {
+                pat: Pattern::Single("hoge".to_symbol()),
+                ty: Type::Unknown.into_id_with_span(5..9),
+                unknown: true,
+            },
             Expr::Literal(Literal::Int(100)).into_id(12..15),
             Some(Expr::Var("hoge".to_symbol(), None).into_id(16..20)),
         )
@@ -166,32 +160,28 @@ fn test_macroexpand() {
 fn test_fndef() {
     let ans = Expr::LetRec(
         TypedId {
-            ty: Some(
-                Type::Function(
-                    vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
-                    Type::Unknown.into_id(),
-                    None,
-                )
-                .into_id(),
-            ),
+            ty: Type::Function(
+                vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
+                Type::Unknown.into_id(),
+                None,
+            )
+            .into_id(),
+
             id: "hoge".to_symbol(),
+            unknown: false,
         },
         Expr::Lambda(
             vec![
-                WithMeta(
-                    TypedId {
-                        ty: None,
-                        id: "input".to_symbol(),
-                    },
-                    8..13,
-                ),
-                WithMeta(
-                    TypedId {
-                        ty: None,
-                        id: "gue".to_symbol(),
-                    },
-                    14..17,
-                ),
+                TypedId {
+                    id: "input".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(8..13),
+                    unknown: true,
+                },
+                TypedId {
+                    id: "gue".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(14..17),
+                    unknown: true,
+                },
             ],
             None,
             Expr::Var("input".to_symbol(), None).into_id(21..26),
@@ -206,25 +196,22 @@ fn test_fndef() {
 fn test_macrodef() {
     let ans = Expr::LetRec(
         TypedId {
-            ty: None,
             id: "hoge".to_symbol(),
+            ty: Type::Unknown.into_id(),
+            unknown: true,
         },
         Expr::Lambda(
             vec![
-                WithMeta(
-                    TypedId {
-                        ty: None,
-                        id: "input".to_symbol(),
-                    },
-                    11..16,
-                ),
-                WithMeta(
-                    TypedId {
-                        ty: None,
-                        id: "gue".to_symbol(),
-                    },
-                    17..20,
-                ),
+                TypedId {
+                    id: "input".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(11..16),
+                    unknown: true,
+                },
+                TypedId {
+                    id: "gue".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(17..20),
+                    unknown: true,
+                },
             ],
             None,
             Expr::Bracket(Expr::Var("input".to_symbol(), None).into_id(24..29)).into_id(24..29),
