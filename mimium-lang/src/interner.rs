@@ -148,8 +148,9 @@ impl ExprNodeId {
     }
 
     pub fn to_span(&self) -> Span {
-        with_session_globals(|session_globals| {
-            session_globals.get_span(*self).expect("Unknown ID").clone()
+        with_session_globals(|session_globals| match session_globals.get_span(*self) {
+            Some(span) => span.clone(),
+            None => dummy_span!(),
         })
     }
 }
@@ -162,8 +163,9 @@ impl TypeNodeId {
     }
 
     pub fn to_span(&self) -> Span {
-        with_session_globals(|session_globals| {
-            session_globals.get_span(*self).expect("Unknown ID").clone()
+        with_session_globals(|session_globals| match session_globals.get_span(*self) {
+            Some(span) => span.clone(),
+            None => dummy_span!(),
         })
     }
 }
