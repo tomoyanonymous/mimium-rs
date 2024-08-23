@@ -346,10 +346,10 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                     })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
-                    id: fname.id.clone(),
+                    id: fname.id,
                     ty: Type::Function(
                         atypes,
-                        r_type.clone().unwrap_or(Type::Unknown.into_id()),
+                        r_type.unwrap_or_else(|| Type::Unknown.into_id()),
                         None,
                     )
                     .into_id(),

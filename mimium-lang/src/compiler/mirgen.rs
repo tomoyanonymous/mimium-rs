@@ -247,8 +247,12 @@ impl Context {
             .iter()
             .map(|(name, a, _)| (*name, a.clone()))
             .collect::<Vec<_>>();
-        let vbinds = binds.iter().map(|(_, a, t)| a.clone()).collect::<Vec<_>>();
-        let tbinds = binds.iter().map(|(_, _, t)| *t).collect::<Vec<_>>();
+        let mut vbinds = Vec::with_capacity(binds.len());
+        let mut tbinds = Vec::with_capacity(binds.len());
+        binds.iter().for_each(|(_, a, t)| {
+            vbinds.push(a.clone());
+            tbinds.push(*t);
+        });
         self.valenv.extend();
         self.valenv.add_bind(&abinds);
         let label = self.get_ctxdata().func_i;

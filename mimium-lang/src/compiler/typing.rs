@@ -172,7 +172,9 @@ impl InferContext {
             Type::Array(a) => cls(*a),
             Type::Tuple(t) => vec_cls(t),
             Type::Function(p, r, s) => {
-                vec_cls(p) && cls(*r) && cls(s.map(|x| x).unwrap_or(Type::Unknown.into_id()))
+                vec_cls(p)
+                    && cls(*r)
+                    && cls(s.map(|x| x).unwrap_or_else(|| Type::Unknown.into_id()))
             }
             Type::Struct(_s) => todo!(),
             _ => false,
