@@ -28,6 +28,7 @@ pub enum Type {
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(TypeNodeId),
     Intermediate(i64),
+    TypeScheme(i64, i64),
     Unknown,
 }
 
@@ -143,7 +144,10 @@ impl fmt::Display for Type {
 
             Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
-                write!(f, "intermediate[{}]", id,)
+                write!(f, "i({id})")
+            }
+            Type::TypeScheme(id, level) => {
+                write!(f, "g({id})[{level}]")
             }
             Type::Unknown => write!(f, "unknown"),
         }
