@@ -147,11 +147,9 @@ impl ExprNodeId {
         })
     }
 
-    pub fn to_span(&self) -> &Span {
-        with_session_globals(|session_globals| unsafe {
-            std::mem::transmute::<&Span, &Span>(
-                session_globals.get_span(*self).expect("Unknown ID"),
-            )
+    pub fn to_span(&self) -> Span {
+        with_session_globals(|session_globals| {
+            session_globals.get_span(*self).expect("Unknown ID").clone()
         })
     }
 }
@@ -163,10 +161,9 @@ impl TypeNodeId {
         })
     }
 
-    pub fn to_span(&self) -> &Span {
-        with_session_globals(|session_globals| match session_globals.get_span(*self) {
-            Some(span) => unsafe { std::mem::transmute::<&Span, &Span>(span) },
-            None => &dummy_span!(),
+    pub fn to_span(&self) -> Span {
+        with_session_globals(|session_globals| {
+            session_globals.get_span(*self).expect("Unknown ID").clone()
         })
     }
 }

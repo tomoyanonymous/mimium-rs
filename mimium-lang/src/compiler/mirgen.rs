@@ -341,12 +341,12 @@ impl Context {
             },
             LookupRes::None => {
                 let ty =
-                    typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
+                    typing::lookup(&name, &mut self.typeenv, &span).map_err(CompileError::from)?;
                 Arc::new(Value::ExtFunction(name, ty))
             }
         };
 
-        let ty = typing::lookup(&name, &mut self.typeenv, span).map_err(CompileError::from)?;
+        let ty = typing::lookup(&name, &mut self.typeenv, &span).map_err(CompileError::from)?;
         Ok((v, ty))
     }
     fn emit_fncall(
@@ -395,11 +395,11 @@ impl Context {
         let span = e_meta.to_span();
         match e_meta.to_expr() {
             Expr::Literal(lit) => {
-                let v = self.eval_literal(lit, span)?;
+                let v = self.eval_literal(lit, &span)?;
                 let t = infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name, _time) => self.eval_var(*name, span),
+            Expr::Var(name, _time) => self.eval_var(*name, &span),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)

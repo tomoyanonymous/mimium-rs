@@ -36,7 +36,7 @@ pub struct TypedId {
 }
 
 impl TypedId {
-    pub fn to_span(&self) -> &Span {
+    pub fn to_span(&self) -> Span {
         self.ty.to_span()
     }
 
@@ -72,7 +72,7 @@ pub struct TypedPattern {
 }
 
 impl TypedPattern {
-    pub fn to_span(&self) -> &Span {
+    pub fn to_span(&self) -> Span {
         self.ty.to_span()
     }
 
