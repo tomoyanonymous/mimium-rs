@@ -128,10 +128,10 @@ pub enum NodeId {
 
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ExprNodeId(ExprKey);
+pub struct ExprNodeId(pub ExprKey);
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct TypeNodeId(TypeKey);
+pub struct TypeNodeId(pub TypeKey);
 
 // traits required for Key trait
 

@@ -1,5 +1,5 @@
 use super::intrinsics;
-use super::typing::{self, infer_type_literal, InferContext};
+use super::typing::{self, infer_root, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
@@ -41,9 +41,9 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(typeenv: InferContext) -> Self {
         Self {
-            typeenv: InferContext::new(),
+            typeenv,
             valenv: Environment::new(),
             program: Default::default(),
             reg_count: 0,
@@ -175,25 +175,10 @@ impl Context {
     ) -> Result<(), CompileError> {
         let TypedPattern { pat, .. } = pattern;
         let span = pattern.to_span();
-        match pat {
-            Pattern::Single(id) => Ok(self.add_bind((*id, v))),
-            Pattern::Tuple(patterns) => {
-                let interm_vec = patterns
-                    .iter()
-                    .map(|_| self.typeenv.gen_intermediate_type())
-                    .collect::<Vec<_>>();
-                let tvec = self
-                    .typeenv
-                    .unify_types(ty, Type::Tuple(interm_vec).into_id())?;
-                let tvec_ty = tvec.to_type();
-                let tvec = tvec_ty
-                    .get_as_tuple()
-                    .ok_or(CompileError::from(typing::Error(
-                        typing::ErrorKind::PatternMismatch(ty.to_type().clone(), pat.clone()),
-                        span.clone(),
-                    )))?;
-                for (i, pat) in patterns.iter().enumerate() {
-                    let cty = tvec[i];
+        match (pat, ty.to_type()) {
+            (Pattern::Single(id), _) => Ok(self.add_bind((*id, v))),
+            (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
+                for ((i, pat), cty) in patterns.iter().enumerate().zip(tvec.iter()) {
                     let v = if i == 0 {
                         v.clone()
                     } else {
@@ -204,15 +189,17 @@ impl Context {
                             tuple_offset: i as u64,
                         })
                     };
-
                     let tid = Type::Unknown.into_id_with_span(span.clone());
                     let tpat = TypedPattern {
                         pat: pat.clone(),
                         ty: tid,
                     };
-                    self.add_bind_pattern(&tpat, v, cty)?;
+                    self.add_bind_pattern(&tpat, v, *cty)?;
                 }
                 Ok(())
+            }
+            _ => {
+                panic!("typing error in the previous stage")
             }
         }
     }
@@ -231,31 +218,15 @@ impl Context {
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
         fname: Symbol,
-        binds: &[(Symbol, VPtr, TypeNodeId)],
+        abinds: &[(Symbol, VPtr)],
+        types: &[TypeNodeId],
         mut action: F,
-    ) -> Result<(usize, VPtr, TypeNodeId), CompileError> {
-        //pre action
-        let atbinds = binds
-            .iter()
-            .map(|(name, _a, t)| (*name, *t))
-            .collect::<Vec<_>>();
-        let abinds = binds
-            .iter()
-            .map(|(name, a, _)| (*name, a.clone()))
-            .collect::<Vec<_>>();
-        let mut vbinds = Vec::with_capacity(binds.len());
-        let mut tbinds = Vec::with_capacity(binds.len());
-        binds.iter().for_each(|(_, a, t)| {
-            vbinds.push(a.clone());
-            tbinds.push(*t);
-        });
+    ) -> Result<(usize, VPtr), CompileError> {
         self.valenv.extend();
         self.valenv.add_bind(&abinds);
+        let args = abinds.iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
         let label = self.get_ctxdata().func_i;
-        let c_idx = self.make_new_function(fname, &vbinds, &tbinds, Some(label));
-
-        self.typeenv.env.extend();
-        self.typeenv.env.add_bind(&atbinds);
+        let c_idx = self.make_new_function(fname, &args, types, Some(label));
 
         self.data.push(ContextData {
             func_i: c_idx,
@@ -275,8 +246,7 @@ impl Context {
         let _ = self.data.pop();
         self.data_i -= 1;
         self.valenv.to_outer();
-        self.typeenv.env.to_outer();
-        Ok((c_idx, fptr, ty))
+        Ok((c_idx, fptr))
     }
     fn lookup(&self, key: &Symbol) -> LookupRes<VPtr> {
         match self.valenv.lookup_cls(key) {
@@ -302,13 +272,9 @@ impl Context {
     pub fn eval_var(
         &mut self,
         name: Symbol,
+        t: TypeNodeId,
         span: &Span,
-    ) -> Result<(VPtr, TypeNodeId), CompileError> {
-        let t = *self
-            .typeenv
-            .env
-            .lookup(&name)
-            .expect("failed to find type for variable");
+    ) -> Result<VPtr, CompileError> {
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i, _s, _nret) => {
@@ -336,14 +302,14 @@ impl Context {
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
-                let ty =
-                    typing::lookup(&name, &mut self.typeenv, &span).map_err(CompileError::from)?;
+                let ty = self
+                    .typeenv
+                    .lookup(&name, span)
+                    .map_err(CompileError::from)?;
                 Arc::new(Value::ExtFunction(name, ty))
             }
         };
-
-        let ty = typing::lookup(&name, &mut self.typeenv, &span).map_err(CompileError::from)?;
-        Ok((v, ty))
+        Ok(v)
     }
     fn emit_fncall(
         &mut self,
@@ -387,20 +353,39 @@ impl Context {
             })
             .try_collect::<Vec<_>>()
     }
-    pub fn eval_expr(&mut self, e_meta: ExprNodeId) -> Result<(VPtr, TypeNodeId), CompileError> {
-        let span = e_meta.to_span();
-        match &e_meta.to_expr() {
+    fn eval_block(
+        &mut self,
+        block: Option<ExprNodeId>,
+    ) -> Result<(VPtr, TypeNodeId), CompileError> {
+        self.add_new_basicblock();
+        let (e, rt) = match block {
+            Some(e) => self.eval_expr(e),
+            None => Ok((Arc::new(Value::None), unit!())),
+        }?;
+        //if returning non-closure function, make closure
+        let e = match e.as_ref() {
+            Value::Function(idx, _, _) => {
+                let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
+                self.push_inst(Instruction::Closure(cpos))
+            }
+            _ => e,
+        };
+        Ok((e, rt))
+    }
+    pub fn eval_expr(&mut self, e: ExprNodeId) -> Result<(VPtr, TypeNodeId), CompileError> {
+        let span = e.to_span();
+        let ty = self.typeenv.lookup_res(e);
+        match &e.to_expr() {
             Expr::Literal(lit) => {
                 let v = self.eval_literal(lit, &span)?;
-                let t = infer_type_literal(lit).map_err(CompileError::from)?;
+                let t = InferContext::infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name, _time) => self.eval_var(*name, &span),
+            Expr::Var(name, _time) => Ok((self.eval_var(*name, ty, &span)?, ty)),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)
                 } else {
-                    //todo?
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
@@ -411,8 +396,6 @@ impl Context {
                 }
                 let alloc_insert_point = self.get_current_basicblock().0.len();
                 let dst = self.gen_new_register();
-                // let mut types = Vec::with_capacity(len);
-                let mut types = vec![];
                 let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
                     let (v, ty) = self.eval_expr(*e)?;
@@ -422,32 +405,16 @@ impl Context {
                         inst_refs.push(self.get_current_basicblock().0.len());
                         self.push_inst(Instruction::GetElement {
                             value: dst.clone(),
-                            ty: Type::Unknown.into_id(), // lazyly set after loops
+                            ty, // lazyly set after loops
                             array_idx: 0,
                             tuple_offset: i as u64,
                         })
                     };
                     self.push_inst(Instruction::Store(ptr, v, ty));
-                    types.push(ty);
-                }
-                let tup_t = Type::Tuple(types.clone()).into_id();
-                for inst_i in inst_refs.iter() {
-                    if let Some((
-                        _,
-                        Instruction::GetElement {
-                            value: _,
-                            ref mut ty,
-                            array_idx: _,
-                            tuple_offset: _,
-                        },
-                    )) = self.get_current_basicblock().0.get_mut(*inst_i)
-                    {
-                        *ty = tup_t;
-                    }
                 }
                 self.get_current_basicblock()
                     .0
-                    .insert(alloc_insert_point, (dst.clone(), Instruction::Alloc(tup_t)));
+                    .insert(alloc_insert_point, (dst.clone(), Instruction::Alloc(ty)));
                 // TODO: validate if the types are all identical?
                 // let first_ty = &types[0];
                 // if !types.iter().all(|x| x == first_ty) {
@@ -456,7 +423,7 @@ impl Context {
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
-                Ok((dst, tup_t))
+                Ok((dst, ty))
             }
             Expr::Proj(_, _) => todo!(),
             Expr::Apply(f, args) => {
@@ -467,20 +434,11 @@ impl Context {
                 } else {
                     let atvvec = self.eval_args(args)?;
                     let (a_regs, atvec): (Vec<VPtr>, Vec<TypeNodeId>) = atvvec.into_iter().unzip();
-                    let rt = self.typeenv.gen_intermediate_type();
-                    let ftype = self
-                        .typeenv
-                        .unify_types(ft, Type::Function(atvec, rt, None).into_id())?;
-                    let rt = if let Type::Function(_, rt, _) = ftype.to_type() {
-                        Ok(rt)
+                    let rt = if let Type::Function(_, rt, _) = ft.to_type() {
+                        rt
                     } else {
-                        Err(CompileError(
-                            CompileErrorKind::TypingFailure(typing::ErrorKind::NonFunction(
-                                ftype.to_type().clone(),
-                            )),
-                            span.clone(),
-                        ))
-                    }?;
+                        unreachable!();
+                    };
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
                             Value::Function(idx, statesize, _rty) => {
@@ -501,9 +459,7 @@ impl Context {
                         Value::Register(_) => {
                             //closure
                             //do not increment state size for closure
-                            let res =
-                                self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone(), rt));
-                            res
+                            self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone(), rt))
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
@@ -511,14 +467,14 @@ impl Context {
                             self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt))
                         }
 
-                        Value::Function(idx, statesize, ret_t) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs, *ret_t)
+                        Value::Function(idx, statesize, _ret_t) => {
+                            self.emit_fncall(*idx as u64, *statesize, a_regs, rt)
                         }
-                        Value::ExtFunction(label, ty) => {
+                        Value::ExtFunction(label, _ty) => {
                             if let Some(res) = self.make_intrinsics(*label, a_regs.clone())? {
                                 res
                             } else {
-                                self.push_inst(Instruction::Call(f.clone(), a_regs.clone(), *ty))
+                                self.push_inst(Instruction::Call(f.clone(), a_regs.clone(), rt))
                             }
                         }
                         // Value::ExternalClosure(i) => todo!(),
@@ -528,86 +484,58 @@ impl Context {
                     Ok((res, rt))
                 }
             }
-            Expr::Lambda(ids, rett, body) => {
-                let binds_to_be_deleted = ids
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, name)| {
-                        let label = name.id;
-                        let t = if !name.is_unknown() {
-                            name.ty
-                        } else {
-                            let tenv = &mut self.typeenv;
-                            tenv.gen_intermediate_type()
-                        };
-                        let a = Argument(label, t);
-                        let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))), t);
-                        res
-                    })
-                    .collect::<Vec<_>>();
-
+            Expr::Lambda(ids, _rett, body) => {
+                let (atypes, rt) = match ty.to_type() {
+                    Type::Function(atypes, rt, _) => (atypes.clone(), rt),
+                    _ => panic!(),
+                };
                 let binds = ids
                     .iter()
                     .enumerate()
-                    .map(|(idx, name)| {
+                    .zip(atypes.iter())
+                    .map(|((idx, name), t)| {
                         let label = name.id;
-                        let t = if !name.is_unknown() {
-                            name.ty
-                        } else {
-                            let tenv = &mut self.typeenv;
-                            tenv.gen_intermediate_type()
-                        };
-                        let a = Argument(label, t);
-                        let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))), t);
+                        let a = Argument(label, *t);
+                        let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))));
                         res
                     })
                     .collect::<Vec<_>>();
 
                 let name = self.consume_fnlabel();
-                let (c_idx, f, res_type) =
-                    self.do_in_child_ctx(name, &binds_to_be_deleted, |ctx, c_idx| {
-                        let (res, mut res_type) = ctx.eval_expr(*body)?;
-                        res_type = if let Some(rt) = rett {
-                            let tenv = &mut ctx.typeenv;
-                            tenv.unify_types(*rt, res_type)
-                                .map_err(CompileError::from)?
-                        } else {
-                            res_type
-                        };
-                        let state_size = {
-                            let child = ctx.program.functions.get_mut(c_idx).unwrap();
-                            child.state_size
-                        };
-                        let push_sum = ctx.get_ctxdata().push_sum;
-                        if push_sum > 0 {
-                            ctx.get_current_basicblock().0.push((
-                                Arc::new(mir::Value::None),
-                                Instruction::PopStateOffset(push_sum),
-                            )); //todo:offset size
-                        }
-                        match (res.as_ref(), res_type.to_type()) {
-                            (_, Type::Primitive(PType::Unit) | Type::Unknown) => {
-                                let _ = ctx.push_inst(Instruction::Return(
-                                    Arc::new(Value::None),
-                                    res_type,
-                                ));
-                            }
-                            (Value::State(v), _) => {
-                                let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), res_type));
-                            }
-                            (Value::Function(i, _, _), _) => {
-                                let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
-                                let cls = ctx.push_inst(Instruction::Closure(idx));
-                                let _ = ctx.push_inst(Instruction::Return(cls, res_type));
-                            }
-                            (_, _) => {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone(), res_type));
-                            }
-                        };
+                let (c_idx, f) = self.do_in_child_ctx(name, &binds, &atypes, |ctx, c_idx| {
+                    let (res, _) = ctx.eval_expr(*body)?;
 
-                        let f = Arc::new(Value::Function(c_idx, state_size, res_type));
-                        Ok((f, res_type))
-                    })?;
+                    let state_size = {
+                        let child = ctx.program.functions.get_mut(c_idx).unwrap();
+                        child.state_size
+                    };
+                    let push_sum = ctx.get_ctxdata().push_sum;
+                    if push_sum > 0 {
+                        ctx.get_current_basicblock().0.push((
+                            Arc::new(mir::Value::None),
+                            Instruction::PopStateOffset(push_sum),
+                        )); //todo:offset size
+                    }
+                    match (res.as_ref(), rt.to_type()) {
+                        (_, Type::Primitive(PType::Unit)) => {
+                            let _ = ctx.push_inst(Instruction::Return(Arc::new(Value::None), rt));
+                        }
+                        (Value::State(v), _) => {
+                            let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), rt));
+                        }
+                        (Value::Function(i, _, _), _) => {
+                            let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
+                            let cls = ctx.push_inst(Instruction::Closure(idx));
+                            let _ = ctx.push_inst(Instruction::Return(cls, rt));
+                        }
+                        (_, _) => {
+                            let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
+                        }
+                    };
+
+                    let f = Arc::new(Value::Function(c_idx, state_size, rt));
+                    Ok((f, rt))
+                })?;
                 let child = self.program.functions.get_mut(c_idx).unwrap();
                 let res = if child.upindexes.is_empty() {
                     //todo:make Closure
@@ -616,33 +544,16 @@ impl Context {
                     let idxcell = self.push_inst(Instruction::Uinteger(c_idx as u64));
                     self.push_inst(Instruction::Closure(idxcell))
                 };
-                let atypes = binds.iter().map(|(_name, _a, t)| *t).collect::<Vec<_>>();
-                let fty = Type::Function(atypes, res_type, None).into_id();
-                Ok((res, fty))
+                Ok((res, ty))
             }
             Expr::Feed(id, expr) => {
-                let insert_pos = self.get_current_basicblock().0.len();
                 //set typesize lazily
-                let res = self.push_inst(Instruction::GetState(Type::Unknown.into_id()));
-
+                let res = self.push_inst(Instruction::GetState(ty));
                 self.get_ctxdata().state_offset += 1;
-
                 self.add_bind((*id, res.clone()));
-                let tf = {
-                    let tf = self.typeenv.gen_intermediate_type();
-                    self.typeenv.env.add_bind(&[(*id, tf)]);
-                    tf
-                };
-                let (retv, t) = self.eval_expr(*expr)?;
-
-                if let (_, Instruction::GetState(ty)) =
-                    self.get_current_basicblock().0.get_mut(insert_pos).unwrap()
-                {
-                    *ty = t;
-                }
-                self.typeenv.unify_types(tf, t)?;
+                let (retv, _t) = self.eval_expr(*expr)?;
                 self.get_current_fn().state_size += 1;
-                Ok((Arc::new(Value::State(retv)), t))
+                Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
@@ -656,19 +567,6 @@ impl Context {
                 let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
-                let idt = if !pat.is_unknown() {
-                    match pat.ty.to_type() {
-                        Type::Function(atypes, rty, s) => {
-                            self.typeenv.convert_unknown_function(&atypes, rty, s)
-                        }
-                        _ => pat.ty,
-                    }
-                } else {
-                    self.typeenv.gen_intermediate_type()
-                };
-                self.typeenv.unify_types(idt, t)?;
-
-                let t = self.typeenv.bind_pattern(t, pat)?;
                 self.fn_label = None;
 
                 match (
@@ -702,21 +600,6 @@ impl Context {
             }
             Expr::LetRec(id, body, then) => {
                 self.fn_label = Some(id.id);
-                let t = {
-                    let tenv = &mut self.typeenv;
-                    let idt = if !id.is_unknown() {
-                        match id.ty.to_type() {
-                            Type::Function(atypes, rty, s) => {
-                                tenv.convert_unknown_function(&atypes, rty, s)
-                            }
-                            _ => id.ty,
-                        }
-                    } else {
-                        tenv.gen_intermediate_type()
-                    };
-                    tenv.env.add_bind(&[(id.id, idt)]);
-                    idt
-                };
                 let nextfunid = self.program.functions.len();
                 let fix = Arc::new(Value::FixPoint(nextfunid));
 
@@ -724,10 +607,7 @@ impl Context {
                 // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
                 let bind = (id.id, fix);
                 self.add_bind(bind);
-                let (b, bt) = self.eval_expr(*body)?;
-                let rest = self.typeenv.unify_types(t, bt)?;
-
-                self.typeenv.env.add_bind(&[(id.id, rest)]);
+                let (b, _bt) = self.eval_expr(*body)?;
                 //set bind from fixpoint to computed lambda
                 let (_, v) = self
                     .valenv
@@ -743,10 +623,7 @@ impl Context {
                 }
             }
             Expr::If(cond, then, else_) => {
-                let (c, t_cond) = self.eval_expr(*cond)?;
-                //todo:need to boolean and insert cast
-                self.typeenv.unify_types(t_cond, numeric!())?;
-
+                let (c, _) = self.eval_expr(*cond)?;
                 let bbidx = self.get_ctxdata().current_bb;
                 let _ = self.push_inst(Instruction::JmpIf(
                     c,
@@ -754,36 +631,14 @@ impl Context {
                     (bbidx + 2) as u64,
                 ));
                 //insert then block
-                self.add_new_basicblock();
-                let (t, thent) = self.eval_expr(*then)?;
-                let t = match t.as_ref() {
-                    Value::Function(idx, _, _) => {
-                        let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
-                        self.push_inst(Instruction::Closure(cpos))
-                    }
-                    _ => t,
-                };
+                let (t, _) = self.eval_block(Some(*then))?;
                 //jmp to ret is inserted in bytecodegen
                 //insert else block
-                self.add_new_basicblock();
-                let (e, elset) = match else_ {
-                    Some(e) => self.eval_expr(*e),
-                    None => Ok((Arc::new(Value::None), unit!())),
-                }?;
-                //if returning non-closure function, make closure
-                let e = match e.as_ref() {
-                    Value::Function(idx, _, _) => {
-                        let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
-                        self.push_inst(Instruction::Closure(cpos))
-                    }
-                    _ => e,
-                };
-
-                self.typeenv.unify_types(thent, elset)?;
+                let (e, _) = self.eval_block(*else_)?;
                 //insert return block
                 self.add_new_basicblock();
                 let res = self.push_inst(Instruction::Phi(t, e));
-                Ok((res, thent))
+                Ok((res, ty))
             }
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
@@ -836,7 +691,9 @@ pub fn compile(root_expr_id: ExprNodeId) -> Result<Mir, Box<dyn ReportableError>
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
-    let mut ctx = Context::new();
+    let infer_ctx = infer_root(expr2)
+        .map_err(|err| Box::new(CompileError::from(err)) as Box<dyn ReportableError>)?;
+    let mut ctx = Context::new(infer_ctx);
     let _res = ctx.eval_expr(expr2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb

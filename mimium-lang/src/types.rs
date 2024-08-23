@@ -49,6 +49,12 @@ impl Type {
             _ => false,
         }
     }
+    pub fn is_intermediate(&self) -> Option<i64> {
+        match self {
+            Type::Intermediate(id) => Some(*id),
+            _ => None,
+        }
+    }
     pub fn apply_fn<F>(&self, closure: F) -> Self
     where
         F: Fn(Self) -> Self,
