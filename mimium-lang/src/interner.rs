@@ -5,21 +5,26 @@ use std::{
     hash::Hash,
 };
 
-use slotmap::{Key, KeyData, SlotMap};
+use slotmap::SlotMap;
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{ast::Expr, dummy_span, types::Type, utils::metadata::Span};
+slotmap::new_key_type! {
+    pub struct ExprKey;
+    pub struct TypeKey;
+}
 
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
-    pub expr_storage: SlotMap<ExprNodeId, Expr>,
-    pub type_storage: SlotMap<TypeNodeId, Type>,
+    pub expr_storage: SlotMap<ExprKey, Expr>,
+    pub type_storage: SlotMap<TypeKey, Type>,
     pub span_storage: BTreeMap<NodeId, Span>,
 }
 
 impl SessionGlobals {
     fn store_expr(&mut self, expr: Expr) -> ExprNodeId {
-        self.expr_storage.insert(expr)
+        let key = self.expr_storage.insert(expr);
+        ExprNodeId(key)
     }
 
     fn store_span<T: ToNodeId>(&mut self, node_id: T, span: Span) {
@@ -27,7 +32,8 @@ impl SessionGlobals {
     }
 
     pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
-        self.type_storage.insert(ty)
+        let key = self.type_storage.insert(ty);
+        TypeNodeId(key)
     }
 
     pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
@@ -48,11 +54,11 @@ impl SessionGlobals {
     //
     // cf. https://github.com/tomoyanonymous/mimium-rs/pull/27#issuecomment-2306226748
     pub fn get_expr(&self, expr_id: ExprNodeId) -> Expr {
-        unsafe { self.expr_storage.get_unchecked(expr_id) }.clone()
+        unsafe { self.expr_storage.get_unchecked(expr_id.0) }.clone()
     }
 
     pub fn get_type(&self, type_id: TypeNodeId) -> Type {
-        unsafe { self.type_storage.get_unchecked(type_id) }.clone()
+        unsafe { self.type_storage.get_unchecked(type_id.0) }.clone()
     }
 
     pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Span> {
@@ -116,18 +122,16 @@ impl Display for Symbol {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NodeId {
-    ExprArena(KeyData),
-    TypeArena(KeyData),
+    ExprArena(ExprKey),
+    TypeArena(TypeKey),
 }
 
-// Note: I wanted to use slotmap::DefaultKey, but it already implements
-// PartialEq, which we want to implement differently.
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialOrd, Ord)]
-pub struct ExprNodeId(KeyData);
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExprNodeId(ExprKey);
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialOrd, Ord)]
-pub struct TypeNodeId(KeyData);
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TypeNodeId(TypeKey);
 
 // traits required for Key trait
 
@@ -137,51 +141,9 @@ impl PartialEq for ExprNodeId {
     }
 }
 
-// Note: this implementation is the same as the default implementation. But,
-// clippy would deny it if I use #[derive(Hash)].
-//
-// cf. https://rust-lang.github.io/rust-clippy/master/index.html#/derived_hash_with_manual_eq
-impl Hash for ExprNodeId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
 impl PartialEq for TypeNodeId {
     fn eq(&self, other: &Self) -> bool {
         self.to_type() == other.to_type()
-    }
-}
-
-impl Hash for TypeNodeId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
-// Key trait
-
-unsafe impl Key for ExprNodeId {
-    fn data(&self) -> KeyData {
-        self.0
-    }
-}
-
-impl From<KeyData> for ExprNodeId {
-    fn from(value: KeyData) -> Self {
-        Self(value)
-    }
-}
-
-unsafe impl Key for TypeNodeId {
-    fn data(&self) -> KeyData {
-        self.0
-    }
-}
-
-impl From<KeyData> for TypeNodeId {
-    fn from(value: KeyData) -> Self {
-        Self(value)
     }
 }
 
@@ -217,12 +179,12 @@ pub trait ToNodeId {
 
 impl ToNodeId for ExprNodeId {
     fn to_node_id(&self) -> NodeId {
-        NodeId::ExprArena(self.data())
+        NodeId::ExprArena(self.0)
     }
 }
 
 impl ToNodeId for TypeNodeId {
     fn to_node_id(&self) -> NodeId {
-        NodeId::TypeArena(self.data())
+        NodeId::TypeArena(self.0)
     }
 }
