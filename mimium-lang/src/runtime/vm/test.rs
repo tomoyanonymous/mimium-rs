@@ -176,8 +176,8 @@ fn rust_closure_test() {
     machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_symbol(), Type::Unknown)],
-        ext_cls_table: vec![("rustclosure".to_symbol(), Type::Unknown)],
+        ext_fun_table: vec![("lib_printi".to_symbol(), Type::Unknown.into_id())],
+        ext_cls_table: vec![("rustclosure".to_symbol(), Type::Unknown.into_id())],
         global_vals: vec![],
     };
     // let mut feedstate = FeedState::default();

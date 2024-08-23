@@ -26,7 +26,9 @@ pub struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) | cfg!(test) {
-        colog::default_builder().filter_level(log::LevelFilter::Debug).init();
+        colog::default_builder()
+            .filter_level(log::LevelFilter::Debug)
+            .init();
     } else {
         colog::default_builder().init();
     }
@@ -44,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })
                     .unwrap();
                 match emit_ast(&content.clone()) {
-                    Ok(ast) => println!("{}", expr2.0.pretty_print()),
+                    Ok(ast) => println!("{}", expr2.pretty_print()),
                     Err(e) => {
                         report(&content, fullpath, &e);
                     }

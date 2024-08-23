@@ -40,8 +40,10 @@ impl std::fmt::Display for Value {
             Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
-            Value::Function(id, _statesize, nret) => write!(f, "function {id} (nret: {nret})"),
-            Value::ExtFunction(label, t) => write!(f, "extfun {label} {t}"),
+            Value::Function(id, _statesize, nret) => {
+                write!(f, "function {id} (nret: {})", nret.to_type())
+            }
+            Value::ExtFunction(label, t) => write!(f, "extfun {label} {}", t.to_type()),
             Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
             Value::None => write!(f, "none"),
@@ -55,43 +57,58 @@ impl std::fmt::Display for Instruction {
             Instruction::Uinteger(u) => write!(f, "uint {u}"),
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
-            Instruction::Alloc(t) => write!(f, "alloc {t}"),
-            Instruction::Load(src, ty) => write!(f, "load {src}, {ty}"),
-            Instruction::Store(dst, src, ty) => write!(f, "store {dst}, {src}, {ty}"),
+            Instruction::Alloc(t) => write!(f, "alloc {}", t.to_type()),
+            Instruction::Load(src, ty) => write!(f, "load {src}, {}", ty.to_type()),
+            Instruction::Store(dst, src, ty) => write!(f, "store {dst}, {src}, {}", ty.to_type()),
             Instruction::GetElement {
                 value,
                 ty,
                 array_idx,
                 tuple_offset,
             } => {
+                let ty = ty.to_type();
                 write!(f, "getelement {value}, {ty}, {tuple_offset}[{array_idx}]")
             }
             Instruction::Call(fptr, args, rty) => {
-                write!(f, "call {} [{}] ->{rty}", *fptr, format_vec!(args, ","))
+                write!(
+                    f,
+                    "call {} [{}] ->{}",
+                    *fptr,
+                    format_vec!(args, ","),
+                    rty.to_type()
+                )
             }
             Instruction::CallCls(cls, args, rty) => {
-                write!(f, "callcls {} [{}] ->{rty}", *cls, format_vec!(args, ","))
+                write!(
+                    f,
+                    "callcls {} [{}] ->{}",
+                    *cls,
+                    format_vec!(args, ","),
+                    rty.to_type()
+                )
             }
             Instruction::Closure(fun) => {
                 if let Value::Function(idx, _, nret) = fun.as_ref() {
-                    write!(f, "closure {idx} (nret: {nret})")
+                    write!(f, "closure {idx} (nret: {})", nret.to_type())
                 } else {
                     write!(f, "closure {}", *fun)
                 }
             }
-            Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {ty}"),
-            Instruction::SetUpValue(idx, ty) => write!(f, "setupval {idx} {ty}"),
-            Instruction::GetGlobal(v, ty) => write!(f, "getglobal {} {ty}", *v),
-            Instruction::SetGlobal(dst, src, ty) => write!(f, "setglobal {} {} {ty}", *dst, *src),
+            Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {}", ty.to_type()),
+            Instruction::SetUpValue(idx, ty) => write!(f, "setupval {idx} {}", ty.to_type()),
+            Instruction::GetGlobal(v, ty) => write!(f, "getglobal {} {}", *v, ty.to_type()),
+            Instruction::SetGlobal(dst, src, ty) => {
+                write!(f, "setglobal {} {} {}", *dst, *src, ty.to_type())
+            }
             Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
             Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
 
-            Instruction::GetState(ty) => write!(f, "getstate {ty}"),
+            Instruction::GetState(ty) => write!(f, "getstate {}", ty.to_type()),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
-            Instruction::Return(a, rty) => write!(f, "ret {} {rty}", *a),
-            Instruction::ReturnFeed(v, rty) => write!(f, "retfeed {} {rty}", *v),
+            Instruction::Return(a, rty) => write!(f, "ret {} {}", *a, rty.to_type()),
+            Instruction::ReturnFeed(v, rty) => write!(f, "retfeed {} {}", *v, rty.to_type()),
             Instruction::Delay(max, a, b) => write!(f, "delay {max} {} {}", *a, *b),
             Instruction::Mem(a) => write!(f, "mem {}", *a),
             Instruction::AddF(a, b) => write!(f, "addf {} {}", *a, *b),

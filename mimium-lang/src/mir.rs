@@ -1,7 +1,7 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::{
-    ast::Symbol,
-    types::{Type, TypeSize},
+    interner::{Symbol, TypeNodeId},
+    types::TypeSize,
 };
 use std::{cell::OnceCell, sync::Arc};
 
@@ -11,7 +11,7 @@ pub mod print;
 // pub struct Global(VPtr);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Argument(pub Symbol, pub Type);
+pub struct Argument(pub Symbol, pub TypeNodeId);
 
 pub type VReg = u64;
 #[derive(Debug, PartialEq)]
@@ -22,8 +22,8 @@ pub enum Value {
     Register(VReg),
     State(VPtr),
     // idx of the function in the program, size of internal state, return type
-    Function(usize, u64, Type),
-    ExtFunction(Symbol, Type),
+    Function(usize, u64, TypeNodeId),
+    ExtFunction(Symbol, TypeNodeId),
     FixPoint(usize), //function id
     //internal state
     None, //??
@@ -38,34 +38,34 @@ pub enum Instruction {
     //constant float
     Float(f64),
     // allocate memory from stack depending on the size
-    Alloc(Type),
+    Alloc(TypeNodeId),
     // load value to register from the pointer type
-    Load(VPtr, Type),
+    Load(VPtr, TypeNodeId),
     // store value to pointer
-    Store(VPtr, VPtr, Type),
+    Store(VPtr, VPtr, TypeNodeId),
     // Instruction for computing destination address like LLVM's GetElementPtr.
     // This instruction does no actual computation on runtime.
     GetElement {
         value: VPtr,
-        ty: Type,
+        ty: TypeNodeId,
         array_idx: u64,
         tuple_offset: u64,
     },
     // call function, arguments
-    Call(VPtr, Vec<VPtr>, Type),
-    CallCls(VPtr, Vec<VPtr>, Type),
-    GetGlobal(VPtr, Type),
-    SetGlobal(VPtr, VPtr, Type),
+    Call(VPtr, Vec<VPtr>, TypeNodeId),
+    CallCls(VPtr, Vec<VPtr>, TypeNodeId),
+    GetGlobal(VPtr, TypeNodeId),
+    SetGlobal(VPtr, VPtr, TypeNodeId),
     // make closure with upindexes
     Closure(VPtr),
     //label to funcproto  and localvar offset?
-    GetUpValue(u64, Type),
-    SetUpValue(u64, Type),
+    GetUpValue(u64, TypeNodeId),
+    SetUpValue(u64, TypeNodeId),
     //internal state: feed and delay
     PushStateOffset(u64),
     PopStateOffset(u64),
     //load internal state to register(destination)
-    GetState(Type),
+    GetState(TypeNodeId),
 
     //condition,  basic block index for then else statement
     JmpIf(VPtr, u64, u64),
@@ -74,9 +74,9 @@ pub enum Instruction {
     //merge
     Phi(VPtr, VPtr),
 
-    Return(VPtr, Type),
+    Return(VPtr, TypeNodeId),
     //value to update state
-    ReturnFeed(VPtr, Type),
+    ReturnFeed(VPtr, TypeNodeId),
 
     Delay(u64, VPtr, VPtr),
     Mem(VPtr),
@@ -138,15 +138,20 @@ pub struct OpenUpValue(pub usize, pub TypeSize);
 pub struct Function {
     pub label: Symbol,
     pub args: Vec<Arc<Value>>,
-    pub argtypes: Vec<Type>,
-    pub return_type: OnceCell<Type>, // TODO: None is the state when the type is not inferred yet.
+    pub argtypes: Vec<TypeNodeId>,
+    pub return_type: OnceCell<TypeNodeId>, // TODO: None is the state when the type is not inferred yet.
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_size: u64,
 }
 impl Function {
-    pub fn new(name: Symbol, args: &[VPtr], argtypes: &[Type], upperfn_i: Option<usize>) -> Self {
+    pub fn new(
+        name: Symbol,
+        args: &[VPtr],
+        argtypes: &[TypeNodeId],
+        upperfn_i: Option<usize>,
+    ) -> Self {
         Self {
             label: name,
             args: args.to_vec(),

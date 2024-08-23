@@ -1,6 +1,7 @@
-use crate::ast::Symbol;
+use crate::interner::{Symbol, TypeNodeId};
 //todo! need to replace with interned string.
 use crate::types::Type;
+use crate::utils::metadata::Span;
 use crate::utils::miniprint::MiniPrint;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,22 +29,37 @@ impl std::fmt::Display for Pattern {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedId {
     pub id: Symbol,
-    pub ty: Option<Type>,
+    // TypeNodeId is always issued even if the expression doesn't have the type
+    // specification at all. This can be used for querying for the span.
+    pub ty: TypeNodeId,
 }
+
+impl TypedId {
+    pub fn to_span(&self) -> Span {
+        self.ty.to_span()
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        self.ty.to_type() == Type::Unknown
+    }
+}
+
 impl std::fmt::Display for TypedId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.ty {
-            Some(t) => write!(f, "{} :{t}", self.id),
-            None => write!(f, "{}", self.id),
+        if !self.is_unknown() {
+            write!(f, "{} :{}", self.id, self.ty.to_type())
+        } else {
+            write!(f, "{}", self.id)
         }
     }
 }
 
 impl MiniPrint for TypedId {
     fn simple_print(&self) -> String {
-        match &self.ty {
-            Some(t) => format!("(tid {} {})", self.id, t), //todo:type
-            None => self.id.to_string(),
+        if !self.is_unknown() {
+            format!("(tid {} {})", self.id, self.ty.to_type())
+        } else {
+            self.id.to_string()
         }
     }
 }
@@ -51,8 +67,19 @@ impl MiniPrint for TypedId {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedPattern {
     pub pat: Pattern,
-    pub ty: Option<Type>,
+    pub ty: TypeNodeId,
 }
+
+impl TypedPattern {
+    pub fn to_span(&self) -> Span {
+        self.ty.to_span()
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        self.ty.to_type() == Type::Unknown
+    }
+}
+
 #[derive(Debug)]
 pub struct ConversionError;
 impl std::fmt::Display for ConversionError {
@@ -86,17 +113,19 @@ impl TryFrom<TypedPattern> for TypedId {
 
 impl MiniPrint for TypedPattern {
     fn simple_print(&self) -> String {
-        match &self.ty {
-            Some(t) => format!("(tpat {} {})", self.pat, t), //todo:type
-            None => self.pat.to_string(),
+        if !self.is_unknown() {
+            format!("(tpat {} {})", self.pat, self.ty.to_type())
+        } else {
+            self.pat.to_string()
         }
     }
 }
 impl std::fmt::Display for TypedPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.ty {
-            Some(t) => write!(f, "{} :{t}", self.pat),
-            None => write!(f, "{}", self.pat),
+        if !self.is_unknown() {
+            write!(f, "{} :{}", self.pat, self.ty.to_type())
+        } else {
+            write!(f, "{}", self.pat)
         }
     }
 }

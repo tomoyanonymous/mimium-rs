@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
@@ -13,20 +14,21 @@ mod lexer;
 #[cfg(test)]
 mod test;
 
-fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
+fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clone {
     recursive(|ty| {
         let primitive = select! {
            Token::FloatType => Type::Primitive(PType::Numeric),
            Token::IntegerType => Type::Primitive(PType::Int),
            Token::StringType => Type::Primitive(PType::String)
-        };
+        }
+        .map_with_span(|t, s| t.into_id_with_span(s));
 
         let tuple = ty
             .clone()
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(Type::Tuple)
+            .map_with_span(|t: Vec<TypeNodeId>, s: Span| Type::Tuple(t).into_id_with_span(s))
             .boxed()
             .labelled("Tuple");
 
@@ -37,7 +39,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .separated_by(just(Token::Comma))
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .then(just(Token::Arrow).ignore_then(ty.clone()))
-            .map(|(a, e)| Type::Function(a, e.into(), None))
+            .map_with_span(|(a, e), s| Type::Function(a, e, None).into_id_with_span(s))
             .boxed()
             .labelled("function");
 
@@ -58,7 +60,7 @@ fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 }
 fn with_type_annotation<P, O>(
     parser: P,
-) -> impl Parser<Token, (O, Option<Type>), Error = Simple<Token>> + Clone
+) -> impl Parser<Token, (O, Option<TypeNodeId>), Error = Simple<Token>> + Clone
 where
     P: Parser<Token, O, Error = Simple<Token>> + Clone,
 {
@@ -68,10 +70,16 @@ where
 }
 fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(select! { Token::Ident(s) => s })
-        .map(|(s, t)| TypedId { id: s, ty: t })
+        .map_with_span(|(sym, t), span| match t {
+            Some(ty) => TypedId { id: sym, ty },
+            None => TypedId {
+                id: sym,
+                ty: Type::Unknown.into_id_with_span(span),
+            },
+        })
         .labelled("lvar")
 }
-fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple<Token>> + Clone {
+fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> + Clone {
     let pat = recursive(|pat| {
         pat.clone()
             .separated_by(just(Token::Comma))
@@ -81,15 +89,21 @@ fn pattern_parser() -> impl Parser<Token, WithMeta<TypedPattern>, Error = Simple
             .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
-    with_type_annotation(pat).map_with_span(|(pat, ty), s| WithMeta(TypedPattern { pat, ty }, s))
+    with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
+        Some(ty) => TypedPattern { pat, ty },
+        None => TypedPattern {
+            pat,
+            ty: Type::Unknown.into_id_with_span(s),
+        },
+    })
 }
 
-fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
+fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser();
     let pattern = pattern_parser();
     let val = val_parser();
     let expr_group = recursive(|expr_group| {
-        let expr = recursive(|expr| {
+        let expr = recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
             let parenexpr = expr
                 .clone()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
@@ -99,14 +113,13 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .then_ignore(just(Token::Assign))
                 .then(expr.clone())
                 .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-                .then(expr_group.clone().map(|e| Box::new(e)).or_not())
-                .map(|((ident, body), then)| Expr::Let(ident, Box::new(body), then))
+                .then(expr_group.clone().or_not())
+                .map(|((ident, body), then)| Expr::Let(ident, body, then))
                 .boxed()
                 .labelled("let");
 
             let lambda = lvar
                 .clone()
-                .map_with_span(|id, span| WithMeta::<TypedId>(id, span))
                 .separated_by(just(Token::Comma))
                 .delimited_by(
                     just(Token::LambdaArgBeginEnd),
@@ -114,19 +127,16 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 )
                 .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
                 .then(expr_group.clone())
-                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, Box::new(body)))
+                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, body))
                 .labelled("lambda");
 
             let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
-                .map_with_span(|e, s| WithMeta(e, s))
+                .map_with_span(|e, s| e.into_id(s))
                 .then_ignore(just(Token::ParenBegin))
                 .then(expr_group.clone())
                 .then_ignore(just(Token::ParenEnd))
                 .map_with_span(|(id, then), s| {
-                    Expr::Escape(Box::new(WithMeta(
-                        Expr::Apply(Box::new(id), vec![then]),
-                        s.clone(),
-                    )))
+                    Expr::Escape(Expr::Apply(id, vec![then]).into_id(s.clone()))
                 })
                 .labelled("macroexpand");
 
@@ -135,14 +145,14 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .map_with_span(|e, s| WithMeta(Expr::Tuple(e), s))
+                .map_with_span(|e, s| Expr::Tuple(e).into_id(s))
                 .labelled("tuple");
 
             let atom = val
                 .or(lambda)
                 .or(macro_expand)
                 .or(let_e)
-                .map_with_span(|e, s| WithMeta(e, s))
+                .map_with_span(|e, s| e.into_id(s))
                 .or(parenexpr)
                 .or(tuple)
                 .boxed()
@@ -157,45 +167,37 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             let parenitems = items
                 .clone()
                 .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .map_with_span(|e, s| WithMeta(e, s))
                 .repeated();
-            let folder = |f: WithMeta<Expr>, args: WithMeta<Vec<WithMeta<Expr>>>| {
-                WithMeta(
-                    Expr::Apply(Box::new(f.clone()), args.0),
-                    f.1.start..args.1.end,
-                )
+            let folder = |f: ExprNodeId, args: Vec<ExprNodeId>| {
+                let f_span = f.to_span();
+                // TODO: this doesn't include the span of the closing parenthesis
+                let span_end = match args.as_slice() {
+                    [.., end] => end.to_span().end,
+                    _ => f_span.end,
+                };
+                let span = f_span.start..span_end;
+                Expr::Apply(f, args).into_id(span)
             };
             let apply = atom.then(parenitems).foldl(folder).labelled("apply");
 
             let unary = select! { Token::Op(Op::Minus) => {} }
+                .map_with_span(|e, s| (e, s))
                 .repeated()
                 .then(apply)
-                .foldr(|_op, rhs| {
-                    let rhs_start = rhs.1.start;
-                    let op_start = rhs_start - 1;
-                    let span_end = rhs.1.end;
-                    let neg_op = Box::new(WithMeta(
-                        Expr::Var("neg".to_symbol(), None),
-                        op_start..rhs_start,
-                    ));
-                    WithMeta(
-                        Expr::Apply(neg_op, vec![WithMeta(rhs.0, rhs.1)]),
-                        op_start..span_end,
-                    )
+                .foldr(|(_op, op_span), rhs| {
+                    let rhs_span = rhs.to_span();
+                    let neg_op =
+                        Expr::Var("neg".to_symbol(), None).into_id(op_span.start..rhs_span.start);
+                    Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
                 })
                 .labelled("unary");
 
-            let op_cls = |x: WithMeta<_>, y: WithMeta<_>, op: Op, opspan: Span| {
-                WithMeta(
-                    Expr::Apply(
-                        Box::new(WithMeta(
-                            Expr::Var(op.get_associated_fn_name(), None),
-                            opspan,
-                        )),
-                        vec![x.clone(), y.clone()],
-                    ),
-                    x.1.start..y.1.end,
+            let op_cls = |x: ExprNodeId, y: ExprNodeId, op: Op, opspan: Span| {
+                Expr::Apply(
+                    Expr::Var(op.get_associated_fn_name(), None).into_id(opspan),
+                    vec![x, y],
                 )
+                .into_id(x.to_span().start..y.to_span().end)
             };
             let optoken = move |o: Op| {
                 just(Token::Op(o)).map_with_span(|e, s| {
@@ -268,8 +270,8 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                 .clone()
                 .then(op.then(cmp).repeated())
                 .foldl(|lhs, ((_, _), rhs)| {
-                    let span = lhs.1.start..rhs.1.end;
-                    WithMeta(Expr::Apply(Box::new(rhs), vec![lhs]), span)
+                    let span = lhs.to_span().start..rhs.to_span().end;
+                    Expr::Apply(rhs, vec![lhs]).into_id(span)
                 })
                 .boxed();
 
@@ -281,7 +283,7 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .clone()
             .padded_by(just(Token::LineBreak).or_not())
             .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
-            .map(|e: WithMeta<Expr>| Expr::Block(Some(Box::new(e))));
+            .map(|e: ExprNodeId| Expr::Block(Some(e)));
 
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
@@ -291,18 +293,12 @@ fn expr_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
             )
             .then(expr_group.clone())
-            .then(
-                just(Token::Else)
-                    .ignore_then(expr_group.clone().map(|e| Box::new(e)))
-                    .or_not(),
-            )
-            .map_with_span(|((cond, then), opt_else), s| {
-                WithMeta(Expr::If(cond.into(), then.into(), opt_else), s)
-            })
+            .then(just(Token::Else).ignore_then(expr_group.clone()).or_not())
+            .map_with_span(|((cond, then), opt_else), s| Expr::If(cond, then, opt_else).into_id(s))
             .labelled("if");
 
         block
-            .map_with_span(|e, s| WithMeta(e, s))
+            .map_with_span(|e, s| e.into_id(s))
             .or(if_)
             .or(expr.clone())
     });
@@ -312,7 +308,7 @@ fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
     select! {Token::Comment(Comment::SingleLine(_t))=>(),
     Token::Comment(Comment::MultiLine(_t))=>()}
 }
-fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
+fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
     let lvar = lvar_parser();
     let blockstart = just(Token::BlockBegin)
@@ -323,7 +319,6 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
         .ignore_then(just(Token::BlockEnd));
     let fnparams = lvar
         .clone()
-        .map_with_span(|e, s| WithMeta(e, s))
         .separated_by(just(Token::Comma))
         .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
         .labelled("fnparams");
@@ -338,31 +333,33 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
                     .delimited_by(blockstart.clone(), blockend.clone()),
             )
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-            .then(stmt.clone().map(|e| Box::new(e)).or_not())
+            .then(stmt.clone().or_not())
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
                 let atypes = ids
                     .iter()
-                    .map(|WithMeta(TypedId { ty, id: _ }, _)| ty.clone().unwrap_or(Type::Unknown))
+                    .map(|tid| {
+                        if !tid.is_unknown() {
+                            tid.ty
+                        } else {
+                            Type::Unknown.into_id()
+                        }
+                    })
                     .collect::<Vec<_>>();
                 let fname = TypedId {
-                    ty: Some(Type::Function(
+                    id: fname.id,
+                    ty: Type::Function(
                         atypes,
-                        Box::new(r_type.clone().unwrap_or(Type::Unknown)),
+                        r_type.unwrap_or_else(|| Type::Unknown.into_id()),
                         None,
-                    )),
-                    id: fname.id.clone(),
+                    )
+                    .into_id(),
                 };
-                WithMeta(
-                    Expr::LetRec(
-                        fname,
-                        Box::new(WithMeta(
-                            Expr::Lambda(ids, r_type, Box::new(block)),
-                            s.clone(),
-                        )),
-                        then,
-                    ),
-                    s,
+                Expr::LetRec(
+                    fname,
+                    Expr::Lambda(ids, r_type, block).into_id(s.clone()),
+                    then,
                 )
+                .into_id(s)
             })
             .labelled("function decl");
         let macro_s = just(Token::Macro)
@@ -371,23 +368,16 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .then(
                 expr.clone()
                     .delimited_by(blockstart.clone(), blockend.clone())
-                    .map(|WithMeta(e, s)| {
-                        WithMeta(Expr::Bracket(Box::new(WithMeta(e, s.clone()))), s)
-                    }),
+                    .map(Expr::Bracket),
             )
-            .then(expr.clone().map(|e| Box::new(e)).or_not())
+            .then(expr.clone().or_not())
             .map_with_span(|(((fname, ids), block), then), s| {
-                WithMeta(
-                    Expr::LetRec(
-                        fname,
-                        Box::new(WithMeta(
-                            Expr::Lambda(ids, None, Box::new(block)),
-                            s.clone(),
-                        )),
-                        then,
-                    ),
-                    s,
+                Expr::LetRec(
+                    fname,
+                    Expr::Lambda(ids, None, block.into_id(s.clone())).into_id(s.clone()),
+                    then,
                 )
+                .into_id(s)
             })
             .labelled("macro definition");
         let let_stmt = just(Token::Let)
@@ -395,10 +385,8 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
             .then_ignore(just(Token::Assign))
             .then(expr.clone())
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-            .then(stmt.clone().map(|e| Box::new(e)).or_not())
-            .map_with_span(|((ident, body), then), span| {
-                WithMeta(Expr::Let(ident, Box::new(body), then), span)
-            })
+            .then(stmt.clone().or_not())
+            .map_with_span(|((ident, body), then), span| Expr::Let(ident, body, then).into_id(span))
             .boxed()
             .labelled("let_stmt");
         function_s.or(macro_s).or(let_stmt).or(expr_parser())
@@ -407,7 +395,7 @@ fn func_parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + 
     // expr_parser().then_ignore(end())
 }
 
-fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone {
+fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let ignored = comment_parser()
         .or(just(Token::LineBreak).ignored())
         .or(just(Token::SemiColon).ignored());
@@ -415,25 +403,20 @@ fn parser() -> impl Parser<Token, WithMeta<Expr>, Error = Simple<Token>> + Clone
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
-pub(crate) fn add_global_context(ast: WithMeta<Expr>) -> WithMeta<Expr> {
-    let WithMeta(_, ref span) = ast;
+
+pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
+    let span = ast.to_span();
     let res = Expr::Let(
-        WithMeta(
-            TypedPattern {
-                pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
-                ty: None,
-            },
-            span.clone(),
-        ),
-        Box::new(WithMeta(
-            Expr::Lambda(vec![], None, Box::new(ast.clone())),
-            span.clone(),
-        )),
+        TypedPattern {
+            pat: Pattern::Single(GLOBAL_LABEL.to_symbol()),
+            ty: Type::Unknown.into_id_with_span(span.clone()),
+        },
+        Expr::Lambda(vec![], None, ast).into_id(span.clone()),
         None,
     );
-    WithMeta(res, span.clone())
+    res.into_id(span.clone())
 }
-pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>> {
+pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
@@ -445,12 +428,15 @@ pub fn parse(src: &str) -> Result<WithMeta<Expr>, Vec<Box<dyn ReportableError>>>
     if let Some(t) = tokens {
         let (ast, parse_errs) =
             parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
-        ast.ok_or_else(|| {
-            parse_errs
-                .iter()
-                .for_each(|e| errs.push(Box::new(error::ParseError::<Token>(e.clone()))));
-            errs
-        })
+        match ast {
+            Some(ast) => Ok(ast),
+            None => {
+                parse_errs
+                    .iter()
+                    .for_each(|e| errs.push(Box::new(error::ParseError::<Token>(e.clone()))));
+                Err(errs)
+            }
+        }
     } else {
         Err(errs)
     }

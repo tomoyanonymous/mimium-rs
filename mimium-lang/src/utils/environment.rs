@@ -1,6 +1,7 @@
 use std::collections::LinkedList;
 
-use crate::ast::Symbol;
+use crate::interner::Symbol;
+
 type EnvInner<T> = LinkedList<Vec<(Symbol, T)>>;
 
 #[derive(Clone, Debug, PartialEq)]

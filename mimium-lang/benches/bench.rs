@@ -9,8 +9,8 @@ fn main() {
 mod tests {
 
     mod runtime {
-        use mimium_lang::ast::ToSymbol;
         use mimium_lang::compiler::emit_bytecode;
+        use mimium_lang::interner::ToSymbol;
         use mimium_lang::runtime::vm::Machine;
         use test::Bencher;
 

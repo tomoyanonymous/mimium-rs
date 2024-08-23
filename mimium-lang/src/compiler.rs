@@ -69,18 +69,16 @@ impl ReportableError for Error {
 use mirgen::recursecheck;
 
 use crate::{
-    ast, ast_interpreter,
+    ast_interpreter,
+    interner::ExprNodeId,
     mir::Mir,
     runtime::vm,
     types::Type,
-    utils::{
-        error::ReportableError,
-        metadata::{Span, WithMeta},
-    },
+    utils::{error::ReportableError, metadata::Span},
 };
-pub fn emit_ast(src: &str) -> Result<WithMeta<ast::Expr>, Vec<Box<dyn ReportableError>>> {
+pub fn emit_ast(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-    Ok(recursecheck::convert_recurse(&ast))
+    Ok(recursecheck::convert_recurse(ast))
 }
 
 pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
@@ -100,7 +98,7 @@ pub fn interpret_top(
     global_ctx: &mut ast_interpreter::Context,
 ) -> Result<ast_interpreter::Value, Vec<Box<dyn ReportableError>>> {
     let ast = emit_ast(&content)?;
-    ast_interpreter::eval_ast(&Box::new(ast), global_ctx).map_err(|e| {
+    ast_interpreter::eval_ast(ast, global_ctx).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         vec![eb]
     })

@@ -4,39 +4,39 @@ use super::Type;
 #[macro_export]
 macro_rules! unit {
     () => {
-        Type::Primitive(PType::Unit)
+        Type::Primitive(PType::Unit).into_id()
     };
 }
 
 #[macro_export]
 macro_rules! integer {
     () => {
-        Type::Primitive(PType::Int)
+        Type::Primitive(PType::Int).into_id()
     };
 }
 #[macro_export]
 macro_rules! numeric {
     () => {
-        Type::Primitive(PType::Numeric)
+        Type::Primitive(PType::Numeric).into_id()
     };
 }
 #[macro_export]
 macro_rules! string_t {
     () => {
-        Type::Primitive(PType::String)
+        Type::Primitive(PType::String).into_id()
     };
 }
 #[macro_export]
 macro_rules! function {
     ($params:expr, $return:expr) => {
-        Type::Function($params, Box::new($return), None)
+        Type::Function($params, $return, None).into_id()
     };
 }
 
 #[macro_export]
 macro_rules! refer {
     ($t:expr) => {
-        Type::Ref(Box::new($t))
+        Type::Ref($t).into_id()
     };
 }
 
@@ -44,7 +44,7 @@ macro_rules! refer {
 macro_rules! tuple {
 
     ($($t:expr),*) => {
-        Type::Tuple(vec![$($t,)*])
+        Type::Tuple(vec![$($t,)*]).into_id()
     };
 }
 
@@ -58,13 +58,21 @@ mod typemacro_test {
             string_t!()
         );
         let answer = Type::Tuple(vec![
-            Type::Ref(Box::new(Type::Function(
-                vec![Type::Primitive(PType::Int), Type::Primitive(PType::Int)],
-                Box::new(Type::Primitive(PType::Numeric)),
-                None,
-            ))),
-            Type::Primitive(PType::String),
-        ]);
+            Type::Ref(
+                Type::Function(
+                    vec![
+                        Type::Primitive(PType::Int).into_id(),
+                        Type::Primitive(PType::Int).into_id(),
+                    ],
+                    Type::Primitive(PType::Numeric).into_id(),
+                    None,
+                )
+                .into_id(),
+            )
+            .into_id(),
+            Type::Primitive(PType::String).into_id(),
+        ])
+        .into_id();
         assert_eq!(t, answer);
     }
 }
