@@ -42,6 +42,11 @@ impl SessionGlobals {
         type_id
     }
 
+    // TODO: in theory, instead of cloning, this can return &Expr with an
+    // extended lifetime by `std::mem::transmute()` just like we do in
+    // Symbol::as_str(). However, we would get segfault for some reason.
+    //
+    // cf. https://github.com/tomoyanonymous/mimium-rs/pull/27#issuecomment-2306226748
     pub fn get_expr(&self, expr_id: ExprNodeId) -> Expr {
         unsafe { self.expr_storage.get_unchecked(expr_id) }.clone()
     }
