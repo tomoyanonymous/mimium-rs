@@ -1,20 +1,20 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{cell::RefCell, collections::BTreeMap, hash::Hash};
 
-use id_arena::{Arena, Id};
+use slotmap::{Key, KeyData, SlotMap};
 use string_interner::{backend::StringBackend, StringInterner};
 
 use crate::{ast::Expr, dummy_span, types::Type, utils::metadata::Span};
 
 pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
-    pub expr_storage: Arena<Expr>,
-    pub type_storage: Arena<Type>,
+    pub expr_storage: SlotMap<ExprNodeId, Expr>,
+    pub type_storage: SlotMap<TypeNodeId, Type>,
     pub span_storage: BTreeMap<NodeId, Span>,
 }
 
 impl SessionGlobals {
     fn store_expr(&mut self, expr: Expr) -> ExprNodeId {
-        ExprNodeId(self.expr_storage.alloc(expr))
+        self.expr_storage.insert(expr)
     }
 
     fn store_span<T: ToNodeId>(&mut self, node_id: T, span: Span) {
@@ -22,7 +22,7 @@ impl SessionGlobals {
     }
 
     pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
-        TypeNodeId(self.type_storage.alloc(ty))
+        self.type_storage.insert(ty)
     }
 
     pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
@@ -38,15 +38,11 @@ impl SessionGlobals {
     }
 
     pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {
-        self.expr_storage
-            .get(expr_id.0)
-            .expect("Unknown ExprNodeId")
+        unsafe { self.expr_storage.get_unchecked(expr_id) }
     }
 
     pub fn get_type(&self, type_id: TypeNodeId) -> &Type {
-        self.type_storage
-            .get(type_id.0)
-            .expect("Unknown TypeNodeId")
+        unsafe { self.type_storage.get_unchecked(type_id) }
     }
 
     pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Span> {
@@ -57,8 +53,8 @@ impl SessionGlobals {
 thread_local!(static SESSION_GLOBALS: RefCell<SessionGlobals> =  RefCell::new(
     SessionGlobals {
         symbol_interner: StringInterner::new(),
-        expr_storage: Arena::new(),
-        type_storage: Arena::new(),
+        expr_storage: SlotMap::with_key(),
+        type_storage: SlotMap::with_key(),
         span_storage: BTreeMap::new()
     }
 ));
@@ -72,15 +68,74 @@ where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NodeId {
-    ExprArena(usize),
-    TypeArena(usize),
+    ExprArena(KeyData),
+    TypeArena(KeyData),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ExprNodeId(pub Id<Expr>);
+// Note: I wanted to use slotmap::DefaultKey, but it already implements
+// PartialEq, which we want to implement differently.
 
-#[derive(Debug, Clone, Copy)]
-pub struct TypeNodeId(pub Id<Type>);
+#[derive(Debug, Clone, Copy, Default, Eq, PartialOrd, Ord)]
+pub struct ExprNodeId(KeyData);
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialOrd, Ord)]
+pub struct TypeNodeId(KeyData);
+
+// traits required for Key trait
+
+impl PartialEq for ExprNodeId {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
+    }
+}
+
+// Note: this implementation is the same as the default implementation. But,
+// clippy would deny it if I use #[derive(Hash)].
+//
+// cf. https://rust-lang.github.io/rust-clippy/master/index.html#/derived_hash_with_manual_eq
+impl Hash for ExprNodeId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl PartialEq for TypeNodeId {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_type() == other.to_type()
+    }
+}
+
+impl Hash for TypeNodeId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+// Key trait
+
+unsafe impl Key for ExprNodeId {
+    fn data(&self) -> KeyData {
+        self.0
+    }
+}
+
+impl From<KeyData> for ExprNodeId {
+    fn from(value: KeyData) -> Self {
+        Self(value)
+    }
+}
+
+unsafe impl Key for TypeNodeId {
+    fn data(&self) -> KeyData {
+        self.0
+    }
+}
+
+impl From<KeyData> for TypeNodeId {
+    fn from(value: KeyData) -> Self {
+        Self(value)
+    }
+}
 
 impl ExprNodeId {
     pub fn to_expr(&self) -> &Expr {
@@ -122,24 +177,12 @@ pub trait ToNodeId {
 
 impl ToNodeId for ExprNodeId {
     fn to_node_id(&self) -> NodeId {
-        NodeId::ExprArena(self.0.index())
+        NodeId::ExprArena(self.data())
     }
 }
 
 impl ToNodeId for TypeNodeId {
     fn to_node_id(&self) -> NodeId {
-        NodeId::TypeArena(self.0.index())
-    }
-}
-
-impl PartialEq for ExprNodeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
-    }
-}
-
-impl PartialEq for TypeNodeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_type() == other.to_type()
+        NodeId::TypeArena(self.data())
     }
 }
