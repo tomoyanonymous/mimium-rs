@@ -7,6 +7,7 @@ use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{Type, TypeSize};
 use crate::utils::error::ReportableError;
+use chumsky::prelude::todo;
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -218,6 +219,7 @@ impl ByteCodeGenerator {
             Type::Function(_, _, _) => 1,
             Type::Ref(_) => 1,
             Type::Code(_) => todo!(),
+            Type::TypeScheme(_, _) => todo!(),
             Type::Intermediate(_) => 1, // TODO
             Type::Unknown => todo!(),
         }
