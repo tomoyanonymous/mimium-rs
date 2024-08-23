@@ -5,11 +5,11 @@ use crate::{
     pattern::TypedPattern,
 };
 
-fn try_find_recurse(e_s: &ExprNodeId, name: &Symbol) -> bool {
+fn try_find_recurse(e_s: ExprNodeId, name: &Symbol) -> bool {
     match e_s.to_expr() {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
-            try_find_recurse(body, name) || then.map_or(false, |e| try_find_recurse(&e, name))
+            try_find_recurse(*body, name) || then.map_or(false, |e| try_find_recurse(e, name))
         }
         Expr::LetRec(_id, _body, _then) => {
             //todo: start new search so we return false here
@@ -17,18 +17,18 @@ fn try_find_recurse(e_s: &ExprNodeId, name: &Symbol) -> bool {
         }
         Expr::Lambda(_ids, _opt_type, body) => {
             // convert_self(body)
-            try_find_recurse(body, name)
+            try_find_recurse(*body, name)
         }
-        Expr::Proj(body, _idx) => try_find_recurse(body, name),
-        Expr::Block(body) => body.map_or(false, |b| try_find_recurse(&b, name)),
+        Expr::Proj(body, _idx) => try_find_recurse(*body, name),
+        Expr::Block(body) => body.map_or(false, |b| try_find_recurse(b, name)),
         Expr::Apply(fun, callee) => {
-            try_find_recurse(fun, name) || callee.iter().any(|v| try_find_recurse(v, name))
+            try_find_recurse(*fun, name) || callee.iter().any(|v| try_find_recurse(*v, name))
         }
-        Expr::Tuple(vec) => vec.iter().any(|v| try_find_recurse(v, name)),
+        Expr::Tuple(vec) => vec.iter().any(|v| try_find_recurse(*v, name)),
         Expr::If(cond, then, opt_else) => {
-            try_find_recurse(cond, name)
-                || try_find_recurse(then, name)
-                || opt_else.map_or(false, |e| try_find_recurse(&e, name))
+            try_find_recurse(*cond, name)
+                || try_find_recurse(*then, name)
+                || opt_else.map_or(false, |e| try_find_recurse(e, name))
         }
         Expr::Feed(_x, _body) => panic!("feed should not be shown in recurse removal process"),
         _ => false,
@@ -40,7 +40,7 @@ pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
     let span = e_s.to_span();
     let res = match e_s.to_expr() {
         Expr::LetRec(id, body, then) => {
-            if !try_find_recurse(body, &id.id) {
+            if !try_find_recurse(*body, &id.id) {
                 Expr::Let(
                     TypedPattern::from(id.clone()),
                     convert_recurse(*body),
