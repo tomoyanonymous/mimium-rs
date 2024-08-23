@@ -162,7 +162,7 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
     // TODO: clean up code later
     if let Some((rt, ptr)) = get_builtin_fns().iter().find_map(|(name, ty, ptr)| {
         let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty.to_type() {
-            (tv.eq(tv2), rt.to_type())
+            (tv.eq(&tv2), rt.to_type())
         } else {
             return None;
         };
@@ -246,7 +246,7 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
 pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileError> {
     let env = &mut ctx.env;
     let span = e_meta.to_span();
-    match e_meta.to_expr() {
+    match &e_meta.to_expr() {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
         ast::Expr::Var(v, _time) => env
             .lookup(v)

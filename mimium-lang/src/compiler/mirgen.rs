@@ -189,13 +189,13 @@ impl Context {
                 let tvec = self
                     .typeenv
                     .unify_types(ty, Type::Tuple(interm_vec).into_id())?;
-                let tvec =
-                    tvec.to_type()
-                        .get_as_tuple()
-                        .ok_or(CompileError::from(typing::Error(
-                            typing::ErrorKind::PatternMismatch(ty.to_type().clone(), pat.clone()),
-                            span.clone(),
-                        )))?;
+                let tvec_ty = tvec.to_type();
+                let tvec = tvec_ty
+                    .get_as_tuple()
+                    .ok_or(CompileError::from(typing::Error(
+                        typing::ErrorKind::PatternMismatch(ty.to_type().clone(), pat.clone()),
+                        span.clone(),
+                    )))?;
                 for (i, pat) in patterns.iter().enumerate() {
                     let cty = tvec[i];
                     let v = if i == 0 {
@@ -393,7 +393,7 @@ impl Context {
     }
     pub fn eval_expr(&mut self, e_meta: ExprNodeId) -> Result<(VPtr, TypeNodeId), CompileError> {
         let span = e_meta.to_span();
-        match e_meta.to_expr() {
+        match &e_meta.to_expr() {
             Expr::Literal(lit) => {
                 let v = self.eval_literal(lit, &span)?;
                 let t = infer_type_literal(lit).map_err(CompileError::from)?;
@@ -488,15 +488,15 @@ impl Context {
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
                             Value::Function(idx, statesize, _rty) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, *rt)
+                                self.emit_fncall(*idx as u64, *statesize, a_regs, rt)
                             }
                             Value::Register(_) => {
-                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone(), *rt))
+                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone(), rt))
                             }
                             Value::FixPoint(fnid) => {
                                 let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                                 let cls = self.push_inst(Instruction::Closure(clspos));
-                                self.push_inst(Instruction::CallCls(cls, a_regs.clone(), *rt))
+                                self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt))
                             }
                             _ => {
                                 panic!("calling non-function global value")
@@ -505,17 +505,14 @@ impl Context {
                         Value::Register(_) => {
                             //closure
                             //do not increment state size for closure
-                            let res = self.push_inst(Instruction::CallCls(
-                                f.clone(),
-                                a_regs.clone(),
-                                *rt,
-                            ));
+                            let res =
+                                self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone(), rt));
                             res
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), *rt))
+                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt))
                         }
 
                         Value::Function(idx, statesize, ret_t) => {
@@ -532,7 +529,7 @@ impl Context {
                         Value::None => unreachable!(),
                         _ => todo!(),
                     };
-                    Ok((res, *rt))
+                    Ok((res, rt))
                 }
             }
             Expr::Lambda(ids, rett, body) => {
@@ -666,7 +663,7 @@ impl Context {
                 let idt = if !pat.is_unknown() {
                     match pat.ty.to_type() {
                         Type::Function(atypes, rty, s) => {
-                            self.typeenv.convert_unknown_function(atypes, *rty, *s)
+                            self.typeenv.convert_unknown_function(&atypes, rty, s)
                         }
                         _ => pat.ty,
                     }
@@ -714,7 +711,7 @@ impl Context {
                     let idt = if !id.is_unknown() {
                         match id.ty.to_type() {
                             Type::Function(atypes, rty, s) => {
-                                tenv.convert_unknown_function(atypes, *rty, *s)
+                                tenv.convert_unknown_function(&atypes, rty, s)
                             }
                             _ => id.ty,
                         }

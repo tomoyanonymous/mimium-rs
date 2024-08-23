@@ -41,7 +41,7 @@ impl TypedId {
     }
 
     pub fn is_unknown(&self) -> bool {
-        self.ty.to_type() == &Type::Unknown
+        self.ty.to_type() == Type::Unknown
     }
 }
 
@@ -77,7 +77,7 @@ impl TypedPattern {
     }
 
     pub fn is_unknown(&self) -> bool {
-        self.ty.to_type() == &Type::Unknown
+        self.ty.to_type() == Type::Unknown
     }
 }
 

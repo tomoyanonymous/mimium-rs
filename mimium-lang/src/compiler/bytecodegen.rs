@@ -387,7 +387,8 @@ impl ByteCodeGenerator {
             } => {
                 let ptr = self.vregister.find_keep(value).unwrap() as usize;
                 let t_size = Self::word_size_for_type(*ty);
-                let tvec = ty.to_type().get_as_tuple().unwrap();
+                let ty = ty.to_type();
+                let tvec = ty.get_as_tuple().unwrap();
                 let t_offset: u64 = tvec[0..(*tuple_offset as _)]
                     .iter()
                     .map(|t| Self::word_size_for_type(*t) as u64)

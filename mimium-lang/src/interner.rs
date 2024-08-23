@@ -37,12 +37,12 @@ impl SessionGlobals {
         type_id
     }
 
-    pub fn get_expr(&self, expr_id: ExprNodeId) -> &Expr {
-        unsafe { self.expr_storage.get_unchecked(expr_id) }
+    pub fn get_expr(&self, expr_id: ExprNodeId) -> Expr {
+        unsafe { self.expr_storage.get_unchecked(expr_id) }.clone()
     }
 
-    pub fn get_type(&self, type_id: TypeNodeId) -> &Type {
-        unsafe { self.type_storage.get_unchecked(type_id) }
+    pub fn get_type(&self, type_id: TypeNodeId) -> Type {
+        unsafe { self.type_storage.get_unchecked(type_id) }.clone()
     }
 
     pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Span> {
@@ -138,13 +138,8 @@ impl From<KeyData> for TypeNodeId {
 }
 
 impl ExprNodeId {
-    pub fn to_expr(&self) -> &Expr {
-        with_session_globals(|session_globals| unsafe {
-            // This transmute is needed to convince the borrow checker. Since
-            // the session_global should exist until the end of the session,
-            // this &Expr should live sufficiently long.
-            std::mem::transmute::<&Expr, &Expr>(session_globals.get_expr(*self))
-        })
+    pub fn to_expr(&self) -> Expr {
+        with_session_globals(|session_globals| session_globals.get_expr(*self))
     }
 
     pub fn to_span(&self) -> Span {
@@ -156,10 +151,8 @@ impl ExprNodeId {
 }
 
 impl TypeNodeId {
-    pub fn to_type(&self) -> &Type {
-        with_session_globals(|session_globals| unsafe {
-            std::mem::transmute::<&Type, &Type>(session_globals.get_type(*self))
-        })
+    pub fn to_type(&self) -> Type {
+        with_session_globals(|session_globals| session_globals.get_type(*self))
     }
 
     pub fn to_span(&self) -> Span {

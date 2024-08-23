@@ -6,7 +6,7 @@ use crate::{
 };
 
 fn try_find_recurse(e_s: ExprNodeId, name: &Symbol) -> bool {
-    match e_s.to_expr() {
+    match &e_s.to_expr() {
         Expr::Var(n, _) => n == name,
         Expr::Let(_id, body, then) => {
             try_find_recurse(*body, name) || then.map_or(false, |e| try_find_recurse(e, name))
@@ -38,7 +38,7 @@ fn try_find_recurse(e_s: ExprNodeId, name: &Symbol) -> bool {
 pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
     let convert_vec = |v: &[ExprNodeId]| v.iter().map(|e| convert_recurse(*e)).collect();
     let span = e_s.to_span();
-    let res = match e_s.to_expr() {
+    let res = match &e_s.to_expr() {
         Expr::LetRec(id, body, then) => {
             if !try_find_recurse(*body, &id.id) {
                 Expr::Let(

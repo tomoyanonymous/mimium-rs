@@ -159,7 +159,7 @@ impl InferContext {
 
         let vec_cls = |t: &[_]| -> bool { t.iter().all(|a| cls(*a)) };
 
-        match t2.to_type() {
+        match &t2.to_type() {
             Type::Intermediate(id2) => {
                 if id1 == *id2 {
                     true
@@ -184,7 +184,7 @@ impl InferContext {
     fn substitute_intermediate_type(&self, id: i64) -> Option<TypeNodeId> {
         match self.subst_map.get(&id) {
             Some(t) => match t.to_type() {
-                Type::Intermediate(i) => self.substitute_intermediate_type(*i),
+                Type::Intermediate(i) => self.substitute_intermediate_type(i),
                 _ => Some(*t),
             },
             None => None,
@@ -192,7 +192,7 @@ impl InferContext {
     }
     pub fn substitute_type(&self, t: TypeNodeId) -> Option<TypeNodeId> {
         match t.to_type() {
-            Type::Intermediate(id) => self.substitute_intermediate_type(*id),
+            Type::Intermediate(id) => self.substitute_intermediate_type(id),
             _ => Some(t.apply_fn(|e| match self.substitute_type(e) {
                 Some(tid) => tid,
                 None => Type::Unknown.into_id(),
@@ -208,7 +208,7 @@ impl InferContext {
                 .map(|(v1, v2)| self.unify_types(*v1, *v2))
                 .collect()
         };
-        match (t1.to_type(), t2.to_type()) {
+        match &(t1.to_type(), t2.to_type()) {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 if self.occur_check(*i1, t2) {
                     Err(Error(ErrorKind::CircularType, 0..0)) //todo:span
@@ -315,7 +315,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             .collect::<Result<Vec<_>, Error>>()
     };
 
-    match e_meta.to_expr() {
+    match &e_meta.to_expr() {
         Expr::Literal(l) => infer_type_literal(l),
         Expr::Tuple(e) => Ok(Type::Tuple(infer_vec(e.as_slice(), ctx)?).into_id()),
         Expr::Proj(e, idx) => {
@@ -373,7 +373,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             let bodyt = infer_type(*body, c)?;
             let idt = if !tpat.is_unknown() {
                 match tpat.ty.to_type() {
-                    Type::Function(atypes, rty, s) => c.convert_unknown_function(atypes, *rty, *s),
+                    Type::Function(atypes, rty, s) => c.convert_unknown_function(&atypes, rty, s),
                     _ => tpat.ty,
                 }
             } else {
@@ -392,7 +392,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             let c = ctx;
             let idt = match (id.is_unknown(), id.ty.to_type()) {
                 (false, Type::Function(atypes, rty, s)) => {
-                    c.convert_unknown_function(atypes, *rty, *s)
+                    c.convert_unknown_function(&atypes, rty, s)
                 }
                 _ => panic!("type for letrec is limited to function type in mimium."),
             };
@@ -416,7 +416,7 @@ pub fn infer_type(e_meta: ExprNodeId, ctx: &mut InferContext) -> Result<TypeNode
             let fntype = Type::Function(callee_t, res_t, None).into_id();
             let restype = ctx.unify_types(fnl, fntype)?;
             if let Type::Function(_, r, _) = restype.to_type() {
-                Ok(*r)
+                Ok(r)
             } else {
                 unreachable!();
             }
