@@ -1,7 +1,7 @@
 use crate::ast::{Expr, Literal};
-use crate::compiler::intrinsics;
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
+use crate::predefined::symbols::{intrinsic, special_fn};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
@@ -81,38 +81,38 @@ impl InferContext {
     fn register_intrinsics(env: &mut Environment<TypeNodeId>) {
         let binop_ty = function!(vec![numeric!(), numeric!()], numeric!());
         let binop_names = vec![
-            intrinsics::ADD,
-            intrinsics::SUB,
-            intrinsics::MULT,
-            intrinsics::DIV,
-            intrinsics::MODULO,
-            intrinsics::EXP,
-            intrinsics::GT,
-            intrinsics::LT,
-            intrinsics::GE,
-            intrinsics::LE,
-            intrinsics::EQ,
-            intrinsics::NE,
+            intrinsic::ADD,
+            intrinsic::SUB,
+            intrinsic::MULT,
+            intrinsic::DIV,
+            intrinsic::MODULO,
+            intrinsic::EXP,
+            intrinsic::GT,
+            intrinsic::LT,
+            intrinsic::GE,
+            intrinsic::LE,
+            intrinsic::EQ,
+            intrinsic::NE,
         ];
         let uniop_ty = function!(vec![numeric!()], numeric!());
         let uniop_names = vec![
-            intrinsics::NEG,
-            intrinsics::MEM,
-            intrinsics::SIN,
-            intrinsics::COS,
-            intrinsics::ABS,
-            intrinsics::SQRT,
+            intrinsic::NEG,
+            special_fn::MEM,
+            intrinsic::SIN,
+            intrinsic::COS,
+            intrinsic::ABS,
+            intrinsic::SQRT,
         ];
         let mut binds = binop_names
             .iter()
-            .map(|n| (n.to_symbol(), binop_ty))
+            .map(|n| (*n, binop_ty))
             .collect::<Vec<(Symbol, TypeNodeId)>>();
         uniop_names
             .iter()
-            .map(|n| (n.to_symbol(), uniop_ty))
+            .map(|n| (*n, uniop_ty))
             .collect_into(&mut binds);
         binds.push((
-            intrinsics::DELAY.to_symbol(),
+            special_fn::DELAY,
             function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
         ));
         env.add_bind(&binds);

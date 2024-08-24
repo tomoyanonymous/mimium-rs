@@ -2,7 +2,6 @@ pub mod parser;
 pub mod typing;
 // pub mod hirgen;
 pub mod bytecodegen;
-mod intrinsics;
 pub mod mirgen;
 
 #[derive(Debug, Clone)]

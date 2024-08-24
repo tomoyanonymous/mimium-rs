@@ -1,8 +1,7 @@
-use super::intrinsics;
 use super::typing::{self, infer_type_literal, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
-use crate::predefined::symbols::special_fn;
+use crate::predefined::symbols::{intrinsic, special_fn};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
@@ -115,28 +114,28 @@ impl Context {
         label: Symbol,
         args: Vec<VPtr>,
     ) -> Result<Option<VPtr>, CompileError> {
-        let inst = match (label.as_str(), args.len()) {
-            (intrinsics::NEG, 1) => Instruction::NegF(args[0].clone()),
-            (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
-            (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
-            (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
-            (intrinsics::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
-            (intrinsics::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
-            (intrinsics::MODULO, 2) => Instruction::ModF(args[0].clone(), args[1].clone()),
-            (intrinsics::SQRT, 1) => Instruction::SqrtF(args[0].clone()),
-            (intrinsics::ABS, 1) => Instruction::AbsF(args[0].clone()),
-            (intrinsics::SIN, 1) => Instruction::SinF(args[0].clone()),
-            (intrinsics::COS, 1) => Instruction::CosF(args[0].clone()),
-            (intrinsics::LOG, 2) => Instruction::LogF(args[0].clone(), args[1].clone()),
-            (intrinsics::GT, 2) => Instruction::Gt(args[0].clone(), args[1].clone()),
-            (intrinsics::GE, 2) => Instruction::Ge(args[0].clone(), args[1].clone()),
-            (intrinsics::LT, 2) => Instruction::Lt(args[0].clone(), args[1].clone()),
-            (intrinsics::LE, 2) => Instruction::Le(args[0].clone(), args[1].clone()),
-            (intrinsics::EQ, 2) => Instruction::Eq(args[0].clone(), args[1].clone()),
-            (intrinsics::NE, 2) => Instruction::Ne(args[0].clone(), args[1].clone()),
-            (intrinsics::AND, 2) => Instruction::And(args[0].clone(), args[1].clone()),
-            (intrinsics::OR, 2) => Instruction::Or(args[0].clone(), args[1].clone()),
-            (intrinsics::MEM, 1) => {
+        let inst = match (label, args.len()) {
+            (intrinsic::NEG, 1) => Instruction::NegF(args[0].clone()),
+            (intrinsic::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
+            (intrinsic::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
+            (intrinsic::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
+            (intrinsic::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
+            (intrinsic::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
+            (intrinsic::MODULO, 2) => Instruction::ModF(args[0].clone(), args[1].clone()),
+            (intrinsic::SQRT, 1) => Instruction::SqrtF(args[0].clone()),
+            (intrinsic::ABS, 1) => Instruction::AbsF(args[0].clone()),
+            (intrinsic::SIN, 1) => Instruction::SinF(args[0].clone()),
+            (intrinsic::COS, 1) => Instruction::CosF(args[0].clone()),
+            (intrinsic::LOG, 2) => Instruction::LogF(args[0].clone(), args[1].clone()),
+            (intrinsic::GT, 2) => Instruction::Gt(args[0].clone(), args[1].clone()),
+            (intrinsic::GE, 2) => Instruction::Ge(args[0].clone(), args[1].clone()),
+            (intrinsic::LT, 2) => Instruction::Lt(args[0].clone(), args[1].clone()),
+            (intrinsic::LE, 2) => Instruction::Le(args[0].clone(), args[1].clone()),
+            (intrinsic::EQ, 2) => Instruction::Eq(args[0].clone(), args[1].clone()),
+            (intrinsic::NE, 2) => Instruction::Ne(args[0].clone(), args[1].clone()),
+            (intrinsic::AND, 2) => Instruction::And(args[0].clone(), args[1].clone()),
+            (intrinsic::OR, 2) => Instruction::Or(args[0].clone(), args[1].clone()),
+            (special_fn::MEM, 1) => {
                 self.get_current_fn().state_size += 1;
                 Instruction::Mem(args[0].clone())
             }

@@ -1,7 +1,7 @@
 use std::fmt;
 
-use crate::compiler::intrinsics;
 use crate::interner::{Symbol, ToSymbol};
+use crate::predefined::symbols::intrinsic;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Comment {
@@ -91,24 +91,23 @@ pub enum Token {
 impl Op {
     pub fn get_associated_fn_name(&self) -> Symbol {
         match self {
-            Op::Sum => intrinsics::ADD,
-            Op::Minus => intrinsics::SUB,
-            Op::Product => intrinsics::MULT,
-            Op::Divide => intrinsics::DIV,
-            Op::Equal => intrinsics::EQ,
-            Op::NotEqual => intrinsics::NE,
-            Op::LessThan => intrinsics::LT,
-            Op::LessEqual => intrinsics::LE,
-            Op::GreaterThan => intrinsics::GT,
-            Op::GreaterEqual => intrinsics::GE,
-            Op::Modulo => intrinsics::MODULO,
-            Op::Exponent => intrinsics::EXP,
-            Op::And => intrinsics::AND,
-            Op::Or => intrinsics::OR,
-            Op::Pipe => "pipe",
-            Op::Unknown(x) => x.as_str(),
+            Op::Sum => intrinsic::ADD,
+            Op::Minus => intrinsic::SUB,
+            Op::Product => intrinsic::MULT,
+            Op::Divide => intrinsic::DIV,
+            Op::Equal => intrinsic::EQ,
+            Op::NotEqual => intrinsic::NE,
+            Op::LessThan => intrinsic::LT,
+            Op::LessEqual => intrinsic::LE,
+            Op::GreaterThan => intrinsic::GT,
+            Op::GreaterEqual => intrinsic::GE,
+            Op::Modulo => intrinsic::MODULO,
+            Op::Exponent => intrinsic::EXP,
+            Op::And => intrinsic::AND,
+            Op::Or => intrinsic::OR,
+            Op::Pipe => "pipe".to_symbol(),
+            Op::Unknown(x) => x.to_symbol(),
         }
-        .to_symbol() // TODO: use prefilled symbols instead of converting on the fly.
     }
 }
 

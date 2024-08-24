@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
-use crate::predefined::symbols::{builtin_fn, entry_point};
+use crate::predefined::symbols::{builtin_fn, entry_point, intrinsic};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
@@ -188,7 +188,7 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 .foldr(|(_op, op_span), rhs| {
                     let rhs_span = rhs.to_span();
                     let neg_op =
-                        Expr::Var(builtin_fn::NEG, None).into_id(op_span.start..rhs_span.start);
+                        Expr::Var(intrinsic::NEG, None).into_id(op_span.start..rhs_span.start);
                     Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
                 })
                 .labelled("unary");
