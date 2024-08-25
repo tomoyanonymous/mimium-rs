@@ -398,7 +398,7 @@ impl Context {
                 let dst = self.gen_new_register();
                 let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
-                    let (v, ty) = self.eval_expr(*e)?;
+                    let (v, elem_ty) = self.eval_expr(*e)?;
                     let ptr = if i == 0 {
                         dst.clone()
                     } else {
@@ -410,7 +410,7 @@ impl Context {
                             tuple_offset: i as u64,
                         })
                     };
-                    self.push_inst(Instruction::Store(ptr, v, ty));
+                    self.push_inst(Instruction::Store(ptr, v, elem_ty));
                 }
                 self.get_current_basicblock()
                     .0
