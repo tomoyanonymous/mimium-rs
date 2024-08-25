@@ -178,6 +178,11 @@ impl Context {
         match (pat, ty.to_type()) {
             (Pattern::Single(id), _) => Ok(self.add_bind((*id, v))),
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
+                let v = if matches!(v.as_ref(), Value::Global(_)) {
+                    self.push_inst(Instruction::GetGlobal(v.clone(), ty))
+                } else {
+                    v
+                };
                 for ((i, pat), cty) in patterns.iter().enumerate().zip(tvec.iter()) {
                     let v = self.push_inst(Instruction::GetElement {
                         value: v.clone(),

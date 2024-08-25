@@ -69,7 +69,7 @@ impl VRegister {
         let res = self.0.get(v).map(|r| r.0);
         match (res, v.as_ref()) {
             //argument is registered in absolute position
-            (Some(_), mir::Value::Argument(_, _)) => res,
+            (Some(_), mir::Value::Argument(_, _)) | (Some(_), mir::Value::Global(_)) => res,
             (Some(_), _) => {
                 self.0.remove(v);
                 res
@@ -106,15 +106,11 @@ impl VStack {
     pub fn add_newvalue(&mut self, v: &Arc<mir::Value>) -> Reg {
         self.get_top().add_newvalue(v)
     }
-    pub fn find(&mut self, v: &Arc<mir::Value>) -> Reg {
-        self.get_top()
-            .find(v)
-            .expect(format!("value {v} not found").as_str())
+    pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
+        self.get_top().find(v)
     }
-    pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Reg {
-        self.get_top()
-            .find_keep(v)
-            .expect(format!("value {v} not found").as_str())
+    pub fn find_keep(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
+        self.get_top().find_keep(v)
     }
 }
 
@@ -163,8 +159,8 @@ impl ByteCodeGenerator {
         }
     }
     fn get_binop(&mut self, v1: &Arc<mir::Value>, v2: &Arc<mir::Value>) -> (Reg, Reg) {
-        let r1 = self.vregister.find(v1);
-        let r2 = self.vregister.find(v2);
+        let r1 = self.find(v1);
+        let r2 = self.find(v2);
         (r1, r2)
     }
     fn emit_binop1<F>(
@@ -176,7 +172,7 @@ impl ByteCodeGenerator {
     where
         F: FnOnce(Reg, Reg) -> VmInstruction,
     {
-        let r1 = self.vregister.find(v1);
+        let r1 = self.find(v1);
         let dst = self.get_destination(dst.clone());
         let i = inst(dst, r1);
         Some(i)
@@ -211,6 +207,18 @@ impl ByteCodeGenerator {
             }
         }
     }
+    fn find(&mut self, v: &Arc<mir::Value>) -> Reg {
+        self.vregister
+            .find(v)
+            .or_else(|| self.globals.iter().position(|gv| v == gv).map(|v| v as Reg))
+            .expect(format!("value {v} not found").as_str())
+    }
+    fn find_keep(&mut self, v: &Arc<mir::Value>) -> Reg {
+        self.vregister
+            .find_keep(v)
+            .or_else(|| self.globals.iter().position(|gv| v == gv).map(|v| v as Reg))
+            .expect(format!("value {v} not found").as_str())
+    }
     fn find_upvalue(&self, upval: &Arc<mir::Value>) -> Reg {
         self.vregister
             .find_upvalue(upval)
@@ -225,7 +233,7 @@ impl ByteCodeGenerator {
         let mut adsts = vec![];
         let dst = faddress;
         for (i, a) in args.iter().enumerate() {
-            let src = self.vregister.find(a);
+            let src = self.find(a);
             let adst = dst as usize + i + 1;
             adsts.push((adst, src))
         }
@@ -283,7 +291,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::Load(ptr, ty) => {
                 let d = self.get_destination(dst);
-                let s = self.vregister.find_keep(ptr);
+                let s = self.find_keep(ptr);
                 let size = Self::word_size_for_type(*ty);
                 match (d, s, size) {
                     (d, s, 1) if d != s => Some(VmInstruction::Move(d, s)),
@@ -292,8 +300,8 @@ impl ByteCodeGenerator {
                 }
             }
             mir::Instruction::Store(dst, src, ty) => {
-                let s = self.vregister.find(src);
-                let d = self.vregister.find_keep(dst);
+                let s = self.find(src);
+                let d = self.find_keep(dst);
                 let size = Self::word_size_for_type(*ty);
                 match (d, s, size) {
                     (d, s, 1) if d != s => Some(VmInstruction::Move(d, s)),
@@ -311,8 +319,8 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::SetGlobal(v, src, ty) => {
-                let s = self.vregister.find(src);
                 let idx = self.get_or_insert_global(v.clone());
+                let s = self.find(src);
                 Some(VmInstruction::SetGlobal(
                     idx,
                     s,
@@ -325,7 +333,7 @@ impl ByteCodeGenerator {
                 array_idx,
                 tuple_offset,
             } => {
-                let ptr = self.vregister.find_keep(value) as usize;
+                let ptr = self.find_keep(value) as usize;
                 let t_size = Self::word_size_for_type(*ty);
                 let ty = ty.to_type();
                 let tvec = ty.get_as_tuple().unwrap();
@@ -346,7 +354,7 @@ impl ByteCodeGenerator {
                 let nargs = args.len() as u8;
                 match v.as_ref() {
                     mir::Value::Register(_address) => {
-                        let faddress = self.vregister.find(v);
+                        let faddress = self.find(v);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let (fadd, _args) = self.prepare_function(bytecodes_dst, faddress, args);
@@ -392,7 +400,7 @@ impl ByteCodeGenerator {
                 let nargs = args.len() as u8;
                 match f.as_ref() {
                     mir::Value::Register(_address) => {
-                        let faddress = self.vregister.find(f);
+                        let faddress = self.find(f);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let (fadd, args) = self.prepare_function(bytecodes_dst, faddress, args);
@@ -412,7 +420,7 @@ impl ByteCodeGenerator {
                 }
             }
             mir::Instruction::Closure(idxcell) => {
-                let idx = self.vregister.find(idxcell);
+                let idx = self.find(idxcell);
                 let dst = self.get_destination(dst);
                 Some(VmInstruction::Closure(dst, idx))
             }
@@ -459,7 +467,7 @@ impl ByteCodeGenerator {
             }
 
             mir::Instruction::JmpIf(cond, tbb, ebb) => {
-                let c = self.vregister.find(cond);
+                let c = self.find(cond);
                 let mut then_bytecodes: Vec<VmInstruction> = vec![];
                 let mut else_bytecodes: Vec<VmInstruction> = vec![];
                 mirfunc.body[*tbb as usize]
@@ -497,9 +505,9 @@ impl ByteCodeGenerator {
                 let (phidst, pinst) = mirfunc.body[(*ebb + 1) as usize].0.first().unwrap();
                 let phi = self.vregister.add_newvalue(phidst);
                 if let mir::Instruction::Phi(t, e) = pinst {
-                    let t = self.vregister.find(t);
+                    let t = self.find(t);
                     then_bytecodes.push(VmInstruction::Move(phi, t));
-                    let e = self.vregister.find(e);
+                    let e = self.find(e);
                     else_bytecodes.push(VmInstruction::Move(phi, e));
                 } else {
                     unreachable!();
@@ -527,7 +535,7 @@ impl ByteCodeGenerator {
                 let nret = Self::word_size_for_type(*rty);
                 let inst = match v.as_ref() {
                     mir::Value::None => VmInstruction::Return0,
-                    _ => VmInstruction::Return(self.vregister.find(v), nret),
+                    _ => VmInstruction::Return(self.find(v), nret),
                 };
                 Some(inst)
             }
@@ -536,21 +544,21 @@ impl ByteCodeGenerator {
                 let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                 let size = Self::word_size_for_type(*rty);
                 bytecodes_dst.push(VmInstruction::GetState(old, size));
-                let new = self.vregister.find(new);
+                let new = self.find(new);
                 bytecodes_dst.push(VmInstruction::SetState(new, size));
                 let nret = Self::word_size_for_type(*rty);
                 Some(VmInstruction::Return(old, nret))
             }
             mir::Instruction::Delay(max, src, time) => {
-                let s = self.vregister.find(src);
-                let t = self.vregister.find(time);
+                let s = self.find(src);
+                let t = self.find(time);
 
                 let dst = self.vregister.add_newvalue(&dst);
                 funcproto.delay_sizes.push(*max as u64);
                 Some(VmInstruction::Delay(dst, s, t))
             }
             mir::Instruction::Mem(src) => {
-                let s = self.vregister.find(src);
+                let s = self.find(src);
                 let dst = self.vregister.add_newvalue(&dst);
                 Some(VmInstruction::Mem(dst, s))
             }
