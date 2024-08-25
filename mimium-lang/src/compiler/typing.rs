@@ -210,8 +210,7 @@ impl InferContext {
             .filter_map(|(e, t)| {
                 t.to_type()
                     .is_intermediate()
-                    .map(|id| self.substitute_intermediate_type(id).map(|t| (*e, t)))
-                    .flatten()
+                    .and_then(|id| self.substitute_intermediate_type(id).map(|t| (*e, t)))
             })
             .collect::<Vec<_>>();
 
