@@ -233,7 +233,7 @@ where
     //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
     // and copy_from_slice use ptr::copy_nonoverwrapping internally.
     // vec[range].copy_from_slice(values)
-    match i.cmp(&vec.len()) {
+    match (i + values.len() - 1).cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
             for (v, i) in values.iter().zip(range.into_iter()) {

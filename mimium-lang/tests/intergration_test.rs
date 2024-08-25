@@ -260,3 +260,10 @@ fn simple_stereo() {
     let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn biquad_lp() {
+    let res = run_file_test_mono("biquad_lp.mmm", 10).unwrap();
+    let ans = vec![0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+    assert_eq!(res, ans);
+}

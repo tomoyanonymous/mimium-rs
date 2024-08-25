@@ -363,6 +363,7 @@ impl ByteCodeGenerator {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(label, ty) => {
+                        //todo: use btreemap
                         let idx = {
                             self.program.ext_fun_table.push((*label, *ty));
                             self.program.ext_fun_table.len() - 1
