@@ -179,16 +179,12 @@ impl Context {
             (Pattern::Single(id), _) => Ok(self.add_bind((*id, v))),
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
                 for ((i, pat), cty) in patterns.iter().enumerate().zip(tvec.iter()) {
-                    let v = if i == 0 {
-                        v.clone()
-                    } else {
-                        self.push_inst(Instruction::GetElement {
-                            value: v.clone(),
-                            ty,
-                            array_idx: 0,
-                            tuple_offset: i as u64,
-                        })
-                    };
+                    let v = self.push_inst(Instruction::GetElement {
+                        value: v.clone(),
+                        ty,
+                        array_idx: 0,
+                        tuple_offset: i as u64,
+                    });
                     let tid = Type::Unknown.into_id_with_span(span.clone());
                     let tpat = TypedPattern {
                         pat: pat.clone(),
@@ -223,7 +219,7 @@ impl Context {
         mut action: F,
     ) -> Result<(usize, VPtr), CompileError> {
         self.valenv.extend();
-        self.valenv.add_bind(&abinds);
+        self.valenv.add_bind(abinds);
         let args = abinds.iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
         let label = self.get_ctxdata().func_i;
         let c_idx = self.make_new_function(fname, &args, types, Some(label));
@@ -396,20 +392,15 @@ impl Context {
                 }
                 let alloc_insert_point = self.get_current_basicblock().0.len();
                 let dst = self.gen_new_register();
-                let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
                     let (v, elem_ty) = self.eval_expr(*e)?;
-                    let ptr = if i == 0 {
-                        dst.clone()
-                    } else {
-                        inst_refs.push(self.get_current_basicblock().0.len());
-                        self.push_inst(Instruction::GetElement {
-                            value: dst.clone(),
-                            ty, // lazyly set after loops
-                            array_idx: 0,
-                            tuple_offset: i as u64,
-                        })
-                    };
+                    let ptr = self.push_inst(Instruction::GetElement {
+                        value: dst.clone(),
+                        ty, // lazyly set after loops
+                        array_idx: 0,
+                        tuple_offset: i as u64,
+                    });
+
                     self.push_inst(Instruction::Store(ptr, v, elem_ty));
                 }
                 self.get_current_basicblock()
