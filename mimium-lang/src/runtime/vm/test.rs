@@ -134,7 +134,8 @@ fn closuretest() {
         ext_cls_table: vec![],
         global_vals: vec![],
     };
-    // let mut feedstate = FeedState::default();
+    // let mut feedstate = FeedState::default()
+    machine.link_functions(&prog);
     let res = machine.execute_main(&prog);
     assert_eq!(res, 0);
 }
