@@ -36,11 +36,18 @@ pub enum Type {
 pub type TypeSize = u8;
 
 impl Type {
+    // This returns true if the type is either
+    //
+    // 1. premitive
+    // 2. a tuple of premitive types
     pub fn is_primitive(&self) -> bool {
-        if let Type::Primitive(_) = self {
-            true
-        } else {
-            false
+        match self {
+            Type::Primitive(_) => true,
+            Type::Tuple(t) => t.iter().all(|t| {
+                // Note: a nested tuple is not allowed
+                matches!(t.to_type(), Type::Primitive(_))
+            }),
+            _ => false,
         }
     }
     pub fn is_function(&self) -> bool {
