@@ -36,17 +36,13 @@ pub enum Type {
 pub type TypeSize = u8;
 
 impl Type {
-    // This returns true if the type is either
-    //
-    // 1. premitive
-    // 2. a tuple of premitive types
-    pub fn is_primitive(&self) -> bool {
+    // check if contains any function type in its member.
+    // if no functions are contained, it means that the value can be placed in linear memory.
+    pub fn contains_function(&self) -> bool {
         match self {
-            Type::Primitive(_) => true,
-            Type::Tuple(t) => t.iter().all(|t| {
-                // Note: a nested tuple is not allowed
-                matches!(t.to_type(), Type::Primitive(_))
-            }),
+            Type::Function(_, _, _) => true,
+            Type::Tuple(t) => t.iter().any(|t| t.to_type().contains_function()),
+            Type::Struct(t) => t.iter().any(|(_s, t)| t.to_type().contains_function()),
             _ => false,
         }
     }

@@ -203,16 +203,21 @@ impl InferContext {
             })),
         }
     }
-    fn substitute_all_intermediates(&mut self){
+    fn substitute_all_intermediates(&mut self) {
+        let mut e_list = self
+            .result_map
+            .iter()
+            .filter_map(|(e, t)| {
+                t.to_type()
+                    .is_intermediate()
+                    .map(|id| self.substitute_intermediate_type(id).map(|t| (*e, t)))
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
 
-        let mut e_list = self.result_map.iter().filter_map(|(e,t)|
-             t.to_type().is_intermediate().map(|id| self.substitute_intermediate_type(id).map(|t|(*e,t))
-             ).flatten()).collect::<Vec<_>>();
-
-        e_list.iter_mut().for_each(|(e,t)|{
-            let _old = self.result_map.insert (*e,*t);
+        e_list.iter_mut().for_each(|(e, t)| {
+            let _old = self.result_map.insert(*e, *t);
         })
-
     }
 
     pub fn unify_types(&mut self, t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
@@ -346,10 +351,10 @@ impl InferContext {
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body);
                 let res = self.unify_types(b?, feedv)?;
-                if res.to_type().is_primitive() {
-                    Ok(res)
-                } else {
+                if res.to_type().contains_function() {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
+                } else {
+                    Ok(res)
                 }
             }
             Expr::Lambda(p, rtype, body) => {
@@ -458,7 +463,7 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(e:ExprNodeId)->Result<InferContext, Error>{
+pub fn infer_root(e: ExprNodeId) -> Result<InferContext, Error> {
     let mut ctx = InferContext::default();
     let _ = ctx.infer_type(e)?;
     ctx.substitute_all_intermediates();
