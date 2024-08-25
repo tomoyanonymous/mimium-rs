@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::interner::{Symbol, TypeNodeId};
@@ -24,15 +24,10 @@ impl std::fmt::Display for Region {
         }
     }
 }
-
-#[derive(Debug, PartialEq)]
-struct VRegister(Vec<Option<Region>>, usize);
-
-impl Default for VRegister {
-    fn default() -> Self {
-        Self(vec![None; 256], 0)
-    }
-}
+#[derive(Debug, Default)]
+struct MemoryRegion(Reg, TypeSize);
+#[derive(Debug, Default)]
+struct VRegister(HashMap<Arc<mir::Value>, MemoryRegion>);
 
 fn tostring_helper(vec: &[Option<Region>]) -> String {
     vec[0..10].iter().fold("".to_string(), |s, a| {
@@ -44,111 +39,51 @@ fn tostring_helper(vec: &[Option<Region>]) -> String {
 }
 
 impl VRegister {
-    pub fn reset(&mut self) {
-        self.0.fill(None);
-    }
     pub fn push_stack(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
-        log::trace!(
-            "alloc reg:{v} {},{}",
-            tostring_helper(self.0.as_slice()),
-            self.1
-        );
-        for i in 0..size {
-            if i == 0 {
-                self.0[self.1] = Some(Region::Value(v.clone()));
-            } else {
-                self.0[self.1 + i as usize] = Some(Region::SubRegion());
-            }
-        }
-        let res = self.1 as Reg;
-        self.1 += size as usize;
-        res
+        self.add_newvalue_range(v, size)
     }
     pub fn add_newvalue(&mut self, v: &Arc<mir::Value>) -> Reg {
-        let len = self.0.len();
-        let pos = self.0[self.1..len]
+        let pos = self
+            .0
             .iter()
-            .position(|v| v.is_none())
-            .unwrap()
-            + self.1;
-
-        self.0[pos] = Some(Region::Value(v.clone()));
-        log::trace!(
-            "add  reg:{v} to {pos} {}",
-            tostring_helper(self.0.as_slice()),
-        );
+            .max_by_key(|(_v, MemoryRegion(address, _))| address)
+            .map(|(_, MemoryRegion(address, size))| address + size)
+            .unwrap_or(0);
+        self.0.insert(v.clone(), MemoryRegion(pos, 1));
+        log::trace!("add {:#?}", self.0);
         pos as Reg
     }
-    pub fn add_newvalue_range(&mut self, v: &Arc<mir::Value>, size: usize) -> Reg {
-        let len = self.0.len();
-        let pos = self.0[self.1..len]
+    pub fn add_newvalue_range(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
+        let pos = self
+            .0
             .iter()
-            .position(|v| v.is_none())
-            .unwrap()
-            + self.1;
-        for i in 0..size {
-            if i == 0 {
-                self.0[pos] = Some(Region::Value(v.clone()));
-            } else {
-                self.0[pos + i] = Some(Region::SubRegion());
-            }
-        }
-        log::trace!(
-            "add  reg:{v} to {pos}..{} {}",
-            pos + size,
-            tostring_helper(self.0.as_slice()),
-        );
+            .max_by_key(|(_v, MemoryRegion(address, _))| address)
+            .map(|(_, MemoryRegion(address, size))| address + size)
+            .unwrap_or(0);
+        self.0.insert(v.clone(), MemoryRegion(pos, size as _));
+        log::trace!("add_range {:#?}", self.0);
         pos as Reg
     }
     pub fn find(&mut self, v: &Arc<mir::Value>) -> Option<Reg> {
-        log::trace!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
-        //todo: Error handling
-        let res = self.0.iter().position(|v1| match v1 {
-            Some(Region::Value(v1_c)) => *v1_c == *v,
-            _ => false,
-        });
+        log::trace!("find {v}");
+        let res = self.0.get(v).map(|r| r.0);
         match (res, v.as_ref()) {
             //argument is registered in absolute position
-            (Some(pos), mir::Value::Argument(_, _)) => Some(pos as Reg),
-            (Some(pos), _) => {
-                //mir is SSA form, so the value will be used only once.
-                self.0[pos] = None;
-                Some(pos as Reg)
+            (Some(_), mir::Value::Argument(_, _)) => res,
+            (Some(_), _) => {
+                self.0.remove(v);
+                res
             }
             _ => None,
         }
     }
-    pub fn find_range(&mut self, v: &Arc<mir::Value>, size: usize) -> Option<Reg> {
-        log::trace!("find reg:{v} {}", tostring_helper(self.0.as_slice()),);
-        //todo: Error handling
-        let res = self.0.iter().position(|v1| match v1 {
-            Some(Region::Value(v1_c)) => *v1_c == *v,
-            _ => false,
-        });
-        match (res, v.as_ref()) {
-            //argument is registered in absolute position
-            (Some(pos), mir::Value::Argument(_, _)) => Some(pos as Reg),
-            (Some(pos), _) => {
-                //mir is SSA form, so the value will be used only once.
-                self.0[pos] = None;
-                for i in 1..size {
-                    self.0[pos + i] = None;
-                }
-                Some(pos as Reg)
-            }
-            _ => None,
-        }
+    pub fn find_range(&mut self, v: &Arc<mir::Value>, _size: usize) -> Option<Reg> {
+        self.find(v)
     }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
-        log::trace!("findkeep reg:{v} {}", tostring_helper(self.0.as_slice()),);
-        self.0
-            .iter()
-            .position(|v1| match v1 {
-                Some(Region::Value(v1_c)) => *v1_c == *v,
-                _ => false,
-            })
-            .map(|pos| pos as Reg)
+        log::trace!("findkeep {v}");
+        self.0.get(v).map(|r| r.0)
     }
 }
 
@@ -286,7 +221,7 @@ impl ByteCodeGenerator {
         bytecodes_dst: &mut Vec<VmInstruction>,
         faddress: Reg,
         args: &[Arc<mir::Value>],
-    ) -> Reg {
+    ) -> (Reg, Vec<Reg>) {
         let mut adsts = vec![];
         let dst = faddress;
         for (i, a) in args.iter().enumerate() {
@@ -307,7 +242,8 @@ impl ByteCodeGenerator {
                 bytecodes_dst.push(VmInstruction::Move(*adst as Reg, *src));
             }
         }
-        dst
+        let args = adsts.iter().map(|(a, _)| *a as Reg).collect();
+        (dst, args)
     }
     fn emit_instruction(
         &mut self,
@@ -393,20 +329,17 @@ impl ByteCodeGenerator {
                 let t_size = Self::word_size_for_type(*ty);
                 let ty = ty.to_type();
                 let tvec = ty.get_as_tuple().unwrap();
+                let tsize = Self::word_size_for_type(tvec[*tuple_offset as usize]);
                 let t_offset: u64 = tvec[0..(*tuple_offset as _)]
                     .iter()
                     .map(|t| Self::word_size_for_type(*t) as u64)
                     .sum();
                 let offset = t_size as u64 * *array_idx + t_offset;
-
-                let address = self
-                    .vregister
+                let address = (ptr + offset as usize) as Reg;
+                self.vregister
                     .get_top()
                     .0
-                    .get_mut(ptr + offset as usize)
-                    .unwrap();
-                *address = Some(Region::Value(dst.clone()));
-
+                    .insert(dst, MemoryRegion(address, tsize));
                 None
             }
             mir::Instruction::Call(v, args, r_ty) => {
@@ -416,14 +349,10 @@ impl ByteCodeGenerator {
                         let faddress = self.vregister.find(v);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let fadd = self.prepare_function(bytecodes_dst, faddress, args);
+                        let (fadd, _args) = self.prepare_function(bytecodes_dst, faddress, args);
                         let dst = self.get_destination(dst);
                         let nret = Self::word_size_for_type(*r_ty);
                         bytecodes_dst.push(VmInstruction::Call(fadd, nargs, nret));
-                        for a in args {
-                            //reset register for args
-                            let _ = self.vregister.find(a);
-                        }
                         match (dst != fadd, nret) {
                             (false, _) => None,
                             (true, 1) => Some(VmInstruction::Move(dst, fadd)),
@@ -442,14 +371,10 @@ impl ByteCodeGenerator {
                         let dst = self.get_destination(dst);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let fadd = self.prepare_function(bytecodes_dst, dst, args);
+                        let (fadd, _args) = self.prepare_function(bytecodes_dst, dst, args);
                         bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
                         let nret = Self::word_size_for_type(*ty);
                         bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, nret));
-                        for a in args {
-                            //reset register for args
-                            let _ = self.vregister.find(a);
-                        }
                         match (dst != fadd, nret) {
                             (false, _) => None,
                             (true, 1) => Some(VmInstruction::Move(dst, fadd)),
@@ -469,14 +394,10 @@ impl ByteCodeGenerator {
                         let faddress = self.vregister.find(f);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let fadd = self.prepare_function(bytecodes_dst, faddress, args);
+                        let (fadd, args) = self.prepare_function(bytecodes_dst, faddress, args);
                         let nret = Self::word_size_for_type(*r_ty);
                         bytecodes_dst.push(VmInstruction::CallCls(fadd, nargs, nret));
                         let dst = self.get_destination(dst);
-                        for a in args {
-                            //reset register for args
-                            let _ = self.vregister.find(a);
-                        }
                         (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
                     }
                     mir::Value::Function(_idx, _state_size, _nret) => {
@@ -782,13 +703,17 @@ mod test {
         use crate::numeric;
         use crate::types::PType;
         use crate::types::Type;
+        extern crate colog;
+        colog::default_builder()
+            .filter_level(log::LevelFilter::Trace)
+            .init();
         // fn test(hoge){
         //   hoge+1
         //}
         let mut src = mir::Mir::default();
         let arg = Arc::new(mir::Value::Argument(
             0,
-            Arc::new(mir::Argument("hoge".to_symbol(), Type::Unknown.into_id())),
+            Arc::new(mir::Argument("hoge".to_symbol(), numeric!())),
         ));
         let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
         func.return_type.get_or_init(|| numeric!());
@@ -801,7 +726,7 @@ mod test {
             .push((res.clone(), mir::Instruction::AddF(arg, resint)));
         block.0.push((
             Arc::new(mir::Value::None),
-            mir::Instruction::Return(res.clone(), Type::Primitive(PType::Numeric).into_id()),
+            mir::Instruction::Return(res.clone(), numeric!()),
         ));
         func.body = vec![block];
         src.functions.push(func);
