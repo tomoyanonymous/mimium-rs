@@ -502,8 +502,9 @@ impl Machine {
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
-                    let f = self.ext_fun_table[ext_fn_idx].1;
-                    let nret = self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    let fi = self.fn_map.get(&ext_fn_idx).unwrap();
+                    let f = self.ext_fun_table[*fi].1;
+                    let nret = self.call_function(func, nargs, nret_req, f);
                     // return
                     let base = self.base_pointer as usize;
                     let iret = base + func as usize + 1;
