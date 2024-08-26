@@ -126,7 +126,6 @@ pub enum NodeId {
     TypeArena(TypeKey),
 }
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ExprNodeId(pub ExprKey);
 
@@ -139,11 +138,17 @@ impl PartialEq for ExprNodeId {
     fn eq(&self, other: &Self) -> bool {
         self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
     }
-}
+} 
 
 impl PartialEq for TypeNodeId {
     fn eq(&self, other: &Self) -> bool {
         self.to_type() == other.to_type()
+    }
+}
+impl Eq for TypeNodeId {}
+impl Hash for TypeNodeId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 

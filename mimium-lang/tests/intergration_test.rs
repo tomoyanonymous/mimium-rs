@@ -260,3 +260,19 @@ fn simple_stereo() {
     let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
     assert_eq!(res, ans);
 }
+
+// implement one-sample delay on mimium with `self` 
+#[test]
+fn fb_mem() {
+    let res = run_file_test_stereo("fb_mem.mmm", 5).unwrap();
+    let ans = vec![0.0,0.0,1.0,0.0,2.0,1.0,3.0,2.0,4.0,3.0];
+    assert_eq!(res, ans);
+}
+
+
+#[test]
+fn biquad_lp() {
+    let res = run_file_test_mono("biquad_lp.mmm", 10).unwrap();
+    let ans = vec![0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+    assert_eq!(res, ans);
+}

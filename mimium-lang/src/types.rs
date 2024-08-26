@@ -47,11 +47,14 @@ pub enum Type {
 pub type TypeSize = u8;
 
 impl Type {
-    pub fn is_primitive(&self) -> bool {
-        if let Type::Primitive(_) = self {
-            true
-        } else {
-            false
+    // check if contains any function type in its member.
+    // if no functions are contained, it means that the value can be placed in linear memory.
+    pub fn contains_function(&self) -> bool {
+        match self {
+            Type::Function(_, _, _) => true,
+            Type::Tuple(t) => t.iter().any(|t| t.to_type().contains_function()),
+            Type::Struct(t) => t.iter().any(|(_s, t)| t.to_type().contains_function()),
+            _ => false,
         }
     }
     pub fn is_function(&self) -> bool {

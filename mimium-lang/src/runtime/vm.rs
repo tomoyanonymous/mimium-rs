@@ -233,7 +233,7 @@ where
     //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
     // and copy_from_slice use ptr::copy_nonoverwrapping internally.
     // vec[range].copy_from_slice(values)
-    match i.cmp(&vec.len()) {
+    match (i + values.len() - 1).cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
             for (v, i) in values.iter().zip(range.into_iter()) {
@@ -502,8 +502,9 @@ impl Machine {
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
-                    let f = self.ext_fun_table[ext_fn_idx].1;
-                    let nret = self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    let fi = self.fn_map.get(&ext_fn_idx).unwrap();
+                    let f = self.ext_fun_table[*fi].1;
+                    let nret = self.call_function(func, nargs, nret_req, f);
                     // return
                     let base = self.base_pointer as usize;
                     let iret = base + func as usize + 1;

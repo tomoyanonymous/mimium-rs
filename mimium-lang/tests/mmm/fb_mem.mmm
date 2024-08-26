@@ -1,0 +1,12 @@
+fn counter(){
+    1.0+self
+}
+
+fn mem_by_hand(x){
+    let (y,ys) = self
+    (x,y)
+}
+
+fn dsp(){
+    mem_by_hand(counter())
+}

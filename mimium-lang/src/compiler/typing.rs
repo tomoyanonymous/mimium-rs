@@ -375,9 +375,9 @@ impl InferContext {
                 let b = self.infer_type(*body);
                 let res = self.unify_types(b?, feedv)?;
                 if res.to_type().contains_function() {
-                    Ok(res)
-                } else {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
+                } else {
+                    Ok(res)
                 }
             }
             Expr::Lambda(p, rtype, body) => {

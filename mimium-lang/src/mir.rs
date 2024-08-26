@@ -10,11 +10,11 @@ pub mod print;
 // #[derive(Debug, Clone, PartialEq)]
 // pub struct Global(VPtr);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Argument(pub Symbol, pub TypeNodeId);
 
 pub type VReg = u64;
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Value {
     Global(VPtr),
     Argument(usize, Arc<Argument>), //index,
