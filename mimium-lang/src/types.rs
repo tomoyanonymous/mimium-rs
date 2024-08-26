@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{cell::RefCell, fmt, rc::Rc};
 
 use crate::{
     format_vec,
@@ -15,6 +15,17 @@ pub enum PType {
     Numeric,
     String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeVar {
+    pub parent: Option<TypeNodeId>,
+    pub var: u64,
+}
+impl TypeVar {
+    pub fn new(var: u64) -> Self {
+        Self { parent: None, var }
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     Primitive(PType),
@@ -27,7 +38,7 @@ pub enum Type {
     Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(TypeNodeId),
-    Intermediate(i64),
+    Intermediate(Rc<RefCell<TypeVar>>),
     TypeScheme(i64, i64),
     Unknown,
 }
@@ -49,9 +60,9 @@ impl Type {
             _ => false,
         }
     }
-    pub fn is_intermediate(&self) -> Option<i64> {
+    pub fn is_intermediate(&self) -> Option<Rc<RefCell<TypeVar>>> {
         match self {
-            Type::Intermediate(id) => Some(*id),
+            Type::Intermediate(tvar) => Some(tvar.clone()),
             _ => None,
         }
     }
@@ -74,7 +85,7 @@ impl Type {
             }
             Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
-            Type::Intermediate(id) => Type::Intermediate(*id),
+            Type::Intermediate(id) => Type::Intermediate(id.clone()),
             _ => self.clone(),
         }
     }
@@ -102,15 +113,24 @@ impl Type {
 }
 
 impl TypeNodeId {
-    // TODO: clean up the roundtrip between Type and TypeNodeId
-    pub fn apply_fn<F>(&self, closure: F) -> Self
-    where
-        F: Fn(Self) -> Self,
-    {
-        self.to_type()
-            .apply_fn(|x| closure(x.into_id()).to_type().clone())
-            .into_id()
+    pub fn get_root(&self) -> TypeNodeId {
+        match self.to_type() {
+            Type::Intermediate(cell) => {
+                let tv = cell.borrow_mut();
+                tv.parent.unwrap_or(*self)
+            }
+            _ => *self,
+        }
     }
+    //     // TODO: clean up the roundtrip between Type and TypeNodeId
+        pub fn apply_fn<F>(&self, closure: F) -> Self
+        where
+            F: Fn(Self) -> Self,
+        {
+            self.to_type()
+                .apply_fn(|x| closure(x.into_id()).to_type().clone())
+                .into_id()
+        }
 }
 
 impl fmt::Display for PType {
@@ -123,7 +143,17 @@ impl fmt::Display for PType {
         }
     }
 }
-
+impl fmt::Display for TypeVar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.var,
+            self.parent
+                .map_or_else(|| "".to_string(), |t| t.to_type().to_string())
+        )
+    }
+}
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -150,7 +180,7 @@ impl fmt::Display for Type {
 
             Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
-                write!(f, "i({id})")
+                write!(f, "i({})", id.borrow())
             }
             Type::TypeScheme(id, level) => {
                 write!(f, "g({id})[{level}]")

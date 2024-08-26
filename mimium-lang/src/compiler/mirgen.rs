@@ -437,7 +437,7 @@ impl Context {
                     let rt = if let Type::Function(_, rt, _) = ft.to_type() {
                         rt
                     } else {
-                        unreachable!();
+                        panic!("non function type {} {} ",ft.to_type(), ty.to_type());
                     };
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {

@@ -3,11 +3,13 @@ use crate::compiler::intrinsics;
 use crate::interner::{ExprKey, ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
-use crate::types::{PType, Type};
+use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, numeric};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::rc::Rc;
 
 //todo: span for 2 different locations
 #[derive(Clone, Debug, PartialEq)]
@@ -61,7 +63,7 @@ impl ReportableError for Error {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
-    interm_idx: i64,
+    interm_idx: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
@@ -129,12 +131,13 @@ impl InferContext {
         env.add_bind(&binds);
     }
     pub fn gen_intermediate_type(&mut self) -> TypeNodeId {
-        let res = Type::Intermediate(self.interm_idx).into_id();
+        let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx)))).into_id();
         self.interm_idx += 1;
         res
     }
     pub fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
-        let res = Type::Intermediate(self.interm_idx).into_id_with_span(span);
+        let res =
+            Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx)))).into_id_with_span(span);
         self.interm_idx += 1;
         res
     }
@@ -158,19 +161,17 @@ impl InferContext {
         Type::Function(a, r, s).into_id()
     }
     // return true when the circular loop of intermediate variable exists.
-    pub fn occur_check(&self, id1: i64, t2: TypeNodeId) -> bool {
+    pub fn occur_check(&self, id1: u64, t2: TypeNodeId) -> bool {
         let cls = |t2dash: TypeNodeId| -> bool { self.occur_check(id1, t2dash) };
 
         let vec_cls = |t: &[_]| -> bool { t.iter().all(|a| cls(*a)) };
 
         match &t2.to_type() {
-            Type::Intermediate(id2) => {
-                if id1 == *id2 {
-                    true
-                } else {
-                    self.subst_map
-                        .get(&id1)
-                        .map_or(false, |r| self.occur_check(*id2, *r))
+            Type::Intermediate(cell) => {
+                let tv2 = &cell.borrow() as &TypeVar;
+                match tv2.parent {
+                    Some(tid2) => id1 == tv2.var && self.occur_check(id1, tid2),
+                    None => id1 == tv2.var,
                 }
             }
             Type::Array(a) => cls(*a),
@@ -185,34 +186,40 @@ impl InferContext {
         }
     }
 
-    fn substitute_intermediate_type(&self, id: i64) -> Option<TypeNodeId> {
-        match self.subst_map.get(&id) {
-            Some(t) => match t.to_type() {
-                Type::Intermediate(i) => self.substitute_intermediate_type(i),
-                _ => Some(*t),
-            },
-            None => None,
-        }
-    }
-    fn substitute_type(&self, t: TypeNodeId) -> Option<TypeNodeId> {
+    // fn substitute_intermediate_type(&self, id: i64) -> TypeNodeId {
+    //     match self.subst_map.get(&id) {
+    //         Some(t) => match t.to_type() {
+    //             Type::Intermediate(tv) => self.substitute_intermediate_type(i),
+    //             _ => *t,
+    //         },
+    //         None => None,
+    //     }
+    // }
+    fn substitute_type(&self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
-            Type::Intermediate(id) => self.substitute_intermediate_type(id),
-            _ => Some(t.apply_fn(|e| match self.substitute_type(e) {
-                Some(tid) => tid,
-                None => Type::Unknown.into_id(),
-            })),
+            Type::Intermediate(cell) => {
+                let TypeVar { parent, var: _ } = &cell.borrow() as &TypeVar;
+                match parent {
+                    Some(p) => *p,
+                    None => t,
+                }
+            }
+            _ => t.apply_fn(|ty| self.substitute_type(ty)),
         }
     }
-    fn substitute_all_intermediates(&mut self){
+    fn substitute_all_intermediates(&mut self) {
+        let mut e_list = self
+            .result_map
+            .iter()
+            .map(|(e, t)| {
+                log::debug!("e: {:?} t: {}", e, t.to_type());
+                (*e, self.substitute_type(*t))
+            })
+            .collect::<Vec<_>>();
 
-        let mut e_list = self.result_map.iter().filter_map(|(e,t)|
-             t.to_type().is_intermediate().map(|id| self.substitute_intermediate_type(id).map(|t|(*e,t))
-             ).flatten()).collect::<Vec<_>>();
-
-        e_list.iter_mut().for_each(|(e,t)|{
-            let _old = self.result_map.insert (*e,*t);
+        e_list.iter_mut().for_each(|(e, t)| {
+            let _old = self.result_map.insert(*e, *t);
         })
-
     }
 
     pub fn unify_types(&mut self, t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
@@ -222,22 +229,43 @@ impl InferContext {
                 .map(|(v1, v2)| self.unify_types(*v1, *v2))
                 .try_collect()
         };
-        match &(t1.to_type(), t2.to_type()) {
+        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
+        let t1r = t1.get_root();
+        let t2r = t2.get_root();
+        match &(t1r.to_type(), t2r.to_type()) {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
-                if self.occur_check(*i1, t2) {
-                    Err(Error(ErrorKind::CircularType, 0..0)) //todo:span
-                } else if i1 < i2 {
-                    self.subst_map.insert(*i1, t2);
-                    Ok(t1)
-                } else {
-                    self.subst_map.insert(*i2, t1);
-                    Ok(t2)
+                let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
+                let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
+                match (tv1.parent, tv2.parent) {
+                    (None, None) => {
+                        if tv1.var > tv2.var {
+                            tv2.parent = Some(t1r);
+                            Ok(t1r)
+                        } else {
+                            tv1.parent = Some(t2r);
+                            Ok(t2r)
+                        }
+                    }
+                    (_, Some(p2)) => {
+                        tv1.parent = Some(p2);
+                        Ok(p2)
+                    }
+                    (Some(p1), _) => {
+                        tv2.parent = Some(p1);
+                        Ok(p1)
+                    }
                 }
             }
-            (Type::Intermediate(i), t) | (t, Type::Intermediate(i)) => {
-                let tid = t.clone().into_id();
-                self.subst_map.insert(*i, tid);
-                Ok(tid)
+            (Type::Intermediate(i1), _) => {
+                let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
+                tv1.parent = Some(t2r);
+                // log::debug!("unified t1:{} t1r:{} i1:{}", t1.to_type(),t1r.to_type(),&i1.borrow() as &TypeVar);
+                Ok(t2r)
+            }
+            (_, Type::Intermediate(i2)) => {
+                let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
+                tv2.parent = Some(t1r);
+                Ok(t1r)
             }
             (Type::Array(a1), Type::Array(a2)) => {
                 Ok(Type::Array(self.unify_types(*a1, *a2)?).into_id())
@@ -346,7 +374,7 @@ impl InferContext {
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body);
                 let res = self.unify_types(b?, feedv)?;
-                if res.to_type().is_primitive() {
+                if res.to_type().contains_function() {
                     Ok(res)
                 } else {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
@@ -458,7 +486,7 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(e:ExprNodeId)->Result<InferContext, Error>{
+pub fn infer_root(e: ExprNodeId) -> Result<InferContext, Error> {
     let mut ctx = InferContext::default();
     let _ = ctx.infer_type(e)?;
     ctx.substitute_all_intermediates();
