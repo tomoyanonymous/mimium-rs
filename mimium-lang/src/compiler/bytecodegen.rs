@@ -173,7 +173,7 @@ impl ByteCodeGenerator {
         F: FnOnce(Reg, Reg) -> VmInstruction,
     {
         let r1 = self.find(v1);
-        let dst = self.get_destination(dst.clone());
+        let dst = self.get_destination(dst.clone(), 1);
         let i = inst(dst, r1);
         Some(i)
     }
@@ -189,12 +189,12 @@ impl ByteCodeGenerator {
     {
         //the order matters! get destination later on arguments
         let (r1, r2) = self.get_binop(v1, v2);
-        let dst = self.get_destination(dst.clone());
+        let dst = self.get_destination(dst.clone(), 1);
         let i = inst(dst, r1, r2);
         Some(i)
     }
-    fn get_destination(&mut self, dst: Arc<mir::Value>) -> Reg {
-        self.vregister.add_newvalue(&dst)
+    fn get_destination(&mut self, dst: Arc<mir::Value>, size: TypeSize) -> Reg {
+        self.vregister.push_stack(&dst, size as _)
     }
     fn get_or_insert_global(&mut self, gv: Arc<mir::Value>) -> GlobalPos {
         match self.globals.iter().position(|v| gv == *v) {
@@ -227,31 +227,31 @@ impl ByteCodeGenerator {
     fn prepare_function(
         &mut self,
         bytecodes_dst: &mut Vec<VmInstruction>,
-        faddress: Reg,
-        args: &[Arc<mir::Value>],
-    ) -> (Reg, Vec<Reg>) {
-        let mut adsts = vec![];
-        let dst = faddress;
-        for (i, a) in args.iter().enumerate() {
+        faddress: &Arc<mir::Value>,
+        args: &[(Arc<mir::Value>, TypeNodeId)],
+    ) -> (Reg, TypeSize) {
+        let mut aoffsets = vec![];
+        let mut offset = 0;
+        for (_i, (a, ty)) in args.iter().enumerate() {
             let src = self.find(a);
-            let adst = dst as usize + i + 1;
-            adsts.push((adst, src))
+            let size = Self::word_size_for_type(*ty);
+            aoffsets.push((offset, src, size));
+            offset += size;
         }
-        for (adst, src) in adsts.iter() {
-            let is_samedst = *adst as Reg == *src;
-            let is_swapping = if let Some(VmInstruction::Move(dst2, src2)) = bytecodes_dst.last() {
-                *dst2 == *src && *adst == *src2 as usize
-            } else {
-                false
-            };
-            if is_swapping {
-                let _ = bytecodes_dst.pop();
-            } else if !is_samedst {
-                bytecodes_dst.push(VmInstruction::Move(*adst as Reg, *src));
+        let faddress = self.find_keep(faddress);
+        // bytecodes_dst.push(VmInstruction::Move())
+        for (adst, src, size) in aoffsets.iter() {
+            let address = *adst + faddress + 1;
+            let is_samedst = address == *src;
+            if !is_samedst {
+                match size {
+                    0 => unreachable!(),
+                    1 => bytecodes_dst.push(VmInstruction::Move(address as Reg, *src)),
+                    _ => bytecodes_dst.push(VmInstruction::MoveRange(address as Reg, *src, *size)),
+                }
             }
         }
-        let args = adsts.iter().map(|(a, _)| *a as Reg).collect();
-        (dst, args)
+        (faddress, offset)
     }
     fn emit_instruction(
         &mut self,
@@ -266,21 +266,21 @@ impl ByteCodeGenerator {
             mir::Instruction::Uinteger(u) => {
                 let pos = funcproto.add_new_constant(*u);
                 Some(VmInstruction::MoveConst(
-                    self.get_destination(dst),
+                    self.get_destination(dst, 1),
                     pos as ConstPos,
                 ))
             }
             mir::Instruction::Integer(i) => {
                 let pos = funcproto.add_new_constant(gen_raw_int(i));
                 Some(VmInstruction::MoveConst(
-                    self.get_destination(dst),
+                    self.get_destination(dst, 1),
                     pos as ConstPos,
                 ))
             }
             mir::Instruction::Float(n) => {
                 let pos = funcproto.add_new_constant(gen_raw_float(n));
                 Some(VmInstruction::MoveConst(
-                    self.get_destination(dst),
+                    self.get_destination(dst, 1),
                     pos as ConstPos,
                 ))
             }
@@ -290,7 +290,7 @@ impl ByteCodeGenerator {
                 None
             }
             mir::Instruction::Load(ptr, ty) => {
-                let d = self.get_destination(dst);
+                let d = self.get_destination(dst, Self::word_size_for_type(*ty));
                 let s = self.find_keep(ptr);
                 let size = Self::word_size_for_type(*ty);
                 match (d, s, size) {
@@ -310,7 +310,7 @@ impl ByteCodeGenerator {
                 }
             }
             mir::Instruction::GetGlobal(v, ty) => {
-                let dst = self.get_destination(dst);
+                let dst = self.get_destination(dst, Self::word_size_for_type(*ty));
                 let idx = self.get_or_insert_global(v.clone());
                 Some(VmInstruction::GetGlobal(
                     dst,
@@ -351,21 +351,16 @@ impl ByteCodeGenerator {
                 None
             }
             mir::Instruction::Call(v, args, r_ty) => {
-                let nargs = args.len() as u8;
+                let rsize = Self::word_size_for_type(*r_ty);
                 match v.as_ref() {
-                    mir::Value::Register(_address) => {
-                        let faddress = self.find(v);
+                    mir::Value::Register(address) => {
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let (fadd, _args) = self.prepare_function(bytecodes_dst, faddress, args);
-                        let dst = self.get_destination(dst);
-                        let nret = Self::word_size_for_type(*r_ty);
-                        bytecodes_dst.push(VmInstruction::Call(fadd, nargs, nret));
-                        match (dst != fadd, nret) {
-                            (false, _) => None,
-                            (true, 1) => Some(VmInstruction::Move(dst, fadd)),
-                            (true, n) => Some(VmInstruction::MoveRange(dst, fadd, n)),
-                        }
+                        let d = self.get_destination(dst.clone(), rsize);
+                        let s = self.find(v);
+                        bytecodes_dst.push(VmInstruction::Move(d, s));
+                        let (fadd, argsize) = self.prepare_function(bytecodes_dst, &dst, args);
+                        Some(VmInstruction::Call(fadd, argsize, rsize))
                     }
                     mir::Value::Function(_idx, _state_size, _nret) => {
                         unreachable!();
@@ -377,18 +372,13 @@ impl ByteCodeGenerator {
                             self.program.ext_fun_table.len() - 1
                         };
                         let fi = funcproto.add_new_constant(idx as u64);
-                        let dst = self.get_destination(dst);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let (fadd, _args) = self.prepare_function(bytecodes_dst, dst, args);
-                        bytecodes_dst.push(VmInstruction::MoveConst(dst, fi as ConstPos));
+                        let f = self.vregister.push_stack(&dst, rsize as _);
+                        bytecodes_dst.push(VmInstruction::MoveConst(f, fi as ConstPos));
+                        let (dst, argsize) = self.prepare_function(bytecodes_dst, &dst, args);
                         let nret = Self::word_size_for_type(*ty);
-                        bytecodes_dst.push(VmInstruction::CallExtFun(fadd as Reg, nargs, nret));
-                        match (dst != fadd, nret) {
-                            (false, _) => None,
-                            (true, 1) => Some(VmInstruction::Move(dst, fadd)),
-                            (true, n) => Some(VmInstruction::MoveRange(dst, fadd, n)),
-                        }
+                        Some(VmInstruction::CallExtFun(dst as Reg, argsize, nret))
                     }
                     mir::Value::FixPoint(_) => {
                         unreachable!("fixpoint should be called with callcls.")
@@ -397,17 +387,21 @@ impl ByteCodeGenerator {
                 }
             }
             mir::Instruction::CallCls(f, args, r_ty) => {
-                let nargs = args.len() as u8;
+                let rsize = Self::word_size_for_type(*r_ty);
                 match f.as_ref() {
                     mir::Value::Register(_address) => {
-                        let faddress = self.find(f);
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let (fadd, args) = self.prepare_function(bytecodes_dst, faddress, args);
-                        let nret = Self::word_size_for_type(*r_ty);
-                        bytecodes_dst.push(VmInstruction::CallCls(fadd, nargs, nret));
-                        let dst = self.get_destination(dst);
-                        (dst != fadd).then(|| VmInstruction::Move(dst, fadd))
+
+                        let (fadd, argsize) = self.prepare_function(bytecodes_dst, f, args);
+                        let s = self.find(f);
+                        let d = self.get_destination(dst.clone(), rsize);
+                        bytecodes_dst.push(VmInstruction::CallCls(fadd, argsize, rsize));
+                        match rsize {
+                            0 => None,
+                            1 => Some(VmInstruction::Move(d, s)),
+                            n => Some(VmInstruction::MoveRange(d, s, n)),
+                        }
                     }
                     mir::Value::Function(_idx, _state_size, _nret) => {
                         unreachable!();
@@ -421,7 +415,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::Closure(idxcell) => {
                 let idx = self.find(idxcell);
-                let dst = self.get_destination(dst);
+                let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
             mir::Instruction::GetUpValue(i, ty) => {
@@ -540,6 +534,7 @@ impl ByteCodeGenerator {
                 Some(inst)
             }
             mir::Instruction::ReturnFeed(new, rty) => {
+                //for returning always 0 at t=0
                 let old = self.vregister.add_newvalue(&dst);
                 let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                 let size = Self::word_size_for_type(*rty);
@@ -548,6 +543,7 @@ impl ByteCodeGenerator {
                 bytecodes_dst.push(VmInstruction::SetState(new, size));
                 let nret = Self::word_size_for_type(*rty);
                 Some(VmInstruction::Return(old, nret))
+                // Some(VmInstruction::Return(new, nret))
             }
             mir::Instruction::Delay(max, src, time) => {
                 let s = self.find(src);

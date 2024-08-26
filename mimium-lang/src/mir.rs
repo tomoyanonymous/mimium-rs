@@ -52,8 +52,8 @@ pub enum Instruction {
         tuple_offset: u64,
     },
     // call function, arguments
-    Call(VPtr, Vec<VPtr>, TypeNodeId),
-    CallCls(VPtr, Vec<VPtr>, TypeNodeId),
+    Call(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
+    CallCls(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
     GetGlobal(VPtr, TypeNodeId),
     SetGlobal(VPtr, VPtr, TypeNodeId),
     // make closure with upindexes

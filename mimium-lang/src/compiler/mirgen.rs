@@ -109,39 +109,65 @@ impl Context {
             )),
         }
     }
+    fn make_binop_intrinsic(
+        &self,
+        label: Symbol,
+        args: &[(VPtr, TypeNodeId)],
+    ) -> Option<Instruction> {
+        debug_assert_eq!(args.len(), 2);
+        let a0 = args[0].0.clone();
+        let a1 = args[1].0.clone();
+        match label.as_str() {
+            intrinsics::ADD => Some(Instruction::AddF(a0, a1)),
+            intrinsics::SUB => Some(Instruction::SubF(a0, a1)),
+            intrinsics::MULT => Some(Instruction::MulF(a0, a1)),
+            intrinsics::DIV => Some(Instruction::DivF(a0, a1)),
+            intrinsics::EXP => Some(Instruction::PowF(a0, a1)),
+            intrinsics::MODULO => Some(Instruction::ModF(a0, a1)),
+            intrinsics::LOG => Some(Instruction::LogF(a0, a1)),
+            intrinsics::GT => Some(Instruction::Gt(a0, a1)),
+            intrinsics::GE => Some(Instruction::Ge(a0, a1)),
+            intrinsics::LT => Some(Instruction::Lt(a0, a1)),
+            intrinsics::LE => Some(Instruction::Le(a0, a1)),
+            intrinsics::EQ => Some(Instruction::Eq(a0, a1)),
+            intrinsics::NE => Some(Instruction::Ne(a0, a1)),
+            intrinsics::AND => Some(Instruction::And(a0, a1)),
+            intrinsics::OR => Some(Instruction::Or(a0, a1)),
+            _ => None,
+        }
+    }
+    fn make_uniop_intrinsic(
+        &mut self,
+        label: Symbol,
+        args: &[(VPtr, TypeNodeId)],
+    ) -> Option<Instruction> {
+        debug_assert_eq!(args.len(), 1);
+        let a0 = args[0].0.clone();
+        match label.as_str() {
+            intrinsics::NEG => Some(Instruction::NegF(a0)),
+            intrinsics::SQRT => Some(Instruction::SqrtF(a0)),
+            intrinsics::ABS => Some(Instruction::AbsF(a0)),
+            intrinsics::SIN => Some(Instruction::SinF(a0)),
+            intrinsics::COS => Some(Instruction::CosF(a0)),
+            intrinsics::MEM => {
+                self.get_current_fn().state_size += 1;
+                Some(Instruction::Mem(a0))
+            }
+            _ => None,
+        }
+    }
+
     fn make_intrinsics(
         &mut self,
         label: Symbol,
-        args: Vec<VPtr>,
+        args: &[(VPtr, TypeNodeId)],
     ) -> Result<Option<VPtr>, CompileError> {
-        let inst = match (label.as_str(), args.len()) {
-            (intrinsics::NEG, 1) => Instruction::NegF(args[0].clone()),
-            (intrinsics::ADD, 2) => Instruction::AddF(args[0].clone(), args[1].clone()),
-            (intrinsics::SUB, 2) => Instruction::SubF(args[0].clone(), args[1].clone()),
-            (intrinsics::MULT, 2) => Instruction::MulF(args[0].clone(), args[1].clone()),
-            (intrinsics::DIV, 2) => Instruction::DivF(args[0].clone(), args[1].clone()),
-            (intrinsics::EXP, 2) => Instruction::PowF(args[0].clone(), args[1].clone()),
-            (intrinsics::MODULO, 2) => Instruction::ModF(args[0].clone(), args[1].clone()),
-            (intrinsics::SQRT, 1) => Instruction::SqrtF(args[0].clone()),
-            (intrinsics::ABS, 1) => Instruction::AbsF(args[0].clone()),
-            (intrinsics::SIN, 1) => Instruction::SinF(args[0].clone()),
-            (intrinsics::COS, 1) => Instruction::CosF(args[0].clone()),
-            (intrinsics::LOG, 2) => Instruction::LogF(args[0].clone(), args[1].clone()),
-            (intrinsics::GT, 2) => Instruction::Gt(args[0].clone(), args[1].clone()),
-            (intrinsics::GE, 2) => Instruction::Ge(args[0].clone(), args[1].clone()),
-            (intrinsics::LT, 2) => Instruction::Lt(args[0].clone(), args[1].clone()),
-            (intrinsics::LE, 2) => Instruction::Le(args[0].clone(), args[1].clone()),
-            (intrinsics::EQ, 2) => Instruction::Eq(args[0].clone(), args[1].clone()),
-            (intrinsics::NE, 2) => Instruction::Ne(args[0].clone(), args[1].clone()),
-            (intrinsics::AND, 2) => Instruction::And(args[0].clone(), args[1].clone()),
-            (intrinsics::OR, 2) => Instruction::Or(args[0].clone(), args[1].clone()),
-            (intrinsics::MEM, 1) => {
-                self.get_current_fn().state_size += 1;
-                Instruction::Mem(args[0].clone())
-            }
+        let inst = match args.len() {
+            1 => self.make_uniop_intrinsic(label, args),
+            2 => self.make_binop_intrinsic(label, args),
             _ => return Ok(None),
         };
-        Ok(Some(self.push_inst(inst)))
+        Ok(inst.map(|i| self.push_inst(i)))
     }
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
         let bbid = self.get_ctxdata().current_bb;
@@ -316,7 +342,7 @@ impl Context {
         &mut self,
         idx: u64,
         statesize: u64,
-        args: Vec<VPtr>,
+        args: Vec<(VPtr, TypeNodeId)>,
         ret_t: TypeNodeId,
     ) -> VPtr {
         let f = {
@@ -429,24 +455,23 @@ impl Context {
                     Ok((d, Type::Primitive(PType::Numeric).into_id()))
                 } else {
                     let atvvec = self.eval_args(args)?;
-                    let (a_regs, atvec): (Vec<VPtr>, Vec<TypeNodeId>) = atvvec.into_iter().unzip();
                     let rt = if let Type::Function(_, rt, _) = ft.to_type() {
                         rt
                     } else {
-                        panic!("non function type {} {} ",ft.to_type(), ty.to_type());
+                        panic!("non function type {} {} ", ft.to_type(), ty.to_type());
                     };
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
                             Value::Function(idx, statesize, _rty) => {
-                                self.emit_fncall(*idx as u64, *statesize, a_regs, rt)
+                                self.emit_fncall(*idx as u64, *statesize, atvvec.clone(), rt)
                             }
                             Value::Register(_) => {
-                                self.push_inst(Instruction::CallCls(v.clone(), a_regs.clone(), rt))
+                                self.push_inst(Instruction::CallCls(v.clone(), atvvec.clone(), rt))
                             }
                             Value::FixPoint(fnid) => {
                                 let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                                 let cls = self.push_inst(Instruction::Closure(clspos));
-                                self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt))
+                                self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
                             }
                             _ => {
                                 panic!("calling non-function global value")
@@ -455,22 +480,22 @@ impl Context {
                         Value::Register(_) => {
                             //closure
                             //do not increment state size for closure
-                            self.push_inst(Instruction::CallCls(f.clone(), a_regs.clone(), rt))
+                            self.push_inst(Instruction::CallCls(f.clone(), atvvec.clone(), rt))
                         }
                         Value::FixPoint(fnid) => {
                             let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
                             let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, a_regs.clone(), rt))
+                            self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
                         }
 
                         Value::Function(idx, statesize, _ret_t) => {
-                            self.emit_fncall(*idx as u64, *statesize, a_regs, rt)
+                            self.emit_fncall(*idx as u64, *statesize, atvvec.clone(), rt)
                         }
                         Value::ExtFunction(label, _ty) => {
-                            if let Some(res) = self.make_intrinsics(*label, a_regs.clone())? {
+                            if let Some(res) = self.make_intrinsics(*label, &atvvec)? {
                                 res
                             } else {
-                                self.push_inst(Instruction::Call(f.clone(), a_regs.clone(), rt))
+                                self.push_inst(Instruction::Call(f.clone(), atvvec.clone(), rt))
                             }
                         }
                         // Value::ExternalClosure(i) => todo!(),

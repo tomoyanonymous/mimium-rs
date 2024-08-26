@@ -80,7 +80,10 @@ impl std::fmt::Display for Instruction {
                     f,
                     "call {} [{}] ->{}",
                     *fptr,
-                    format_vec!(args, ","),
+                    args.iter()
+                        .map(|(a, _t)| a.to_string())
+                        .collect::<Vec<_>>()
+                        .join(","),
                     rty.to_type()
                 )
             }
@@ -89,7 +92,10 @@ impl std::fmt::Display for Instruction {
                     f,
                     "callcls {} [{}] ->{}",
                     *cls,
-                    format_vec!(args, ","),
+                    args.iter()
+                        .map(|(a, _t)| a.to_string())
+                        .collect::<Vec<_>>()
+                        .join(","),
                     rty.to_type()
                 )
             }
