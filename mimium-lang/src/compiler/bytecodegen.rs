@@ -46,18 +46,18 @@ impl VRegister {
         let pos = self
             .0
             .iter()
-            .max_by_key(|(_v, MemoryRegion(address, _))| address)
+            .max_by_key(|(_v, MemoryRegion(address, size))| address + size)
             .map(|(_, MemoryRegion(address, size))| address + size)
             .unwrap_or(0);
         self.0.insert(v.clone(), MemoryRegion(pos, 1));
-        log::trace!("add {:#?}", self.0);
+        log::debug!("add {:?}", self.0);
         pos as Reg
     }
     pub fn add_newvalue_range(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
         let pos = self
             .0
             .iter()
-            .max_by_key(|(_v, MemoryRegion(address, _))| address)
+            .max_by_key(|(_v, MemoryRegion(address, size))| address + size)
             .map(|(_, MemoryRegion(address, size))| address + size)
             .unwrap_or(0);
         self.0.insert(v.clone(), MemoryRegion(pos, size as _));
@@ -82,7 +82,7 @@ impl VRegister {
     }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
-        log::trace!("findkeep {v}");
+        log::debug!("findkeep {v}");
         self.0.get(v).map(|r| r.0)
     }
 }
