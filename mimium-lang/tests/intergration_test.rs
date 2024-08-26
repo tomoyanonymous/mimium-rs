@@ -261,18 +261,30 @@ fn simple_stereo() {
     assert_eq!(res, ans);
 }
 
-// implement one-sample delay on mimium with `self` 
+// implement one-sample delay on mimium with `self`
 #[test]
 fn fb_mem() {
-    let res = run_file_test_stereo("fb_mem.mmm", 5).unwrap();
-    let ans = vec![0.0,0.0,1.0,0.0,2.0,1.0,3.0,2.0,4.0,3.0];
+    let res = run_file_test_stereo("fb_mem.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1.0, 3.0, 2.0, 4.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0,
+        8.0, 7.0,
+    ];
     assert_eq!(res, ans);
 }
 
+#[test]
+fn fb_mem2() {
+    let res = run_file_test_stereo("fb_mem2.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 1.0, 4.0, 2.0, 5.0, 3.0, 6.0, 4.0, 7.0, 5.0,
+        8.0, 6.0,
+    ];
+    assert_eq!(res, ans);
+}
 
 #[test]
 fn biquad_hp() {
     let res = run_file_test_mono("biquad_hp.mmm", 10).unwrap();
-    let ans = vec![0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     assert_eq!(res, ans);
 }
