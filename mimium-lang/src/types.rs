@@ -120,20 +120,20 @@ impl TypeNodeId {
         match self.to_type() {
             Type::Intermediate(cell) => {
                 let tv = cell.borrow_mut();
-                tv.parent.unwrap_or(*self)
+                tv.parent.map_or(*self, |t| t.get_root())
             }
             _ => *self,
         }
     }
     //     // TODO: clean up the roundtrip between Type and TypeNodeId
-        pub fn apply_fn<F>(&self, closure: F) -> Self
-        where
-            F: Fn(Self) -> Self,
-        {
-            self.to_type()
-                .apply_fn(|x| closure(x.into_id()).to_type().clone())
-                .into_id()
-        }
+    pub fn apply_fn<F>(&self, closure: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        self.to_type()
+            .apply_fn(|x| closure(x.into_id()).to_type().clone())
+            .into_id()
+    }
 }
 
 impl fmt::Display for PType {
