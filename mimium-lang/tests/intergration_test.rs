@@ -271,8 +271,8 @@ fn fb_mem() {
 
 
 #[test]
-fn biquad_lp() {
-    let res = run_file_test_mono("biquad_lp.mmm", 10).unwrap();
+fn biquad_hp() {
+    let res = run_file_test_mono("biquad_hp.mmm", 10).unwrap();
     let ans = vec![0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
     assert_eq!(res, ans);
 }
