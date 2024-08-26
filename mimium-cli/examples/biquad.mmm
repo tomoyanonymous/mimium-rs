@@ -9,7 +9,7 @@ fn osc(freq){
 
 fn gen_hp_coeff(fc,q,fs){
     let omega = 2.0 * pi* fc / fs
-    let alpha = sin(omega)/(q)
+    let alpha = sin(omega)/(2.0* q)
     let norm = 1.0 + alpha
     let a1 = -2.0 * cos(omega) / norm
     let a2 = (1.0 - alpha)/ norm
@@ -21,7 +21,7 @@ fn gen_hp_coeff(fc,q,fs){
 }
 fn gen_lp_coeff(fc,q,fs){
     let omega = 2.0 * pi* fc / fs
-    let alpha = sin(omega)/q
+    let alpha = sin(omega)/(2.0*q)
     let norm = 1.0 + alpha
     let a1 = -2.0 * cos(omega) / norm
     let a2 = (1.0 - alpha)/ norm
@@ -43,5 +43,6 @@ fn biquad(x,coeffs){
 }
 
 fn dsp(){
-    biquad(osc(440.0),gen_hp_coeff(2000.0,2.0,sr))
+    let coeff = gen_lp_coeff(834.5,2.0,sr);
+    biquad(osc(440.0),coeff)
 }
