@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{cell::RefCell, fmt, rc::Rc};
 
 use crate::{
     format_vec,
@@ -15,6 +15,17 @@ pub enum PType {
     Numeric,
     String,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeVar {
+    pub parent: Option<TypeNodeId>,
+    pub var: u64,
+}
+impl TypeVar {
+    pub fn new(var: u64) -> Self {
+        Self { parent: None, var }
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     Primitive(PType),
@@ -27,7 +38,8 @@ pub enum Type {
     Ref(TypeNodeId),
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(TypeNodeId),
-    Intermediate(i64),
+    Intermediate(Rc<RefCell<TypeVar>>),
+    TypeScheme(i64, i64),
     Unknown,
 }
 
@@ -35,17 +47,26 @@ pub enum Type {
 pub type TypeSize = u8;
 
 impl Type {
-    pub fn is_primitive(&self) -> bool {
-        if let Type::Primitive(_) = self {
-            true
-        } else {
-            false
+    // check if contains any function type in its member.
+    // if no functions are contained, it means that the value can be placed in linear memory.
+    pub fn contains_function(&self) -> bool {
+        match self {
+            Type::Function(_, _, _) => true,
+            Type::Tuple(t) => t.iter().any(|t| t.to_type().contains_function()),
+            Type::Struct(t) => t.iter().any(|(_s, t)| t.to_type().contains_function()),
+            _ => false,
         }
     }
     pub fn is_function(&self) -> bool {
         match self {
             Type::Function(_, _, _) => true,
             _ => false,
+        }
+    }
+    pub fn is_intermediate(&self) -> Option<Rc<RefCell<TypeVar>>> {
+        match self {
+            Type::Intermediate(tvar) => Some(tvar.clone()),
+            _ => None,
         }
     }
     pub fn apply_fn<F>(&self, closure: F) -> Self
@@ -67,7 +88,7 @@ impl Type {
             }
             Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),
-            Type::Intermediate(id) => Type::Intermediate(*id),
+            Type::Intermediate(id) => Type::Intermediate(id.clone()),
             _ => self.clone(),
         }
     }
@@ -95,7 +116,16 @@ impl Type {
 }
 
 impl TypeNodeId {
-    // TODO: clean up the roundtrip between Type and TypeNodeId
+    pub fn get_root(&self) -> TypeNodeId {
+        match self.to_type() {
+            Type::Intermediate(cell) => {
+                let tv = cell.borrow_mut();
+                tv.parent.map_or(*self, |t| t.get_root())
+            }
+            _ => *self,
+        }
+    }
+    //     // TODO: clean up the roundtrip between Type and TypeNodeId
     pub fn apply_fn<F>(&self, closure: F) -> Self
     where
         F: Fn(Self) -> Self,
@@ -116,7 +146,17 @@ impl fmt::Display for PType {
         }
     }
 }
-
+impl fmt::Display for TypeVar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.var,
+            self.parent
+                .map_or_else(|| "".to_string(), |t| t.to_type().to_string())
+        )
+    }
+}
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -143,7 +183,10 @@ impl fmt::Display for Type {
 
             Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
-                write!(f, "intermediate[{}]", id,)
+                write!(f, "i({})", id.borrow())
+            }
+            Type::TypeScheme(id, level) => {
+                write!(f, "g({id})[{level}]")
             }
             Type::Unknown => write!(f, "unknown"),
         }

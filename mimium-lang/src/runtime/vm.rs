@@ -236,7 +236,12 @@ where
     //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
     // and copy_from_slice use ptr::copy_nonoverwrapping internally.
     // vec[range].copy_from_slice(values)
-    match i.cmp(&vec.len()) {
+    let start = i;
+    let end = i + values.len();
+    if end > vec.len() {
+        vec.resize(i, T::default());
+    }
+    match start.cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
             for (v, i) in values.iter().zip(range.into_iter()) {
@@ -244,10 +249,7 @@ where
             }
         }
         Ordering::Equal => values.iter().for_each(|v| vec.push(*v)),
-        Ordering::Greater => {
-            vec.resize(i, T::default());
-            values.iter().for_each(|v| vec.push(*v))
-        }
+        Ordering::Greater => values.iter().for_each(|v| vec.push(*v)),
     }
 }
 
@@ -519,8 +521,9 @@ impl Machine {
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
-                    let f = self.ext_fun_table[ext_fn_idx].1;
-                    let nret = self.call_function(func, nargs, nret_req, move |machine| f(machine));
+                    let fi = self.fn_map.get(&ext_fn_idx).unwrap();
+                    let f = self.ext_fun_table[*fi].1;
+                    let nret = self.call_function(func, nargs, nret_req, f);
                     // return
                     let base = self.base_pointer as usize;
                     let iret = base + func as usize + 1;
@@ -702,15 +705,12 @@ impl Machine {
                     self.set_stack_range(dst as i64, ptr, size);
                 }
                 Instruction::SetState(src, size) => {
-                    let (ptr, len) = {
+                    let vs = {
                         let (_range, v) = self.get_stack_range(src as i64, size as _);
-                        (v.as_ptr(), v.len())
+                        unsafe { std::mem::transmute::<&[RawVal], &[RawVal]>(v) }
                     };
                     let dst = self.get_current_state().get_state_mut(size as _);
-                    unsafe {
-                        let s = slice::from_raw_parts(ptr, len);
-                        s.iter().enumerate().for_each(|(i, v)| dst[i] = *v);
-                    }
+                    dst.copy_from_slice(vs);
                 }
                 Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
                 Instruction::Delay(dst, src, time) => {

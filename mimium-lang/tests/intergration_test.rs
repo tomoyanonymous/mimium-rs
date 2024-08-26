@@ -260,3 +260,31 @@ fn simple_stereo() {
     let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn tuple_args() {
+    let res = run_file_test_stereo("tuple_args.mmm", 3).unwrap();
+    let ans = vec![30.0, 50.0, 30.0, 50.0, 30.0, 50.0];
+    assert_eq!(res, ans);
+}
+
+// implement one-sample delay on mimium with `self`
+#[test]
+fn fb_mem() {
+    let res = run_file_test_stereo("fb_mem.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1.0, 3.0, 2.0, 4.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0,
+        8.0, 7.0,
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn fb_mem2() {
+    let res = run_file_test_stereo("fb_mem2.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 1.0, 4.0, 2.0, 5.0, 3.0, 6.0, 4.0, 7.0, 5.0,
+        8.0, 6.0,
+    ];
+    assert_eq!(res, ans);
+}
