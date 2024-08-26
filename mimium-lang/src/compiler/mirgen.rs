@@ -398,7 +398,7 @@ impl Context {
                 let dst = self.gen_new_register();
                 let mut inst_refs: Vec<usize> = vec![];
                 for (i, e) in items.iter().enumerate() {
-                    let (v, ty) = self.eval_expr(*e)?;
+                    let (v, cty) = self.eval_expr(*e)?;
                     let ptr = if i == 0 {
                         dst.clone()
                     } else {
