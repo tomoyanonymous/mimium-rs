@@ -294,7 +294,7 @@ fn fb_mem3_uninitialized_memory() {
     // It seems a function with a long state size might refer to an
     // uninitialized memory. Since this happens randomly, we need to repeat the
     // same test several times to reproduce the error.
-    for _ in 0..10 {
+    for _ in 0..1000 {
         let res = run_file_test_stereo("fb_mem3.mmm", 1).unwrap();
         let ans = vec![0.0, 0.0];
         assert_eq!(res, ans);
