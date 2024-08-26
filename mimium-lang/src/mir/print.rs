@@ -5,7 +5,13 @@ use super::*;
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fun in self.functions.iter() {
-            let af = format_vec!(fun.args, ",");
+            let af = fun
+                .args
+                .iter()
+                .zip(fun.argtypes.clone())
+                .map(|(a, t)| format!("{}:{}", *a, t.to_type()))
+                .collect::<Vec<_>>()
+                .join(",");
             let _ = writeln!(f, "fn {} [{af}]", fun.label);
             let upi = format_vec!(fun.upindexes, ",");
             let _ = write!(f, "upindexes:[{upi}]");
@@ -29,8 +35,8 @@ impl std::fmt::Display for Mir {
 
 impl std::fmt::Display for Argument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Argument(label, _t) = self;
-        write!(f, "arg {}", label.0)
+        let Argument(label, t) = self;
+        write!(f, "arg {}: {}", label.0, t.to_type())
     }
 }
 
