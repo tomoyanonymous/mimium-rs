@@ -50,7 +50,7 @@ impl VRegister {
             .map(|(_, MemoryRegion(address, size))| address + size)
             .unwrap_or(0);
         self.0.insert(v.clone(), MemoryRegion(pos, 1));
-        log::debug!("add {:?}", self.0);
+        log::trace!("add {:?}", self.0);
         pos as Reg
     }
     pub fn add_newvalue_range(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
@@ -82,7 +82,7 @@ impl VRegister {
     }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
-        log::debug!("findkeep {v}");
+        log::trace!("findkeep {v}");
         self.0.get(v).map(|r| r.0)
     }
 }

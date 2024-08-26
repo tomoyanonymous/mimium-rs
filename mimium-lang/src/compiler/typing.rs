@@ -216,7 +216,7 @@ impl InferContext {
             .collect::<Vec<_>>();
 
         e_list.iter_mut().for_each(|(e, t)| {
-            log::debug!("e: {:?} t: {}", e, t.to_type());
+            log::trace!("e: {:?} t: {}", e, t.to_type());
             let _old = self.result_map.insert(*e, *t);
         })
     }
@@ -228,7 +228,7 @@ impl InferContext {
                 .map(|(v1, v2)| self.unify_types(*v1, *v2))
                 .try_collect()
         };
-        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
+        log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
@@ -261,7 +261,6 @@ impl InferContext {
             (Type::Intermediate(i1), _) => {
                 let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
                 tv1.parent = Some(t2r);
-                // log::debug!("unified t1:{} t1r:{} i1:{}", t1.to_type(),t1r.to_type(),&i1.borrow() as &TypeVar);
                 Ok(t2r)
             }
             (_, Type::Intermediate(i2)) => {
@@ -316,7 +315,6 @@ impl InferContext {
                             pat: p.clone(),
                             ty: ity,
                         };
-                        log::debug!("bind tvec:{}", ity.to_type());
                         self.bind_pattern(ity, &p)
                     })
                     .try_collect::<Vec<_>>()?;
@@ -329,7 +327,6 @@ impl InferContext {
     pub fn lookup(&self, name: &Symbol, span: &Span) -> Result<TypeNodeId, Error> {
         self.env.lookup(name).map_or_else(
             || {
-                log::debug!("{:#?}", self.env);
                 Err(Error(
                     ErrorKind::VariableNotFound(name.to_string()),
                     span.clone(),
@@ -376,7 +373,6 @@ impl InferContext {
                 let feedv = self.gen_intermediate_type();
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body)?;
-                log::debug!("feed id {} feed body {}", feedv.to_type(), b.to_type());
                 let res = self.unify_types(b, feedv)?;
                 if res.to_type().contains_function() {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
