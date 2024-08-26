@@ -233,7 +233,12 @@ where
     //do not use copy_from_slice  or extend_from_slice because the ptr range may overwrap,
     // and copy_from_slice use ptr::copy_nonoverwrapping internally.
     // vec[range].copy_from_slice(values)
-    match (i + values.len() - 1).cmp(&vec.len()) {
+    let start = i;
+    let end = i + values.len();
+    if end > vec.len() {
+        vec.resize(i, T::default());
+    }
+    match start.cmp(&vec.len()) {
         Ordering::Less => {
             let range = i..(i + values.len());
             for (v, i) in values.iter().zip(range.into_iter()) {
@@ -241,10 +246,7 @@ where
             }
         }
         Ordering::Equal => values.iter().for_each(|v| vec.push(*v)),
-        Ordering::Greater => {
-            vec.resize(i, T::default());
-            values.iter().for_each(|v| vec.push(*v))
-        }
+        Ordering::Greater => values.iter().for_each(|v| vec.push(*v)),
     }
 }
 
@@ -676,15 +678,12 @@ impl Machine {
                     self.set_stack_range(dst as i64, ptr, size);
                 }
                 Instruction::SetState(src, size) => {
-                    let (ptr, len) = {
+                    let vs = {
                         let (_range, v) = self.get_stack_range(src as i64, size as _);
-                        (v.as_ptr(), v.len())
+                        unsafe { std::mem::transmute::<&[RawVal], &[RawVal]>(v) }
                     };
                     let dst = self.get_current_state().get_state_mut(size as _);
-                    unsafe {
-                        let s = slice::from_raw_parts(ptr, len);
-                        s.iter().enumerate().for_each(|(i, v)| dst[i] = *v);
-                    }
+                    dst.copy_from_slice(vs);
                 }
                 Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
                 Instruction::Delay(dst, src, time) => {
