@@ -10,11 +10,11 @@ pub mod print;
 // #[derive(Debug, Clone, PartialEq)]
 // pub struct Global(VPtr);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Argument(pub Symbol, pub TypeNodeId);
 
 pub type VReg = u64;
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Value {
     Global(VPtr),
     Argument(usize, Arc<Argument>), //index,
@@ -52,8 +52,8 @@ pub enum Instruction {
         tuple_offset: u64,
     },
     // call function, arguments
-    Call(VPtr, Vec<VPtr>, TypeNodeId),
-    CallCls(VPtr, Vec<VPtr>, TypeNodeId),
+    Call(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
+    CallCls(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
     GetGlobal(VPtr, TypeNodeId),
     SetGlobal(VPtr, VPtr, TypeNodeId),
     // make closure with upindexes

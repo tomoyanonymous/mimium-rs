@@ -8,15 +8,32 @@ use crate::{
 
 #[test]
 fn stack_set_vec_test1() {
+    //less
     let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
     set_vec_range(&mut testvec, 2, &[6, 7]);
     assert_eq!(testvec, vec![0u64, 1, 6, 7, 4, 5])
 }
 #[test]
 fn stack_set_vec_test2() {
+    //greater
     let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
     set_vec_range(&mut testvec, 6, &[6, 7]);
     assert_eq!(testvec, vec![0u64, 1, 2, 3, 4, 5, 6, 7])
+}
+
+#[test]
+fn stack_set_vec_test3() {
+    //equal
+    let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
+    set_vec_range(&mut testvec, 5, &[6, 7]);
+    assert_eq!(testvec, vec![0u64, 1, 2, 3, 4, 6, 7])
+}
+#[test]
+fn stack_set_vec_test4() {
+    //even_greater
+    let mut testvec = vec![0u64, 1, 2, 3, 4, 5];
+    set_vec_range(&mut testvec, 7, &[6, 7]);
+    assert_eq!(testvec, vec![0u64, 1, 2, 3, 4, 5, 0, 6, 7])
 }
 
 #[test]
@@ -134,7 +151,8 @@ fn closuretest() {
         ext_cls_table: vec![],
         global_vals: vec![],
     };
-    // let mut feedstate = FeedState::default();
+    // let mut feedstate = FeedState::default()
+    machine.link_functions(&prog);
     let res = machine.execute_main(&prog);
     assert_eq!(res, 0);
 }

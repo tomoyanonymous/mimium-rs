@@ -1,0 +1,10 @@
+//expect (30.0,50.0)
+fn get(tup){
+    let (a,b,c) = tup
+    (a+b,c)
+}
+
+fn dsp(){
+    let v = (10.0,20.0,50.0)
+    get(v)
+}

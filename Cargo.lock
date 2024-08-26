@@ -553,6 +553,7 @@ version = "0.0.1"
 dependencies = [
  "ariadne",
  "chumsky",
+ "colog",
  "log",
  "slotmap",
  "string-interner",
