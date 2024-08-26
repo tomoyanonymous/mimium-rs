@@ -223,6 +223,13 @@ impl InferContext {
 
     pub fn unify_types(&mut self, t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
         let mut unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
+            if a1.len() != a2.len() {
+                return Err(Error(
+                    ErrorKind::TypeMismatch(t1.to_type(), t2.to_type()),
+                    t1.to_span(),
+                ));
+            }
+
             a1.iter()
                 .zip(a2.iter())
                 .map(|(v1, v2)| self.unify_types(*v1, *v2))
