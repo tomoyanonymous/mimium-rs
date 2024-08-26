@@ -433,7 +433,7 @@ impl InferContext {
             }
             Expr::If(cond, then, opt_else) => {
                 let condt = self.infer_type(*cond)?;
-                let _bt = self.unify_types(Type::Primitive(PType::Int).into_id(), condt); //todo:boolean type
+                let _bt = self.unify_types(Type::Primitive(PType::Numeric).into_id(), condt); //todo:boolean type
                 let thent = self.infer_type(*then)?;
                 let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                     self.infer_type(e)
