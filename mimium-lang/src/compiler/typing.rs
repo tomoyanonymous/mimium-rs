@@ -200,7 +200,7 @@ impl InferContext {
             Type::Intermediate(cell) => {
                 let TypeVar { parent, var: _ } = &cell.borrow() as &TypeVar;
                 match parent {
-                    Some(p) => *p,
+                    Some(p) => self.substitute_type(*p),
                     None => t,
                 }
             }
@@ -212,12 +212,12 @@ impl InferContext {
             .result_map
             .iter()
             .map(|(e, t)| {
-                log::debug!("e: {:?} t: {}", e, t.to_type());
                 (*e, self.substitute_type(*t))
             })
             .collect::<Vec<_>>();
-
+        
         e_list.iter_mut().for_each(|(e, t)| {
+            log::debug!("e: {:?} t: {}", e, t.to_type());
             let _old = self.result_map.insert(*e, *t);
         })
     }
