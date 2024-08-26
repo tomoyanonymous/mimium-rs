@@ -420,7 +420,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::CloseUpValue(src) => {
                 let src = self.vregister.find(src).unwrap();
-                let dst = self.get_destination(dst);
+                let dst = self.get_destination(dst,1);
                 Some(VmInstruction::Close(dst, src))
             }
             mir::Instruction::GetUpValue(i, ty) => {

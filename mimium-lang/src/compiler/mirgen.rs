@@ -376,6 +376,12 @@ impl Context {
                     }
                     _ => v.clone(),
                 };
+                let res = if t.to_type().contains_function() {
+                    //higher-order function need to close immidiately
+                    self.push_inst(Instruction::CloseUpValue(res))
+                } else {
+                    res
+                };
                 Ok((res, t))
             })
             .try_collect::<Vec<_>>()
@@ -550,7 +556,13 @@ impl Context {
                             let _ = ctx.push_inst(Instruction::Return(cls, rt));
                         }
                         (_, _) => {
-                            let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
+                            if rt.to_type().contains_function() {
+                                let newres = ctx.push_inst(Instruction::CloseUpValue(res.clone()));
+                                let _ =
+                                    ctx.push_inst(Instruction::Return(newres.clone(), rt.clone()));
+                            } else {
+                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt.clone()));
+                            }
                         }
                     };
 

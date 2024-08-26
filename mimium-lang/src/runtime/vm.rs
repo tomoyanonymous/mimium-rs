@@ -641,7 +641,6 @@ impl Machine {
                     let (_, slice) = self.get_stack_range(src as i64, size);
                     gvs.copy_from_slice(slice);
                 }
-                // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
                     // -1 is for the offset in last increment
                     increment = offset;
