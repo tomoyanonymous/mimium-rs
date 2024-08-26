@@ -541,8 +541,7 @@ impl ByteCodeGenerator {
                 bytecodes_dst.push(VmInstruction::GetState(old, size));
                 let new = self.find(new);
                 bytecodes_dst.push(VmInstruction::SetState(new, size));
-                let nret = Self::word_size_for_type(*rty);
-                Some(VmInstruction::Return(old, nret))
+                Some(VmInstruction::Return(old, size))
                 // Some(VmInstruction::Return(new, nret))
             }
             mir::Instruction::Delay(max, src, time) => {
