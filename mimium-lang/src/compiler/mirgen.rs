@@ -344,7 +344,7 @@ impl Context {
         let mut state_sizes = self.get_current_fn().get_state_sizes().to_vec();
 
         let f = {
-            self.get_current_fn().add_state_size(1);
+            self.get_current_fn().add_typed_state_size(1, ret_t);
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
@@ -562,7 +562,9 @@ impl Context {
             Expr::Feed(id, expr) => {
                 //set typesize lazily
                 let res = self.push_inst(Instruction::GetState(ty));
-                self.get_ctxdata().state_offset.push(StateSize::Word(1));
+                self.get_ctxdata()
+                    .state_offset
+                    .push(StateSize::Typed(1, ty));
                 self.add_bind((*id, res.clone()));
                 let (retv, _t) = self.eval_expr(*expr)?;
                 self.get_current_fn().add_typed_state_size(1, ty);
