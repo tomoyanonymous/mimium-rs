@@ -162,9 +162,7 @@ impl ByteCodeGenerator {
         state_sizes
             .as_ref()
             .iter()
-            .map(|x| match x {
-                StateSize::Typed(size, ty) => *size * Self::word_size_for_type(*ty) as u64,
-            })
+            .map(|x| x.size * Self::word_size_for_type(x.ty) as u64)
             .sum()
     }
     fn get_binop(&mut self, v1: &Arc<mir::Value>, v2: &Arc<mir::Value>) -> (Reg, Reg) {

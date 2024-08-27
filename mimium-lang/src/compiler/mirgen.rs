@@ -86,7 +86,7 @@ impl Context {
             (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn().add_typed_state_size(shift_size, *rt);
+                self.get_current_fn().add_state_size(shift_size, *rt);
                 let coffset = &self.get_ctxdata().state_offset.clone();
                 if !coffset.is_empty() {
                     self.get_current_basicblock().0.push((
@@ -152,7 +152,7 @@ impl Context {
             intrinsics::SIN => Some(Instruction::SinF(a0)),
             intrinsics::COS => Some(Instruction::CosF(a0)),
             intrinsics::MEM => {
-                self.get_current_fn().add_typed_state_size(1, a0_ty);
+                self.get_current_fn().add_state_size(1, a0_ty);
                 Some(Instruction::Mem(a0))
             }
             _ => None,
@@ -344,7 +344,7 @@ impl Context {
         let mut state_sizes = self.get_current_fn().get_state_sizes().to_vec();
 
         let f = {
-            self.get_current_fn().add_typed_state_size(1, ret_t);
+            self.get_current_fn().add_state_size(1, ret_t);
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
@@ -564,10 +564,10 @@ impl Context {
                 let res = self.push_inst(Instruction::GetState(ty));
                 self.get_ctxdata()
                     .state_offset
-                    .push(StateSize::Typed(1, ty));
+                    .push(StateSize { size: 1, ty });
                 self.add_bind((*id, res.clone()));
                 let (retv, _t) = self.eval_expr(*expr)?;
-                self.get_current_fn().add_typed_state_size(1, ty);
+                self.get_current_fn().add_state_size(1, ty);
                 Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
