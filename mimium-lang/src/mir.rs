@@ -21,8 +21,8 @@ pub enum Value {
     // holds SSA index(position in infinite registers)
     Register(VReg),
     State(VPtr),
-    // idx of the function in the program, size of internal state, return type
-    Function(usize, u64, TypeNodeId),
+    // idx of the function in the program
+    Function(usize),
     ExtFunction(Symbol, TypeNodeId),
     FixPoint(usize), //function id
     //internal state
@@ -62,8 +62,8 @@ pub enum Instruction {
     GetUpValue(u64, TypeNodeId),
     SetUpValue(u64, TypeNodeId),
     //internal state: feed and delay
-    PushStateOffset(u64),
-    PopStateOffset(u64),
+    PushStateOffset(Vec<StateSize>),
+    PopStateOffset(Vec<StateSize>),
     //load internal state to register(destination)
     GetState(TypeNodeId),
 
@@ -143,8 +143,15 @@ pub struct Function {
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
-    pub state_size: u64,
+    state_sizes: Vec<StateSize>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StateSize {
+    Typed(u64, TypeNodeId),
+    Word(u64),
+}
+
 impl Function {
     pub fn new(
         name: Symbol,
@@ -160,12 +167,26 @@ impl Function {
             upindexes: vec![],
             upperfn_i,
             body: vec![Block::default()],
-            state_size: 0,
+            state_sizes: vec![],
         }
     }
     pub fn add_new_basicblock(&mut self) -> usize {
         self.body.push(Block(vec![]));
         self.body.len() - 1
+    }
+
+    // for the case where the state size can be determined immediately
+    pub fn add_state_size(&mut self, size: u64) {
+        self.state_sizes.push(StateSize::Word(1))
+    }
+
+    // for the case where the state size will be calculated from the type later
+    pub fn add_typed_state_size(&mut self, size: u64, ty: TypeNodeId) {
+        self.state_sizes.push(StateSize::Typed(1, ty))
+    }
+
+    pub fn get_state_sizes(&self) -> &[StateSize] {
+        &self.state_sizes
     }
 }
 

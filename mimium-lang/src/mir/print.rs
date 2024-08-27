@@ -18,7 +18,7 @@ impl std::fmt::Display for Mir {
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
             }
-            let _ = write!(f, " state_size: {}", fun.state_size);
+            let _ = write!(f, " state_size: {:?}", fun.state_sizes);
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "\n  block {i}\n");
                 for (v, insts) in block.0.iter() {
@@ -46,9 +46,7 @@ impl std::fmt::Display for Value {
             Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
-            Value::Function(id, _statesize, nret) => {
-                write!(f, "function {id} (nret: {})", nret.to_type())
-            }
+            Value::Function(id) => write!(f, "function {id}"),
             Value::ExtFunction(label, t) => write!(f, "extfun {label} {}", t.to_type()),
             Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
@@ -100,8 +98,8 @@ impl std::fmt::Display for Instruction {
                 )
             }
             Instruction::Closure(fun) => {
-                if let Value::Function(idx, _, nret) = fun.as_ref() {
-                    write!(f, "closure {idx} (nret: {})", nret.to_type())
+                if let Value::Function(idx) = fun.as_ref() {
+                    write!(f, "closure {idx}") // TODO
                 } else {
                     write!(f, "closure {}", *fun)
                 }
@@ -112,8 +110,8 @@ impl std::fmt::Display for Instruction {
             Instruction::SetGlobal(dst, src, ty) => {
                 write!(f, "setglobal {} {} {}", *dst, *src, ty.to_type())
             }
-            Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
-            Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
+            Instruction::PushStateOffset(v) => write!(f, "pushstateidx {:?}", v), // TODO
+            Instruction::PopStateOffset(v) => write!(f, "popstateidx  {:?}", v),  // TODO
 
             Instruction::GetState(ty) => write!(f, "getstate {}", ty.to_type()),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
