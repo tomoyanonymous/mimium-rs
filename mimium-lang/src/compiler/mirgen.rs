@@ -5,7 +5,7 @@ use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
-use crate::mir::{self, Argument, Instruction, Mir, VPtr, VReg, Value};
+use crate::mir::{self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value};
 
 use std::sync::Arc;
 
@@ -25,8 +25,8 @@ const DELAY_ADDITIONAL_OFFSET: u64 = 3;
 struct ContextData {
     pub func_i: usize,
     pub current_bb: usize,
-    pub state_offset: u64,
-    pub push_sum: u64,
+    pub state_offset: Vec<StateSize>,
+    pub push_sum: Vec<StateSize>,
 }
 #[derive(Debug)]
 pub struct Context {
@@ -86,13 +86,15 @@ impl Context {
             (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn().state_size += shift_size;
-                let coffset = self.get_ctxdata().state_offset;
-                if coffset > 0 {
-                    self.get_current_basicblock()
-                        .0
-                        .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
-                    self.get_ctxdata().push_sum += coffset;
+                self.get_current_fn()
+                    .add_typed_state_size(shift_size, rt.clone());
+                let mut coffset = &self.get_ctxdata().state_offset.clone();
+                if !coffset.is_empty() {
+                    self.get_current_basicblock().0.push((
+                        Arc::new(Value::None),
+                        Instruction::PushStateOffset(coffset.clone()),
+                    ));
+                    self.get_ctxdata().push_sum.append(&mut coffset.clone());
                 }
                 let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
@@ -150,7 +152,7 @@ impl Context {
             intrinsics::SIN => Some(Instruction::SinF(a0)),
             intrinsics::COS => Some(Instruction::CosF(a0)),
             intrinsics::MEM => {
-                self.get_current_fn().state_size += 1;
+                self.get_current_fn().add_state_size(1);
                 Some(Instruction::Mem(a0))
             }
             _ => None,
@@ -258,8 +260,8 @@ impl Context {
         self.data.push(ContextData {
             func_i: c_idx,
             current_bb: 0,
-            state_offset: 0,
-            push_sum: 0,
+            state_offset: vec![],
+            push_sum: vec![],
         });
         self.data_i += 1;
         //do action
@@ -304,7 +306,7 @@ impl Context {
     ) -> Result<VPtr, CompileError> {
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
-                Value::Function(i, _s, _nret) => {
+                Value::Function(i) => {
                     let reg = self.push_inst(Instruction::Uinteger(*i as u64));
                     self.push_inst(Instruction::Closure(reg))
                 }
@@ -325,7 +327,7 @@ impl Context {
             }),
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t)),
-                Value::Function(_, _, _) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
+                Value::Function(_) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
@@ -338,29 +340,25 @@ impl Context {
         };
         Ok(v)
     }
-    fn emit_fncall(
-        &mut self,
-        idx: u64,
-        statesize: u64,
-        args: Vec<(VPtr, TypeNodeId)>,
-        ret_t: TypeNodeId,
-    ) -> VPtr {
+    fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
+        let mut state_sizes = self.get_current_fn().get_state_sizes().to_vec();
+
         let f = {
-            self.get_current_fn().state_size += statesize;
+            self.get_current_fn().add_state_size(1);
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
-        if self.get_ctxdata().state_offset > 0 {
+        if !self.get_ctxdata().state_offset.is_empty() {
             self.get_current_basicblock().0.push((
                 Arc::new(Value::None),
-                Instruction::PushStateOffset(statesize),
+                Instruction::PushStateOffset(state_sizes.clone()),
             ));
-            self.get_ctxdata().push_sum += statesize;
+            self.get_ctxdata().push_sum.append(&mut state_sizes.clone());
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
-        if statesize > 0 {
-            self.get_ctxdata().state_offset += statesize;
+        if !state_sizes.is_empty() {
+            self.get_ctxdata().state_offset.append(&mut state_sizes);
         }
         res
     }
@@ -370,7 +368,7 @@ impl Context {
                 let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
                     // for the higher order function, make closure regardless it is global function
-                    Value::Function(idx, _, _) => {
+                    Value::Function(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
                         self.push_inst(Instruction::Closure(f))
                     }
@@ -391,7 +389,7 @@ impl Context {
         }?;
         //if returning non-closure function, make closure
         let e = match e.as_ref() {
-            Value::Function(idx, _, _) => {
+            Value::Function(idx) => {
                 let cpos = self.push_inst(Instruction::Uinteger(*idx as u64));
                 self.push_inst(Instruction::Closure(cpos))
             }
@@ -462,8 +460,8 @@ impl Context {
                     };
                     let res = match f.as_ref() {
                         Value::Global(v) => match v.as_ref() {
-                            Value::Function(idx, statesize, _rty) => {
-                                self.emit_fncall(*idx as u64, *statesize, atvvec.clone(), rt)
+                            Value::Function(idx) => {
+                                self.emit_fncall(*idx as u64, atvvec.clone(), rt)
                             }
                             Value::Register(_) => {
                                 self.push_inst(Instruction::CallCls(v.clone(), atvvec.clone(), rt))
@@ -488,9 +486,7 @@ impl Context {
                             self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
                         }
 
-                        Value::Function(idx, statesize, _ret_t) => {
-                            self.emit_fncall(*idx as u64, *statesize, atvvec.clone(), rt)
-                        }
+                        Value::Function(idx) => self.emit_fncall(*idx as u64, atvvec.clone(), rt),
                         Value::ExtFunction(label, _ty) => {
                             if let Some(res) = self.make_intrinsics(*label, &atvvec)? {
                                 res
@@ -526,15 +522,11 @@ impl Context {
                 let (c_idx, f) = self.do_in_child_ctx(name, &binds, &atypes, |ctx, c_idx| {
                     let (res, _) = ctx.eval_expr(*body)?;
 
-                    let state_size = {
-                        let child = ctx.program.functions.get_mut(c_idx).unwrap();
-                        child.state_size
-                    };
-                    let push_sum = ctx.get_ctxdata().push_sum;
-                    if push_sum > 0 {
+                    let push_sum = &ctx.get_ctxdata().push_sum.clone();
+                    if !push_sum.is_empty() {
                         ctx.get_current_basicblock().0.push((
                             Arc::new(mir::Value::None),
-                            Instruction::PopStateOffset(push_sum),
+                            Instruction::PopStateOffset(push_sum.clone()),
                         )); //todo:offset size
                     }
                     match (res.as_ref(), rt.to_type()) {
@@ -544,7 +536,7 @@ impl Context {
                         (Value::State(v), _) => {
                             let _ = ctx.push_inst(Instruction::ReturnFeed(v.clone(), rt));
                         }
-                        (Value::Function(i, _, _), _) => {
+                        (Value::Function(i), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
                             let _ = ctx.push_inst(Instruction::Return(cls, rt));
@@ -554,7 +546,7 @@ impl Context {
                         }
                     };
 
-                    let f = Arc::new(Value::Function(c_idx, state_size, rt));
+                    let f = Arc::new(Value::Function(c_idx));
                     Ok((f, rt))
                 })?;
                 let child = self.program.functions.get_mut(c_idx).unwrap();
@@ -570,10 +562,10 @@ impl Context {
             Expr::Feed(id, expr) => {
                 //set typesize lazily
                 let res = self.push_inst(Instruction::GetState(ty));
-                self.get_ctxdata().state_offset += 1;
+                self.get_ctxdata().state_offset.push(StateSize::Word(1));
                 self.add_bind((*id, res.clone()));
                 let (retv, _t) = self.eval_expr(*expr)?;
-                self.get_current_fn().state_size += 1;
+                self.get_current_fn().add_typed_state_size(1, ty);
                 Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
@@ -592,7 +584,7 @@ impl Context {
 
                 match (
                     is_global,
-                    matches!(bodyv.as_ref(), Value::Function(_, _, _)),
+                    matches!(bodyv.as_ref(), Value::Function(_)),
                     then,
                 ) {
                     (true, false, Some(then_e)) => {
