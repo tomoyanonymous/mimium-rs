@@ -158,7 +158,7 @@ impl ByteCodeGenerator {
             Type::Unknown => todo!(),
         }
     }
-    fn word_size_for_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {
+    fn calc_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {
         state_sizes
             .as_ref()
             .iter()
@@ -459,11 +459,11 @@ impl ByteCodeGenerator {
                     Self::word_size_for_type(*ty),
                 ))
             }
-            mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(
-                Self::word_size_for_state_size(v) as i16,
-            )),
+            mir::Instruction::PushStateOffset(v) => {
+                Some(VmInstruction::ShiftStatePos(Self::calc_state_size(v) as i16))
+            }
             mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(
-                -(Self::word_size_for_state_size(v) as i16),
+                -(Self::calc_state_size(v) as i16),
             )),
             mir::Instruction::GetState(ty) => {
                 let size = Self::word_size_for_type(*ty);
@@ -604,7 +604,7 @@ impl ByteCodeGenerator {
         fidx: usize,
     ) -> (Symbol, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
-        let state_size = Self::word_size_for_state_size(mirfunc.get_state_sizes());
+        let state_size = Self::calc_state_size(mirfunc.get_state_sizes());
         let mut func = vm::FuncProto {
             nparam: mirfunc.args.len(),
             nret: Self::word_size_for_type(
