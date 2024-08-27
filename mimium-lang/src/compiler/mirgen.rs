@@ -86,9 +86,8 @@ impl Context {
             (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn()
-                    .add_typed_state_size(shift_size, rt.clone());
-                let mut coffset = &self.get_ctxdata().state_offset.clone();
+                self.get_current_fn().add_typed_state_size(shift_size, *rt);
+                let coffset = &self.get_ctxdata().state_offset.clone();
                 if !coffset.is_empty() {
                     self.get_current_basicblock().0.push((
                         Arc::new(Value::None),
@@ -145,6 +144,7 @@ impl Context {
     ) -> Option<Instruction> {
         debug_assert_eq!(args.len(), 1);
         let a0 = args[0].0.clone();
+        let a0_ty = args[0].1;
         match label.as_str() {
             intrinsics::NEG => Some(Instruction::NegF(a0)),
             intrinsics::SQRT => Some(Instruction::SqrtF(a0)),
@@ -152,7 +152,7 @@ impl Context {
             intrinsics::SIN => Some(Instruction::SinF(a0)),
             intrinsics::COS => Some(Instruction::CosF(a0)),
             intrinsics::MEM => {
-                self.get_current_fn().add_state_size(1);
+                self.get_current_fn().add_typed_state_size(1, a0_ty);
                 Some(Instruction::Mem(a0))
             }
             _ => None,

@@ -164,7 +164,6 @@ impl ByteCodeGenerator {
             .iter()
             .map(|x| match x {
                 StateSize::Typed(size, ty) => *size * Self::word_size_for_type(*ty) as u64,
-                StateSize::Word(size) => *size,
             })
             .sum()
     }

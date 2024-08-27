@@ -149,7 +149,6 @@ pub struct Function {
 #[derive(Debug, Clone, PartialEq)]
 pub enum StateSize {
     Typed(u64, TypeNodeId),
-    Word(u64),
 }
 
 impl Function {
@@ -175,14 +174,9 @@ impl Function {
         self.body.len() - 1
     }
 
-    // for the case where the state size can be determined immediately
-    pub fn add_state_size(&mut self, size: u64) {
-        self.state_sizes.push(StateSize::Word(1))
-    }
-
     // for the case where the state size will be calculated from the type later
     pub fn add_typed_state_size(&mut self, size: u64, ty: TypeNodeId) {
-        self.state_sizes.push(StateSize::Typed(1, ty))
+        self.state_sizes.push(StateSize::Typed(size, ty))
     }
 
     pub fn get_state_sizes(&self) -> &[StateSize] {
