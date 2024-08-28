@@ -346,6 +346,9 @@ impl Context {
         Ok(v)
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
+        // current base position
+        let state_offset = self.get_ctxdata().state_offset.clone();
+        // stack size of the function to be called
         let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
 
         let f = {
@@ -355,12 +358,14 @@ impl Context {
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
-        if !self.get_ctxdata().state_offset.is_empty() {
+        if !state_offset.is_empty() {
             self.get_current_basicblock().0.push((
                 Arc::new(Value::None),
-                Instruction::PushStateOffset(state_sizes.clone()),
+                Instruction::PushStateOffset(state_offset.clone()),
             ));
-            self.get_ctxdata().push_sum.append(&mut state_sizes.clone());
+            self.get_ctxdata()
+                .push_sum
+                .append(&mut state_offset.clone());
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
