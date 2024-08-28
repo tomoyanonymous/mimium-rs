@@ -604,7 +604,7 @@ impl ByteCodeGenerator {
         fidx: usize,
     ) -> (Symbol, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
-        let state_size = Self::calc_state_size(mirfunc.get_state_sizes());
+        let state_size = Self::calc_state_size(&mirfunc.state_sizes);
         let mut func = vm::FuncProto {
             nparam: mirfunc.args.len(),
             nret: Self::word_size_for_type(

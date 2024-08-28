@@ -143,7 +143,7 @@ pub struct Function {
     pub upindexes: Vec<Arc<Value>>,
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
-    state_sizes: Vec<StateSize>,
+    pub state_sizes: Vec<StateSize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -173,15 +173,6 @@ impl Function {
     pub fn add_new_basicblock(&mut self) -> usize {
         self.body.push(Block(vec![]));
         self.body.len() - 1
-    }
-
-    // for the case where the state size will be calculated from the type later
-    pub fn add_state_size(&mut self, size: u64, ty: TypeNodeId) {
-        self.state_sizes.push(StateSize { size, ty })
-    }
-
-    pub fn get_state_sizes(&self) -> &[StateSize] {
-        &self.state_sizes
     }
 }
 

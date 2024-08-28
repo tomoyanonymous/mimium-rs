@@ -86,7 +86,10 @@ impl Context {
             (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
-                self.get_current_fn().add_state_size(shift_size, *rt);
+                self.get_current_fn().state_sizes.push(StateSize {
+                    size: shift_size,
+                    ty: *rt,
+                });
                 let coffset = &self.get_ctxdata().state_offset.clone();
                 if !coffset.is_empty() {
                     self.get_current_basicblock().0.push((
@@ -152,7 +155,9 @@ impl Context {
             intrinsics::SIN => Some(Instruction::SinF(a0)),
             intrinsics::COS => Some(Instruction::CosF(a0)),
             intrinsics::MEM => {
-                self.get_current_fn().add_state_size(1, a0_ty);
+                self.get_current_fn()
+                    .state_sizes
+                    .push(StateSize { size: 1, ty: a0_ty });
                 Some(Instruction::Mem(a0))
             }
             _ => None,
@@ -341,12 +346,12 @@ impl Context {
         Ok(v)
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
-        let state_sizes = self.program.functions[idx as usize]
-            .get_state_sizes()
-            .to_vec();
+        let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
 
         let f = {
-            self.get_current_fn().add_state_size(1, ret_t);
+            self.get_current_fn()
+                .state_sizes
+                .append(&mut state_sizes.clone());
             self.push_inst(Instruction::Uinteger(idx))
         };
         //insert pushstateoffset
@@ -569,7 +574,9 @@ impl Context {
                     .push(StateSize { size: 1, ty });
                 self.add_bind((*id, res.clone()));
                 let (retv, _t) = self.eval_expr(*expr)?;
-                self.get_current_fn().add_state_size(1, ty);
+                self.get_current_fn()
+                    .state_sizes
+                    .push(StateSize { size: 1, ty });
                 Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
