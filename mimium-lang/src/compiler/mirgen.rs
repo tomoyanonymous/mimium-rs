@@ -363,9 +363,7 @@ impl Context {
                 Arc::new(Value::None),
                 Instruction::PushStateOffset(state_offset.clone()),
             ));
-            self.get_ctxdata()
-                .push_sum
-                .append(&mut state_offset.clone());
+            self.get_ctxdata().push_sum = state_offset.clone();
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
