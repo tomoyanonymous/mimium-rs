@@ -460,11 +460,13 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::PushStateOffset(v) => {
-                Some(VmInstruction::ShiftStatePos(Self::calc_state_size(v) as i16))
+                let state_size = Self::calc_state_size(v) as i16;
+                Some(VmInstruction::ShiftStatePos(state_size))
             }
-            mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(
-                -(Self::calc_state_size(v) as i16),
-            )),
+            mir::Instruction::PopStateOffset(v) => {
+                let state_size = Self::calc_state_size(v) as i16;
+                Some(VmInstruction::ShiftStatePos(-state_size))
+            }
             mir::Instruction::GetState(ty) => {
                 let size = Self::word_size_for_type(*ty);
                 let d = self.vregister.push_stack(&dst, size as _);
