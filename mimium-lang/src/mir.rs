@@ -146,7 +146,7 @@ pub struct Function {
     state_sizes: Vec<StateSize>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StateSize {
     pub size: u64,
     pub ty: TypeNodeId,

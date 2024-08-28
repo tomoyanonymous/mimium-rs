@@ -341,7 +341,9 @@ impl Context {
         Ok(v)
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
-        let mut state_sizes = self.get_current_fn().get_state_sizes().to_vec();
+        let state_sizes = self.program.functions[idx as usize]
+            .get_state_sizes()
+            .to_vec();
 
         let f = {
             self.get_current_fn().add_state_size(1, ret_t);
@@ -357,9 +359,9 @@ impl Context {
         }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
-        if !state_sizes.is_empty() {
-            self.get_ctxdata().state_offset.append(&mut state_sizes);
-        }
+        self.get_ctxdata()
+            .state_offset
+            .append(&mut state_sizes.clone());
         res
     }
     fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, TypeNodeId)>, CompileError> {
