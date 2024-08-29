@@ -357,18 +357,16 @@ impl Context {
                 .append(&mut state_sizes.clone());
             self.push_inst(Instruction::Uinteger(idx))
         };
-        //insert pushstateoffset
-        if !state_offset.is_empty() {
-            self.get_current_basicblock().0.push((
-                Arc::new(Value::None),
-                Instruction::PushStateOffset(state_offset.clone()),
-            ));
-            self.get_ctxdata()
-                .push_sum
-                .append(&mut state_offset.clone());
-        }
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
+
+        //insert pushstateoffset
+        self.get_current_basicblock().0.push((
+            Arc::new(Value::None),
+            Instruction::PushStateOffset(state_sizes.clone()),
+        ));
+        self.get_ctxdata().push_sum.append(&mut state_sizes.clone());
+
         self.get_ctxdata()
             .state_offset
             .append(&mut state_sizes.clone());
