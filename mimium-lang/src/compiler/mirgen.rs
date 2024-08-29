@@ -553,7 +553,8 @@ impl Context {
                         (Value::Function(i, _, _), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
-                            let _ = ctx.push_inst(Instruction::Return(cls, rt));
+                            let newres = ctx.push_inst(Instruction::CloseUpValue(cls.clone()));
+                            let _ = ctx.push_inst(Instruction::Return(newres, rt));
                         }
                         (_, _) => {
                             if rt.to_type().contains_function() {
@@ -591,6 +592,10 @@ impl Context {
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
+                    log::debug!(
+                        "{}",
+                        self.fn_label.map_or("".to_string(), |s| s.to_string())
+                    )
                 };
                 let insert_pos = if self.program.functions.is_empty() {
                     0
