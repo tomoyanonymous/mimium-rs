@@ -37,7 +37,7 @@ pub enum Instruction {
     //call internal state over time, destination,source
     GetState(Reg, TypeSize),
     SetState(Reg, TypeSize),
-    SetStatePos(Offset),
+    ShiftStatePos(Offset),
 
     // Close(), // currently not implemented as it is not required unless loop/break is used
     Return0,
@@ -101,7 +101,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Jmp(dst) => write!(f, "{:<10} {}", "jmp", dst),
             Instruction::GetState(dst, size) => write!(f, "{:<10} {} {}", "getstate", dst, size),
             Instruction::SetState(src, size) => write!(f, "{:<10} {} {}", "setstate", src, size),
-            Instruction::SetStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
+            Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
             Instruction::MoveRange(dst, src, n) => {

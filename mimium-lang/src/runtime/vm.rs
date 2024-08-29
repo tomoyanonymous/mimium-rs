@@ -55,8 +55,8 @@ impl StateStorage {
         let data_head = unsafe { self.rawdata.as_mut_ptr().offset(self.pos as isize) };
         Ringbuffer::new(data_head, size_in_samples)
     }
-    fn set_pos(&mut self, offset: i16) {
-        self.pos = offset as usize;
+    fn shift_pos(&mut self, offset: i16) {
+        self.pos = (self.pos as i64 + offset as i64) as usize;
     }
 }
 
@@ -685,7 +685,7 @@ impl Machine {
                     let dst = self.get_current_state().get_state_mut(size as _);
                     dst.copy_from_slice(vs);
                 }
-                Instruction::SetStatePos(v) => self.get_current_state().set_pos(v),
+                Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
                 Instruction::Delay(dst, src, time) => {
                     let i = self.get_stack(src as i64);
                     let t = self.get_stack(time as i64);
