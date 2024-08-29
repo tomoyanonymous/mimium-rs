@@ -25,9 +25,11 @@ const DELAY_ADDITIONAL_OFFSET: u64 = 3;
 struct ContextData {
     pub func_i: usize,
     pub current_bb: usize,
-    pub state_offset: Vec<StateSize>,
+    pub next_state_offset: Option<Vec<StateSize>>,
+    pub cur_state_pos: Vec<StateSize>,
     pub push_sum: Vec<StateSize>,
 }
+
 #[derive(Debug)]
 pub struct Context {
     typeenv: InferContext,
@@ -90,7 +92,7 @@ impl Context {
                     size: shift_size,
                     ty: *rt,
                 });
-                let coffset = &self.get_ctxdata().state_offset.clone();
+                let coffset = &self.get_ctxdata().cur_state_pos.clone();
                 if !coffset.is_empty() {
                     self.get_current_basicblock().0.push((
                         Arc::new(Value::None),
@@ -265,7 +267,8 @@ impl Context {
         self.data.push(ContextData {
             func_i: c_idx,
             current_bb: 0,
-            state_offset: vec![],
+            next_state_offset: None,
+            cur_state_pos: vec![],
             push_sum: vec![],
         });
         self.data_i += 1;
@@ -346,10 +349,18 @@ impl Context {
         Ok(v)
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
-        // current base position
-        let state_offset = self.get_ctxdata().state_offset.clone();
         // stack size of the function to be called
         let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
+
+        if let Some(mut offset) = self.get_ctxdata().next_state_offset.take() {
+            //insert pushstateoffset
+            self.get_current_basicblock().0.push((
+                Arc::new(Value::None),
+                Instruction::PushStateOffset(offset.clone()),
+            ));
+
+            self.get_ctxdata().push_sum.append(&mut offset);
+        }
 
         let f = {
             self.get_current_fn()
@@ -360,16 +371,14 @@ impl Context {
 
         let res = self.push_inst(Instruction::Call(f.clone(), args, ret_t));
 
-        //insert pushstateoffset
-        self.get_current_basicblock().0.push((
-            Arc::new(Value::None),
-            Instruction::PushStateOffset(state_sizes.clone()),
-        ));
-        self.get_ctxdata().push_sum.append(&mut state_sizes.clone());
+        if !state_sizes.is_empty() {
+            self.get_ctxdata()
+                .cur_state_pos
+                .append(&mut state_sizes.clone());
 
-        self.get_ctxdata()
-            .state_offset
-            .append(&mut state_sizes.clone());
+            self.get_ctxdata().next_state_offset = Some(state_sizes);
+        }
+
         res
     }
     fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, TypeNodeId)>, CompileError> {
@@ -573,7 +582,7 @@ impl Context {
                 //set typesize lazily
                 let res = self.push_inst(Instruction::GetState(ty));
                 self.get_ctxdata()
-                    .state_offset
+                    .cur_state_pos
                     .push(StateSize { size: 1, ty });
                 self.add_bind((*id, res.clone()));
                 let (retv, _t) = self.eval_expr(*expr)?;
