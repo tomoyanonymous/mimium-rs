@@ -92,13 +92,12 @@ impl Context {
                     size: shift_size,
                     ty: *rt,
                 });
-                let coffset = &self.get_ctxdata().cur_state_pos.clone();
+                let coffset = self.get_ctxdata().cur_state_pos.clone();
                 if !coffset.is_empty() {
-                    self.get_current_basicblock().0.push((
-                        Arc::new(Value::None),
-                        Instruction::PushStateOffset(coffset.clone()),
-                    ));
-                    self.get_ctxdata().push_sum.append(&mut coffset.clone());
+                    self.get_ctxdata().push_sum.extend_from_slice(&coffset);
+                    self.get_current_basicblock()
+                        .0
+                        .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
                 }
                 let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
@@ -352,20 +351,18 @@ impl Context {
         // stack size of the function to be called
         let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
 
-        if let Some(mut offset) = self.get_ctxdata().next_state_offset.take() {
+        if let Some(offset) = self.get_ctxdata().next_state_offset.take() {
+            self.get_ctxdata().push_sum.extend_from_slice(&offset);
             //insert pushstateoffset
-            self.get_current_basicblock().0.push((
-                Arc::new(Value::None),
-                Instruction::PushStateOffset(offset.clone()),
-            ));
-
-            self.get_ctxdata().push_sum.append(&mut offset);
+            self.get_current_basicblock()
+                .0
+                .push((Arc::new(Value::None), Instruction::PushStateOffset(offset)));
         }
 
         let f = {
             self.get_current_fn()
                 .state_sizes
-                .append(&mut state_sizes.clone());
+                .extend_from_slice(&state_sizes);
             self.push_inst(Instruction::Uinteger(idx))
         };
 
@@ -374,7 +371,7 @@ impl Context {
         if !state_sizes.is_empty() {
             self.get_ctxdata()
                 .cur_state_pos
-                .append(&mut state_sizes.clone());
+                .extend_from_slice(&state_sizes);
 
             self.get_ctxdata().next_state_offset = Some(state_sizes);
         }
@@ -541,11 +538,11 @@ impl Context {
                 let (c_idx, f) = self.do_in_child_ctx(name, &binds, &atypes, |ctx, c_idx| {
                     let (res, _) = ctx.eval_expr(*body)?;
 
-                    let push_sum = &ctx.get_ctxdata().push_sum.clone();
+                    let push_sum = ctx.get_ctxdata().push_sum.clone();
                     if !push_sum.is_empty() {
                         ctx.get_current_basicblock().0.push((
                             Arc::new(mir::Value::None),
-                            Instruction::PopStateOffset(push_sum.clone()),
+                            Instruction::PopStateOffset(push_sum),
                         )); //todo:offset size
                     }
                     match (res.as_ref(), rt.to_type()) {
