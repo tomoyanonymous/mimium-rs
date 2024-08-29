@@ -158,7 +158,7 @@ impl ByteCodeGenerator {
             Type::Unknown => todo!(),
         }
     }
-    fn calc_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {
+    pub fn calc_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {
         state_sizes
             .as_ref()
             .iter()
