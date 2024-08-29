@@ -1,6 +1,27 @@
-use crate::format_vec;
+use crate::{compiler::bytecodegen::ByteCodeGenerator, format_vec};
 
 use super::*;
+
+fn display_state_sizes<T: AsRef<[StateSize]>>(x: T) -> String {
+    let x_ref = x.as_ref();
+
+    // it's a bit weird to use a function defined for bytecode to display an
+    // MIR, but this is for the sake of debugging.
+    let x_calculated = ByteCodeGenerator::calc_state_size(x_ref);
+
+    let x_str = x_ref
+        .iter()
+        .map(|x| {
+            if x.size == 1 {
+                x.ty.to_type().to_string()
+            } else {
+                format!("({}*{})", x.ty.to_type(), x.size)
+            }
+        })
+        .collect::<Vec<String>>();
+
+    format!("{x_calculated}(=[{}])", x_str.join(","))
+}
 
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -18,7 +39,7 @@ impl std::fmt::Display for Mir {
             if let Some(upper_i) = fun.upperfn_i {
                 let _ = write!(f, "upper:{upper_i}");
             }
-            let _ = write!(f, " state_size: {}", fun.state_size);
+            let _ = write!(f, " state_size: {}", display_state_sizes(&fun.state_sizes));
             for (i, block) in fun.body.iter().enumerate() {
                 let _ = write!(f, "\n  block {i}\n");
                 for (v, insts) in block.0.iter() {
@@ -46,9 +67,7 @@ impl std::fmt::Display for Value {
             Value::Global(gv) => write!(f, "global({})", *gv),
             Value::Argument(_, v) => write!(f, "{}", v.0),
             Value::Register(r) => write!(f, "reg({r})"),
-            Value::Function(id, _statesize, nret) => {
-                write!(f, "function {id} (nret: {})", nret.to_type())
-            }
+            Value::Function(id) => write!(f, "function {id}"),
             Value::ExtFunction(label, t) => write!(f, "extfun {label} {}", t.to_type()),
             Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
@@ -100,8 +119,9 @@ impl std::fmt::Display for Instruction {
                 )
             }
             Instruction::Closure(fun) => {
-                if let Value::Function(idx, _, nret) = fun.as_ref() {
-                    write!(f, "closure {idx} (nret: {})", nret.to_type())
+                if let Value::Function(idx) = fun.as_ref() {
+                    // TODO: convert idx to function in order to show more information
+                    write!(f, "closure {idx}")
                 } else {
                     write!(f, "closure {}", *fun)
                 }
@@ -112,8 +132,12 @@ impl std::fmt::Display for Instruction {
             Instruction::SetGlobal(dst, src, ty) => {
                 write!(f, "setglobal {} {} {}", *dst, *src, ty.to_type())
             }
-            Instruction::PushStateOffset(v) => write!(f, "pushstateidx {}", *v),
-            Instruction::PopStateOffset(v) => write!(f, "popstateidx  {}", *v),
+            Instruction::PushStateOffset(v) => {
+                write!(f, "pushstateidx {}", display_state_sizes(v))
+            }
+            Instruction::PopStateOffset(v) => {
+                write!(f, "popstateidx  {}", display_state_sizes(v))
+            }
 
             Instruction::GetState(ty) => write!(f, "getstate {}", ty.to_type()),
             Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::interner::{Symbol, TypeNodeId};
-use crate::mir::{self, Mir};
+use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{Type, TypeSize};
@@ -157,6 +157,13 @@ impl ByteCodeGenerator {
             Type::Intermediate(_) => 1, // TODO
             Type::Unknown => todo!(),
         }
+    }
+    pub fn calc_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {
+        state_sizes
+            .as_ref()
+            .iter()
+            .map(|x| x.size * Self::word_size_for_type(x.ty) as u64)
+            .sum()
     }
     fn get_binop(&mut self, v1: &Arc<mir::Value>, v2: &Arc<mir::Value>) -> (Reg, Reg) {
         let r1 = self.find(v1);
@@ -362,7 +369,7 @@ impl ByteCodeGenerator {
                         let (fadd, argsize) = self.prepare_function(bytecodes_dst, &dst, args);
                         Some(VmInstruction::Call(fadd, argsize, rsize))
                     }
-                    mir::Value::Function(_idx, _state_size, _nret) => {
+                    mir::Value::Function(_idx) => {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(label, ty) => {
@@ -403,7 +410,7 @@ impl ByteCodeGenerator {
                             n => Some(VmInstruction::MoveRange(d, s, n)),
                         }
                     }
-                    mir::Value::Function(_idx, _state_size, _nret) => {
+                    mir::Value::Function(_idx) => {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(_idx, _) => {
@@ -452,8 +459,14 @@ impl ByteCodeGenerator {
                     Self::word_size_for_type(*ty),
                 ))
             }
-            mir::Instruction::PushStateOffset(v) => Some(VmInstruction::ShiftStatePos(*v as i16)),
-            mir::Instruction::PopStateOffset(v) => Some(VmInstruction::ShiftStatePos(-(*v as i16))),
+            mir::Instruction::PushStateOffset(v) => {
+                let state_size = Self::calc_state_size(v) as i16;
+                Some(VmInstruction::ShiftStatePos(state_size))
+            }
+            mir::Instruction::PopStateOffset(v) => {
+                let state_size = Self::calc_state_size(v) as i16;
+                Some(VmInstruction::ShiftStatePos(-state_size))
+            }
             mir::Instruction::GetState(ty) => {
                 let size = Self::word_size_for_type(*ty);
                 let d = self.vregister.push_stack(&dst, size as _);
@@ -593,8 +606,7 @@ impl ByteCodeGenerator {
         fidx: usize,
     ) -> (Symbol, vm::FuncProto) {
         log::trace!("generating function {}", mirfunc.label.0);
-        let state_size = mirfunc.state_size
-            * Self::word_size_for_type(*mirfunc.return_type.get().unwrap()) as u64;
+        let state_size = Self::calc_state_size(&mirfunc.state_sizes);
         let mut func = vm::FuncProto {
             nparam: mirfunc.args.len(),
             nret: Self::word_size_for_type(
