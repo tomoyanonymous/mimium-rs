@@ -108,6 +108,23 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
         },
     })
 }
+fn binop_folder<'a, I, OP>(prec: I, op: OP) -> BoxedParser<'a, Token, ExprNodeId, Simple<Token>>
+where
+    I: Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a,
+    OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
+{
+    prec.clone()
+        .then(op.then(prec).repeated())
+        .foldl(move |x, ((op, opspan), y)| {
+            Expr::Apply(
+                Expr::Var(op.get_associated_fn_name()).into_id(opspan),
+                vec![x, y],
+            )
+            .into_id(x.to_span().start..y.to_span().end)
+        })
+        .boxed()
+}
+
 fn op_parser<'a, I>(apply: I) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a
 where
     I: Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a,
@@ -115,7 +132,7 @@ where
     let unary = select! { Token::Op(Op::Minus) => {} }
         .map_with_span(|e, s| (e, s))
         .repeated()
-        .then(apply)
+        .then(apply.clone())
         .foldr(|(_op, op_span), rhs| {
             let rhs_span = rhs.to_span();
             let neg_op = Expr::Var("neg".to_symbol()).into_id(op_span.start..rhs_span.start);
@@ -123,90 +140,43 @@ where
         })
         .labelled("unary");
 
-    let op_cls = |x: ExprNodeId, y: ExprNodeId, op: Op, opspan: Span| {
-        Expr::Apply(
-            Expr::Var(op.get_associated_fn_name()).into_id(opspan),
-            vec![x, y],
-        )
-        .into_id(x.to_span().start..y.to_span().end)
-    };
     let optoken = move |o: Op| {
-        just(Token::Op(o)).map_with_span(|e, s| {
-            (
-                match e {
-                    Token::Op(o) => o,
-                    _ => Op::Unknown(String::from("invalid")),
-                },
-                s,
-            )
-        })
+        just(Token::Op(o))
+            .map_with_span(|e, s| {
+                (
+                    match e {
+                        Token::Op(o) => o,
+                        _ => Op::Unknown(String::from("invalid")),
+                    },
+                    s,
+                )
+            })
+            .boxed()
     };
+    //defining binary operators in order of precedence.
+    let ops = [
+        optoken(Op::Exponent),
+        choice((
+            optoken(Op::Product),
+            optoken(Op::Divide),
+            optoken(Op::Modulo),
+        ))
+        .boxed(),
+        optoken(Op::Sum).or(optoken(Op::Minus)).boxed(),
+        optoken(Op::Equal).or(optoken(Op::NotEqual)).boxed(),
+        optoken(Op::And),
+        optoken(Op::Or),
+        choice((
+            optoken(Op::LessThan),
+            optoken(Op::LessEqual),
+            optoken(Op::GreaterThan),
+            optoken(Op::GreaterEqual),
+        ))
+        .boxed(),
+        optoken(Op::Pipe),
+    ];
+    ops.into_iter().fold(unary.boxed(), binop_folder)
 
-    let op = optoken(Op::Exponent);
-    let exponent = unary
-        .clone()
-        .then(op.then(unary).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = choice((
-        optoken(Op::Product),
-        optoken(Op::Divide),
-        optoken(Op::Modulo),
-    ));
-    let product = exponent
-        .clone()
-        .then(op.then(exponent).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = optoken(Op::Sum).or(optoken(Op::Minus));
-    let add = product
-        .clone()
-        .then(op.then(product).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-
-    let op = optoken(Op::Equal).or(optoken(Op::NotEqual));
-
-    let cmp = add
-        .clone()
-        .then(op.then(add).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = optoken(Op::And);
-    let cmp = cmp
-        .clone()
-        .then(op.then(cmp).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = optoken(Op::Or);
-    let cmp = cmp
-        .clone()
-        .then(op.then(cmp).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = choice((
-        optoken(Op::LessThan),
-        optoken(Op::LessEqual),
-        optoken(Op::GreaterThan),
-        optoken(Op::GreaterEqual),
-    ));
-    let cmp = cmp
-        .clone()
-        .then(op.then(cmp).repeated())
-        .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-        .boxed();
-    let op = optoken(Op::Pipe);
-
-    let pipe = cmp
-        .clone()
-        .then(op.then(cmp).repeated())
-        .foldl(|lhs, ((_, _), rhs)| {
-            let span = lhs.to_span().start..rhs.to_span().end;
-            Expr::Apply(rhs, vec![lhs]).into_id(span)
-        })
-        .boxed();
-
-    pipe
 }
 fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let lvar = lvar_parser_typed();
