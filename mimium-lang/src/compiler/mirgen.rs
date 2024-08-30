@@ -682,6 +682,18 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
+Expr::Assign(assignee, body) => {
+                let (src, ty) = self.eval_expr(*body)?;
+                let dst = self.eval_var(*assignee, ty, &span)?;
+                Ok((self.push_inst(Instruction::Store(dst, src, ty)), ty))
+            }
+            Expr::Then(body, then) => {
+                let _ = self.eval_expr(*body)?;
+                match then {
+                    Some(t) => self.eval_expr(*t),
+                    None => Ok((Arc::new(Value::None), unit!())),
+                }
+            }
             Expr::If(cond, then, else_) => {
                 let (c, _) = self.eval_expr(*cond)?;
                 let bbidx = self.get_ctxdata().current_bb;
