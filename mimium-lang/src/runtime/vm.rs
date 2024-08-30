@@ -443,8 +443,8 @@ impl Machine {
         cls.is_closed = true;
     }
     #[allow(clippy::filter_map_bool_then)]
-    fn release_open_closures(&mut self, local_closures: &[(RawVal, ClosureIdx)]) {
-        for (_, clsidx) in local_closures.iter() {
+    fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
+        for clsidx in local_closures.iter() {
             let cls = self.get_closure(*clsidx);
             if !cls.is_closed {
                 self.closures.remove(clsidx.0);
@@ -459,7 +459,7 @@ impl Machine {
         cls_i: Option<ClosureIdx>,
     ) -> ReturnCode {
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_closures: Vec<(RawVal, ClosureIdx)> = vec![];
+        let mut local_closures: Vec<ClosureIdx> = vec![];
         let mut pcounter = 0;
         // if cfg!(test) {
         //     log::trace!("{:?}", func);
@@ -549,7 +549,7 @@ impl Machine {
                         self.base_pointer,
                         fn_proto_pos,
                     )));
-                    local_closures.push((dst as _, vaddr));
+                    local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
                 Instruction::Close(src) => {
