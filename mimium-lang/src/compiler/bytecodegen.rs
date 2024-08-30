@@ -426,9 +426,9 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::Closure(dst, idx))
             }
             mir::Instruction::CloseUpValue(src) => {
-                let src = self.vregister.find(src).unwrap();
-                let dst = self.get_destination(dst,1);
-                Some(VmInstruction::Close(dst, src))
+                let src = self.vregister.find_keep(src).unwrap();
+                self.vregister.get_top().0.insert(dst, MemoryRegion(src, 1));
+                Some(VmInstruction::Close(src))
             }
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
@@ -730,9 +730,9 @@ mod test {
         use crate::types::PType;
         use crate::types::Type;
         extern crate colog;
-        colog::default_builder()
-            .filter_level(log::LevelFilter::Trace)
-            .init();
+        // colog::default_builder()
+        //     .filter_level(log::LevelFilter::Trace)
+        //     .init();
         // fn test(hoge){
         //   hoge+1
         //}

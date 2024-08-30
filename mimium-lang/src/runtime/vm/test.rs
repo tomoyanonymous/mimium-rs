@@ -99,7 +99,7 @@ fn closuretest() {
         Instruction::AddI(3, 0, 2),   // beg+1, n is in reg0
         Instruction::MoveConst(4, 1), //load posf in reg4
         Instruction::Closure(5, 4), // make closure of constant table 1(which is the function table 0)
-        Instruction::Close(5, 5),   // convert n(at 0) and inc(at 1) into closed value
+        Instruction::Close(5),      // convert n(at 0) and inc(at 1) into closed value
         Instruction::Return(5, 1),  // return 1 value
     ];
     let makecounter_f = FuncProto {
@@ -229,7 +229,7 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
         Instruction::Return0, // return single value at 1
     ];
     if is_closed {
-        inner_insts.insert(3, Instruction::Close(0, 0))
+        inner_insts.insert(2, Instruction::Close(0))
     }
     let main_f = FuncProto {
         nparam: 0,

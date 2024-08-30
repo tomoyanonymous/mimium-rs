@@ -352,7 +352,6 @@ impl Machine {
         };
         (abs_pos..end, slice)
     }
-    #[cfg(debug_assertions)]
     fn get_closure(&self, idx: ClosureIdx) -> &Closure {
         debug_assert!(
             self.closures.contains_key(idx.0),
@@ -360,7 +359,6 @@ impl Machine {
         );
         unsafe { self.closures.get_unchecked(idx.0) }
     }
-    #[cfg(debug_assertions)]
     fn get_closure_mut(&mut self, idx: ClosureIdx) -> &mut Closure {
         debug_assert!(
             self.closures.contains_key(idx.0),
@@ -423,32 +421,29 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
-    fn close_upvalues(&mut self, src: Reg, local_closures: &[(usize, ClosureIdx)]) {
-        local_closures
+    fn close_upvalues(&mut self, src: Reg) {
+        let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
+
+        let newupvls = self
+            .get_closure(clsidx)
+            .upvalues
             .iter()
-            .filter(|(stack_pos, _)| (src == *stack_pos as u8))
-            .for_each(|(_, clsidx)| {
-                let newupvls = self
-                    .get_closure(*clsidx)
-                    .upvalues
-                    .iter()
-                    .map(|upv| {
-                        if let UpValue::Open(i) = upv {
-                            let (_range, ov) =
-                                self.get_open_upvalue(self.base_pointer as usize, *i);
-                            UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
-                        } else {
-                            upv.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                let cls = self.get_closure_mut(*clsidx);
-                cls.upvalues = newupvls;
-                cls.is_closed = true;
-            });
+            .map(|upv| {
+                if let UpValue::Open(i) = upv {
+                    let (_range, ov) =
+                        self.get_open_upvalue(self.base_pointer as usize, *i);
+                    UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
+                } else {
+                    upv.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let cls = self.get_closure_mut(clsidx);
+        cls.upvalues = newupvls;
+        cls.is_closed = true;
     }
     #[allow(clippy::filter_map_bool_then)]
-    fn release_open_closures(&mut self, local_closures: &[(usize, ClosureIdx)]) {
+    fn release_open_closures(&mut self, local_closures: &[(RawVal, ClosureIdx)]) {
         for (_, clsidx) in local_closures.iter() {
             let cls = self.get_closure(*clsidx);
             if !cls.is_closed {
@@ -464,7 +459,7 @@ impl Machine {
         cls_i: Option<ClosureIdx>,
     ) -> ReturnCode {
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
+        let mut local_closures: Vec<(RawVal, ClosureIdx)> = vec![];
         let mut pcounter = 0;
         // if cfg!(test) {
         //     log::trace!("{:?}", func);
@@ -554,12 +549,11 @@ impl Machine {
                         self.base_pointer,
                         fn_proto_pos,
                     )));
-                    local_closures.push((dst as usize, vaddr));
+                    local_closures.push((dst as _, vaddr));
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
-                Instruction::Close(dst, src) => {
-                    self.close_upvalues(src, &local_closures);
-                    self.set_stack(dst as _, self.get_stack(src as _));
+                Instruction::Close(src) => {
+                    self.close_upvalues(src);
                 }
                 Instruction::Return0 => {
                     self.stack.truncate((self.base_pointer - 1) as usize);
