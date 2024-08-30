@@ -35,7 +35,7 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Var(Symbol, Option<Time>),
+    Var(Symbol),
     Block(Option<ExprNodeId>),
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
@@ -102,10 +102,7 @@ impl MiniPrint for Expr {
     fn simple_print(&self) -> String {
         match self {
             Expr::Literal(l) => l.simple_print(),
-            Expr::Var(v, t) => match t {
-                Some(t) => format!("{}@{}", v, t),
-                None => v.to_string(),
-            },
+            Expr::Var(v) => format!("{v}"),
             Expr::Block(e) => e.map_or("".to_string(), |eid| {
                 format!("(block {})", eid.to_expr().simple_print())
             }),

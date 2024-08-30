@@ -451,7 +451,7 @@ impl InferContext {
                 };
                 res
             }
-            Expr::Var(name, _time) => self.lookup(name, &span),
+            Expr::Var(name) => self.lookup(name, &span),
             Expr::Apply(fun, callee) => {
                 let fnl = self.infer_type(*fun)?;
                 let callee_t = self.infer_vec(callee.as_slice())?;

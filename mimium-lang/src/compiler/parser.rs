@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
+use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
@@ -46,17 +46,22 @@ fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clon
         func.or(atom).boxed().labelled("Type")
     })
 }
-
-fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
+    select! { Token::Ident(s) => s }.labelled("ident")
+}
+fn literals_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     select! {
-        Token::Ident(s) => Expr::Var(s,None),
-        Token::Int(x) => Expr::Literal(Literal::Int(x)),
-        Token::Float(x) =>Expr::Literal(Literal::Float(x.parse().unwrap())),
-        Token::Str(s) => Expr::Literal(Literal::String(s)),
-        Token::SelfLit => Expr::Literal(Literal::SelfLit),
-        Token::Now => Expr::Literal(Literal::Now),
+        Token::Int(x) => Literal::Int(x),
+        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
+        Token::Str(s) => Literal::String(s),
+        Token::SelfLit => Literal::SelfLit,
+        Token::Now => Literal::Now,
     }
-    .labelled("value")
+    .map(Expr::Literal)
+    .labelled("literal")
+}
+fn var_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+    ident_parser().map(Expr::Var)
 }
 fn with_type_annotation<P, O>(
     parser: P,
@@ -68,8 +73,14 @@ where
         .then(just(Token::Colon).ignore_then(type_parser()).or_not())
         .map(|(id, t)| (id, t))
 }
-fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
-    with_type_annotation(select! { Token::Ident(s) => s })
+
+fn placement_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
+    //todo! it can be the left hand expression of assignment i.e. can have memory address,
+    //including var(`v`), Tuple dot access(`v.0`), array access(`v[2]`), struct member access...
+    ident_parser().labelled("placement_values")
+}
+fn lvar_parser_typed() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
+    with_type_annotation(ident_parser())
         .map_with_span(|(sym, t), span| match t {
             Some(ty) => TypedId { id: sym, ty },
             None => TypedId {
@@ -77,7 +88,7 @@ fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
                 ty: Type::Unknown.into_id_with_span(span),
             },
         })
-        .labelled("lvar")
+        .labelled("lvar_typed")
 }
 fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> + Clone {
     let pat = recursive(|pat| {
@@ -99,9 +110,9 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
 }
 
 fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let lvar = lvar_parser();
+    let lvar = lvar_parser_typed();
     let pattern = pattern_parser();
-    let val = val_parser();
+    let val = literals_parser().or(var_parser());
     let expr_group = recursive(|expr_group| {
         let expr = recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
             let parenexpr = expr
@@ -130,7 +141,7 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, body))
                 .labelled("lambda");
 
-            let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
+            let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s) }
                 .map_with_span(|e, s| e.into_id(s))
                 .then_ignore(just(Token::ParenBegin))
                 .then(expr_group.clone())
@@ -187,14 +198,14 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 .foldr(|(_op, op_span), rhs| {
                     let rhs_span = rhs.to_span();
                     let neg_op =
-                        Expr::Var("neg".to_symbol(), None).into_id(op_span.start..rhs_span.start);
+                        Expr::Var("neg".to_symbol()).into_id(op_span.start..rhs_span.start);
                     Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
                 })
                 .labelled("unary");
 
             let op_cls = |x: ExprNodeId, y: ExprNodeId, op: Op, opspan: Span| {
                 Expr::Apply(
-                    Expr::Var(op.get_associated_fn_name(), None).into_id(opspan),
+                    Expr::Var(op.get_associated_fn_name()).into_id(opspan),
                     vec![x, y],
                 )
                 .into_id(x.to_span().start..y.to_span().end)
@@ -310,7 +321,7 @@ fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
 }
 fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let expr = expr_parser();
-    let lvar = lvar_parser();
+    let lvar = lvar_parser_typed();
     let blockstart = just(Token::BlockBegin)
         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated());
     let blockend = just(Token::LineBreak)

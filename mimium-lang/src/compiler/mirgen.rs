@@ -428,7 +428,7 @@ impl Context {
                 let t = InferContext::infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name, _time) => Ok((self.eval_var(*name, ty, &span)?, ty)),
+            Expr::Var(name) => Ok((self.eval_var(*name, ty, &span)?, ty)),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)

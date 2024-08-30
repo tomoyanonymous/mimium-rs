@@ -59,7 +59,7 @@ fn convert_self(e_id: ExprNodeId, feedctx: FeedId) -> Result<ConvertResult, Erro
         Expr::Literal(Literal::SelfLit) => match feedctx {
             FeedId::Global => Err(Error::NoParentSelf(span.clone())),
             FeedId::Local(i) => Ok(ConvertResult::Err(
-                Expr::Var(get_feedvar_name(i), None).into_id(span.clone()),
+                Expr::Var(get_feedvar_name(i)).into_id(span.clone()),
             )),
         },
         Expr::Tuple(v) => {
@@ -201,7 +201,7 @@ mod test {
                 None,
                 Expr::Feed(
                     "feed_id0".to_symbol(),
-                    Expr::Var("feed_id0".to_symbol(), None).into_id(0..1),
+                    Expr::Var("feed_id0".to_symbol()).into_id(0..1),
                 )
                 .into_id(0..1),
             )
