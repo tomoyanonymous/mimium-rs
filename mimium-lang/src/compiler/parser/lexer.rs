@@ -121,10 +121,12 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .or(linebreak)
         .recover_with(skip_then_retry_until([]));
 
+    let whitespaces = one_of(" \t\u{0020}").repeated();
+
     token
         .map_with_span(|tok, span| (tok, span))
         // .padded_by(comment_parser().repeated())
-        .padded_by(just(' ').or(just('\t').or(just('\u{0020}'))).or_not())
+        .padded_by(whitespaces)
         .repeated()
         .then_ignore(end())
 }
@@ -185,5 +187,19 @@ another line
         assert!(res.is_some());
         assert_eq!(ans, res.unwrap());
         assert_eq!(src.len(), 75);
+    }
+
+    #[test]
+    fn test_whitespaces() {
+        let cases = [
+            "foo ",    // single white space at end
+            "foo  ",   // multiple white spaces at end
+            "foo  \n", // linebreak at end
+        ];
+        for c in cases {
+            let (res, errs) = lexer().parse_recovery(c);
+            assert!(errs.is_empty(), "failed to parse");
+            assert_eq!(res.unwrap()[0], (Token::Ident("foo".to_symbol()), 0..3))
+        }
     }
 }
