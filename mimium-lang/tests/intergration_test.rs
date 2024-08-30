@@ -235,6 +235,12 @@ fn stateful_closure() {
     ];
     assert_eq!(res, ans);
 }
+#[test]
+fn closure_counter() {
+    let res = run_file_test_mono("closure_counter.mmm", 5).unwrap();
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
 
 #[test]
 fn hof_state() {

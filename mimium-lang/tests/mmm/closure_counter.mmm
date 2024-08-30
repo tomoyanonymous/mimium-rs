@@ -1,0 +1,14 @@
+// counter implemented using closure. for the test of assignment expression
+fn makecounter(){
+    let x = 0.0
+    let countup = | |{
+        x = x+1.0
+        x
+    }
+    countup
+}
+let myc = makecounter();
+fn dsp(){
+    myc()
+}
+
