@@ -2,8 +2,9 @@
 fn makecounter(){
     let x = 0.0
     let countup = | |{
+        let res = x
         x = x+1.0
-        x
+        res 
     }
     countup
 }

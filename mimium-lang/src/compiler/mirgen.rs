@@ -344,6 +344,43 @@ impl Context {
         };
         Ok(v)
     }
+    fn eval_assign(
+        &mut self,
+        name: Symbol,
+        src: VPtr,
+        t: TypeNodeId,
+        span: &Span,
+    ) -> Result<(), CompileError> {
+        match self.lookup(&name) {
+            LookupRes::Local(v) => match v.as_ref() {
+                Value::Argument(_i, _a) => Err(CompileError(
+                    CompileErrorKind::AssignmentToArg,
+                    span.clone(),
+                )),
+                _ => {
+                    self.push_inst(Instruction::Store(v.clone(), src, t));
+                    Ok(())
+                }
+            },
+            LookupRes::UpValue(_level, upv) => {
+                //todo: nested closure
+                let currentf = self.get_current_fn();
+                let upi = currentf.get_or_insert_upvalue(&upv) as _;
+                self.push_inst(Instruction::SetUpValue(upi, src, t));
+                Ok(())
+            }
+            LookupRes::Global(dst) => match dst.as_ref() {
+                Value::Global(_gv) => {
+                    self.push_inst(Instruction::SetGlobal(dst.clone(), src.clone(), t));
+                    Ok(())
+                }
+                _ => unreachable!("non global_value"),
+            },
+            LookupRes::None => {
+                unreachable!("invalid value assignment")
+            }
+        }
+    }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
         // stack size of the function to be called
         let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
@@ -678,8 +715,8 @@ impl Context {
             }
             Expr::Assign(assignee, body) => {
                 let (src, ty) = self.eval_expr(*body)?;
-                let dst = self.eval_rvar(*assignee, ty, &span)?;
-                Ok((self.push_inst(Instruction::Store(dst, src, ty)), ty))
+                self.eval_assign(*assignee, src, ty, &span)?;
+                Ok((Arc::new(Value::None), unit!()))
             }
             Expr::Then(body, then) => {
                 let _ = self.eval_expr(*body)?;
@@ -716,6 +753,7 @@ impl Context {
 #[derive(Clone, Debug)]
 pub enum CompileErrorKind {
     TypingFailure(typing::ErrorKind),
+    AssignmentToArg,
     UnboundedDelay,
     TooManyConstants,
     VariableNotFound(String),
@@ -728,6 +766,7 @@ impl std::fmt::Display for CompileError {
         let CompileError(kind, _span) = self;
         match kind {
             CompileErrorKind::TypingFailure(k) => write!(f, "{k}"),
+            CompileErrorKind::AssignmentToArg => write!(f, "Arguments can not be mutated"),
             CompileErrorKind::UnboundedDelay => {
                 write!(f, "Maximium delay time needs to be a number literal.")
             }

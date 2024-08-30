@@ -41,7 +41,7 @@ pub enum Instruction {
     Alloc(TypeNodeId),
     // load value to register from the pointer type
     Load(VPtr, TypeNodeId),
-    // store value to pointer
+    // Store value to stack(destination,source, type)
     Store(VPtr, VPtr, TypeNodeId),
     // Instruction for computing destination address like LLVM's GetElementPtr.
     // This instruction does no actual computation on runtime.
@@ -62,7 +62,7 @@ pub enum Instruction {
     CloseUpValue(VPtr),
     //label to funcproto  and localvar offset?
     GetUpValue(u64, TypeNodeId),
-    SetUpValue(u64, TypeNodeId),
+    SetUpValue(u64, VPtr, TypeNodeId),
     //internal state: feed and delay
     PushStateOffset(Vec<StateSize>),
     PopStateOffset(Vec<StateSize>),
