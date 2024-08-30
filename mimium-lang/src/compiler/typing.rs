@@ -448,8 +448,15 @@ impl InferContext {
                 let res = match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
-                };
-                res
+            Expr::Assign(name, expr) => {
+                let assignee_t = self.lookup(name, &span)?;
+                let e_t = self.infer_type(*expr)?;
+                self.unify_types(assignee_t, e_t)?;
+                Ok(unit!())
+            }
+            Expr::Then(e, then) => {
+                let _ = self.infer_type(*e)?;
+                then.map_or(Ok(unit!()), |t| self.infer_type(t))
             }
             Expr::Var(name) => self.lookup(name, &span),
             Expr::Apply(fun, callee) => {
