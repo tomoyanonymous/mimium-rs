@@ -128,6 +128,33 @@ fn test_apply() {
     .into_id(0..13);
     test_string!("myfun(callee)", ans);
 }
+
+#[test]
+fn test_assign1() {
+    let ans = Expr::Then(
+        Expr::Assign(
+            "hoge".to_symbol(),
+            Expr::Var("fuga".to_symbol()).into_id(6..10),
+        )
+        .into_id(0..10),
+        None,
+    )
+    .into_id(0..10);
+    test_string!("hoge = fuga", ans);
+}
+#[test]
+fn test_assign2() {
+    let ans = Expr::Then(
+        Expr::Assign(
+            "hoge".to_symbol(),
+            Expr::Var("fuga".to_symbol()).into_id(6..10),
+        )
+        .into_id(0..10),
+        Some(Expr::Literal(Literal::Float("100.0".to_string())).into_id(13..18)),
+    )
+    .into_id(0..10);
+    test_string!("hoge = fuga\n 100.0", ans);
+}
 #[test]
 fn test_applynested() {
     let ans = Expr::Apply(
