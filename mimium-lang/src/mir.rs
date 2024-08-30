@@ -26,7 +26,7 @@ pub enum Value {
     ExtFunction(Symbol, TypeNodeId),
     FixPoint(usize), //function id
     //internal state
-    None, //??
+    None,
 }
 
 pub type VPtr = Arc<Value>;

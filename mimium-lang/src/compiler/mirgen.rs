@@ -101,12 +101,11 @@ impl Context {
                 }
                 let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
-                let res = Ok(Some(self.push_inst(Instruction::Delay(
+                Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
                     args[0].clone(),
                     args[1].clone(),
-                ))));
-                res
+                ))))
             }
             _ => Err(CompileError(
                 CompileErrorKind::UnboundedDelay,
@@ -247,8 +246,7 @@ impl Context {
     ) -> usize {
         let newf = mir::Function::new(name, args, argtypes, parent_i);
         self.program.functions.push(newf);
-        let idx = self.program.functions.len() - 1;
-        idx
+        self.program.functions.len() - 1
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -319,7 +317,7 @@ impl Context {
                 }
                 _ => self.push_inst(Instruction::Load(v.clone(), t)),
             },
-            LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
+            LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
                 let currentf = self.program.functions.get_mut(current.func_i).unwrap();
@@ -472,7 +470,7 @@ impl Context {
                 let (f, ft) = self.eval_expr(*f)?;
                 let del = self.make_delay(&f, args)?;
                 if let Some(d) = del {
-                    Ok((d, Type::Primitive(PType::Numeric).into_id()))
+                    Ok((d, numeric!()))
                 } else {
                     let atvvec = self.eval_args(args)?;
                     let rt = if let Type::Function(_, rt, _) = ft.to_type() {
@@ -535,8 +533,7 @@ impl Context {
                     .map(|((idx, name), t)| {
                         let label = name.id;
                         let a = Argument(label, *t);
-                        let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))));
-                        res
+                        (label, Arc::new(Value::Argument(idx, Arc::new(a))))
                     })
                     .collect::<Vec<_>>();
 
@@ -567,10 +564,9 @@ impl Context {
                         (_, _) => {
                             if rt.to_type().contains_function() {
                                 let newres = ctx.push_inst(Instruction::CloseUpValue(res.clone()));
-                                let _ =
-                                    ctx.push_inst(Instruction::Return(newres.clone(), rt.clone()));
+                                let _ = ctx.push_inst(Instruction::Return(newres.clone(), rt));
                             } else {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt.clone()));
+                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
                             }
                         }
                     };
@@ -629,13 +625,12 @@ impl Context {
                         if t.to_type().is_function() {
                             //globally allocated closures are immidiately closed, not to be disposed
                             let b = self.push_inst(Instruction::CloseUpValue(bodyv.clone()));
-                            let _greg =
-                                self.push_inst(Instruction::SetGlobal(gv.clone(), b, t.clone()));
+                            let _greg = self.push_inst(Instruction::SetGlobal(gv.clone(), b, t));
                         } else {
                             let _greg = self.push_inst(Instruction::SetGlobal(
                                 gv.clone(),
                                 bodyv.clone(),
-                                t.clone(),
+                                t,
                             ));
                         }
                         self.add_bind_pattern(pat, gv, t)?;
@@ -682,7 +677,7 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
-Expr::Assign(assignee, body) => {
+            Expr::Assign(assignee, body) => {
                 let (src, ty) = self.eval_expr(*body)?;
                 let dst = self.eval_var(*assignee, ty, &span)?;
                 Ok((self.push_inst(Instruction::Store(dst, src, ty)), ty))
@@ -715,8 +710,6 @@ Expr::Assign(assignee, body) => {
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
             Expr::Error => todo!(),
-            Expr::Assign(_, _) => todo!(),
-            Expr::Then(_, _) => todo!(),
         }
     }
 }
