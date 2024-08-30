@@ -303,7 +303,7 @@ impl Context {
         };
         Ok(v)
     }
-    pub fn eval_var(
+    fn eval_rvar(
         &mut self,
         name: Symbol,
         t: TypeNodeId,
@@ -321,9 +321,8 @@ impl Context {
                 let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
                 let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                let upi = currentf.get_or_insert_upvalue(&upv) as _;
                 let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
-                currentf.upindexes.push(upv.clone());
-                let upi = (currentf.upindexes.len() - 1) as u64;
 
                 currentbb
                     .0
@@ -426,7 +425,7 @@ impl Context {
                 let t = InferContext::infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name) => Ok((self.eval_var(*name, ty, &span)?, ty)),
+            Expr::Var(name) => Ok((self.eval_rvar(*name, ty, &span)?, ty)),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)
@@ -679,7 +678,7 @@ impl Context {
             }
             Expr::Assign(assignee, body) => {
                 let (src, ty) = self.eval_expr(*body)?;
-                let dst = self.eval_var(*assignee, ty, &span)?;
+                let dst = self.eval_rvar(*assignee, ty, &span)?;
                 Ok((self.push_inst(Instruction::Store(dst, src, ty)), ty))
             }
             Expr::Then(body, then) => {

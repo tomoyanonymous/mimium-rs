@@ -176,6 +176,15 @@ impl Function {
         self.body.push(Block(vec![]));
         self.body.len() - 1
     }
+    pub fn get_or_insert_upvalue(&mut self, v: &Arc<Value>) -> usize {
+        self.upindexes
+            .iter()
+            .position(|vt| v == vt)
+            .unwrap_or_else(|| {
+                self.upindexes.push(v.clone());
+                self.upindexes.len() - 1
+            })
+    }
 }
 
 #[derive(Debug, Clone, Default)]
