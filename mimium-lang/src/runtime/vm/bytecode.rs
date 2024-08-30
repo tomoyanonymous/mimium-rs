@@ -26,7 +26,8 @@ pub enum Instruction {
     CallExtCls(Reg, u8, TypeSize),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
-
+    // register of the closure to be closed. other local closures will be released with this instruction.
+    Close(Reg),
     //destination,source, size
     GetUpValue(Reg, Reg, TypeSize),
     SetUpValue(Reg, Reg, TypeSize),
@@ -118,6 +119,9 @@ impl std::fmt::Display for Instruction {
 
             Instruction::Closure(dst, src) => {
                 write!(f, "{:<10} {} {}", "closure", dst, src)
+            }
+            Instruction::Close( src) => {
+                write!(f, "{:<10} {}", "close", src)
             }
             Instruction::Delay(dst, src, time) => {
                 write!(f, "{:<10} {} {} {}", "delay", dst, src, time)

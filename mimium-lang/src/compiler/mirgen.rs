@@ -390,6 +390,12 @@ impl Context {
                     }
                     _ => v.clone(),
                 };
+                let res = if t.to_type().contains_function() {
+                    //higher-order function need to close immidiately
+                    self.push_inst(Instruction::CloseUpValue(res))
+                } else {
+                    res
+                };
                 Ok((res, t))
             })
             .try_collect::<Vec<_>>()
@@ -555,10 +561,17 @@ impl Context {
                         (Value::Function(i), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
-                            let _ = ctx.push_inst(Instruction::Return(cls, rt));
+                            let newres = ctx.push_inst(Instruction::CloseUpValue(cls.clone()));
+                            let _ = ctx.push_inst(Instruction::Return(newres, rt));
                         }
                         (_, _) => {
-                            let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
+                            if rt.to_type().contains_function() {
+                                let newres = ctx.push_inst(Instruction::CloseUpValue(res.clone()));
+                                let _ =
+                                    ctx.push_inst(Instruction::Return(newres.clone(), rt.clone()));
+                            } else {
+                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt.clone()));
+                            }
                         }
                     };
 
@@ -591,6 +604,10 @@ impl Context {
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
+                    log::debug!(
+                        "{}",
+                        self.fn_label.map_or("".to_string(), |s| s.to_string())
+                    )
                 };
                 let insert_pos = if self.program.functions.is_empty() {
                     0
@@ -609,8 +626,18 @@ impl Context {
                 ) {
                     (true, false, Some(then_e)) => {
                         let gv = Arc::new(Value::Global(bodyv.clone()));
-                        let _greg =
-                            self.push_inst(Instruction::SetGlobal(gv.clone(), bodyv.clone(), t));
+                        if t.to_type().is_function() {
+                            //globally allocated closures are immidiately closed, not to be disposed
+                            let b = self.push_inst(Instruction::CloseUpValue(bodyv.clone()));
+                            let _greg =
+                                self.push_inst(Instruction::SetGlobal(gv.clone(), b, t.clone()));
+                        } else {
+                            let _greg = self.push_inst(Instruction::SetGlobal(
+                                gv.clone(),
+                                bodyv.clone(),
+                                t.clone(),
+                            ));
+                        }
                         self.add_bind_pattern(pat, gv, t)?;
                         self.eval_expr(*then_e)
                     }

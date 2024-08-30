@@ -425,6 +425,11 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
+            mir::Instruction::CloseUpValue(src) => {
+                let src = self.vregister.find_keep(src).unwrap();
+                self.vregister.get_top().0.insert(dst, MemoryRegion(src, 1));
+                Some(VmInstruction::Close(src))
+            }
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
@@ -509,7 +514,8 @@ impl ByteCodeGenerator {
                             else_bytecodes.push(inst);
                         };
                     });
-                let (phidst, pinst) = mirfunc.body[(*ebb + 1) as usize].0.first().unwrap();
+                let phiblock = &mirfunc.body[(*ebb + 1) as usize].0;
+                let (phidst, pinst) = phiblock.first().unwrap();
                 let phi = self.vregister.add_newvalue(phidst);
                 if let mir::Instruction::Phi(t, e) = pinst {
                     let t = self.find(t);
@@ -529,10 +535,14 @@ impl ByteCodeGenerator {
 
                 funcproto.bytecodes.append(&mut then_bytecodes);
                 funcproto.bytecodes.append(&mut else_bytecodes);
-
-                // TODO: probably need to infer type to determine the correct nret
-                let nret = 1;
-                Some(VmInstruction::Return(phi, nret))
+                phiblock.iter().skip(1).for_each(|(dst, p_inst)| {
+                    if let Some(inst) =
+                        self.emit_instruction(funcproto, None, fidx, mirfunc, dst.clone(), p_inst)
+                    {
+                        funcproto.bytecodes.push(inst);
+                    };
+                });
+                None
             }
             mir::Instruction::Jmp(offset) => Some(VmInstruction::Jmp(*offset)),
             mir::Instruction::Phi(_, _) => {
@@ -720,9 +730,9 @@ mod test {
         use crate::types::PType;
         use crate::types::Type;
         extern crate colog;
-        colog::default_builder()
-            .filter_level(log::LevelFilter::Trace)
-            .init();
+        // colog::default_builder()
+        //     .filter_level(log::LevelFilter::Trace)
+        //     .init();
         // fn test(hoge){
         //   hoge+1
         //}

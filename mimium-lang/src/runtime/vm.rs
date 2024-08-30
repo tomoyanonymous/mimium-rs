@@ -1,13 +1,14 @@
 use core::slice;
-use log;
+use slotmap::{DefaultKey, SlotMap};
 use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::HashMap,
-    ops::Range,
+    ops::{Not, Range},
     rc::Rc,
     sync::{Arc, Mutex},
 };
+
 pub mod builtin;
 pub mod bytecode;
 pub mod program;
@@ -61,7 +62,7 @@ impl StateStorage {
 }
 
 #[derive(Clone, Copy)]
-pub struct ClosureIdx(pub u64);
+pub struct ClosureIdx(pub slotmap::DefaultKey);
 
 #[derive(Clone, Default)]
 struct StateStorageStack(Vec<ClosureIdx>);
@@ -91,6 +92,7 @@ impl From<OpenUpValue> for UpValue {
 pub(crate) struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
     pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
+    pub is_closed: bool,
     pub upvalues: Vec<UpValue>,
     state_storage: StateStorage,
 }
@@ -107,6 +109,7 @@ impl Closure {
         Self {
             fn_proto_pos: fn_i,
             upvalues,
+            is_closed: false,
             base_ptr,
             state_storage,
         }
@@ -128,7 +131,7 @@ impl Default for RawValType {
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
-    closures: Vec<Closure>,
+    closures: SlotMap<DefaultKey, Closure>,
     pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
@@ -259,7 +262,7 @@ impl Machine {
         Self {
             stack: vec![],
             base_pointer: 0,
-            closures: vec![],
+            closures: Default::default(),
             ext_fun_table,
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
@@ -349,20 +352,27 @@ impl Machine {
         };
         (abs_pos..end, slice)
     }
-
+    fn get_closure(&self, idx: ClosureIdx) -> &Closure {
+        debug_assert!(
+            self.closures.contains_key(idx.0),
+            "Invalid Closure Id referred"
+        );
+        unsafe { self.closures.get_unchecked(idx.0) }
+    }
+    fn get_closure_mut(&mut self, idx: ClosureIdx) -> &mut Closure {
+        debug_assert!(
+            self.closures.contains_key(idx.0),
+            "Invalid Closure Id referred"
+        );
+        unsafe { self.closures.get_unchecked_mut(idx.0) }
+    }
     fn get_current_state(&mut self) -> &mut StateStorage {
         if self.states_stack.0.is_empty() {
             &mut self.global_states
         } else {
-            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked().0 as usize };
-            &mut self.closures[idx].state_storage
+            let idx = unsafe { self.states_stack.0.last().unwrap_unchecked() };
+            &mut self.get_closure_mut(*idx).state_storage
         }
-    }
-    fn get_local_closure(&self, clsidx: ClosureIdx) -> &Closure {
-        &self.closures[clsidx.0 as usize]
-    }
-    fn get_local_closure_mut(&mut self, clsidx: ClosureIdx) -> &mut Closure {
-        &mut self.closures[clsidx.0 as usize]
     }
     fn return_general(&mut self, iret: Reg, nret: Reg) -> &[u64] {
         let base = self.base_pointer as usize;
@@ -411,31 +421,33 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
-    fn close_upvalues(&mut self, iret: Reg, nret: Reg, local_closures: &[(usize, ClosureIdx)]) {
-        for (base_ptr_cls, clsidx) in local_closures.iter() {
-            let start = iret + self.base_pointer as u8 + iret;
-            // let is_escaping = (start..(start + nret)).contains(&(*base_ptr_cls as u8));
-            let is_escaping = true; //TODO
-            if is_escaping {
-                let cls = self.get_local_closure(*clsidx);
+    fn close_upvalues(&mut self, src: Reg) {
+        let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
 
-                let newupvls = cls
-                    .upvalues
-                    .iter()
-                    .map(|upv| {
-                        if let UpValue::Open(i) = upv {
-                            let (_range, ov) =
-                                self.get_open_upvalue(self.base_pointer as usize, *i);
-                            UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
-                        } else {
-                            upv.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                self.get_local_closure_mut(*clsidx).upvalues = newupvls;
-            } else {
-                //todo: release closure
-                // self.closures[clsidx.0] = ;
+        let newupvls = self
+            .get_closure(clsidx)
+            .upvalues
+            .iter()
+            .map(|upv| {
+                if let UpValue::Open(i) = upv {
+                    let (_range, ov) =
+                        self.get_open_upvalue(self.base_pointer as usize, *i);
+                    UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
+                } else {
+                    upv.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let cls = self.get_closure_mut(clsidx);
+        cls.upvalues = newupvls;
+        cls.is_closed = true;
+    }
+    #[allow(clippy::filter_map_bool_then)]
+    fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
+        for clsidx in local_closures.iter() {
+            let cls = self.get_closure(*clsidx);
+            if !cls.is_closed {
+                self.closures.remove(clsidx.0);
             }
         }
     }
@@ -447,7 +459,7 @@ impl Machine {
         cls_i: Option<ClosureIdx>,
     ) -> ReturnCode {
         let (_fname, func) = &prog.global_fn_table[func_i];
-        let mut local_closures: Vec<(usize, ClosureIdx)> = vec![];
+        let mut local_closures: Vec<ClosureIdx> = vec![];
         let mut pcounter = 0;
         // if cfg!(test) {
         //     log::trace!("{:?}", func);
@@ -488,7 +500,7 @@ impl Machine {
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
                     let cls_i = Self::get_as::<ClosureIdx>(addr);
-                    let cls = &self.closures[cls_i.0 as usize];
+                    let cls = self.get_closure(cls_i);
                     let pos_of_f = cls.fn_proto_pos;
                     self.states_stack.push(cls_i);
                     self.call_function(func, nargs, nret_req, move |machine| {
@@ -531,24 +543,32 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-                    self.closures
-                        .push(Closure::new(prog, self.base_pointer, fn_proto_pos));
-                    let vaddr = ClosureIdx((self.closures.len() - 1) as u64);
-                    local_closures.push((dst as usize, vaddr));
+
+                    let vaddr = ClosureIdx(self.closures.insert(Closure::new(
+                        prog,
+                        self.base_pointer,
+                        fn_proto_pos,
+                    )));
+                    local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
+                Instruction::Close(src) => {
+                    self.close_upvalues(src);
+                }
                 Instruction::Return0 => {
+                    self.stack.truncate((self.base_pointer - 1) as usize);
+                    self.release_open_closures(&local_closures);
                     return 0;
                 }
                 Instruction::Return(iret, nret) => {
-                    self.close_upvalues(iret, nret, &local_closures);
                     let _ = self.return_general(iret, nret);
+                    self.release_open_closures(&local_closures);
                     return nret.into();
                 }
                 Instruction::GetUpValue(dst, index, size) => {
                     {
                         let up_i = cls_i.unwrap();
-                        let cls = &self.closures[up_i.0 as usize];
+                        let cls = self.get_closure(up_i);
                         let upvalues = &cls.upvalues;
                         let rv = &upvalues[index as usize];
                         match rv {
@@ -579,14 +599,15 @@ impl Machine {
                 }
                 Instruction::SetUpValue(index, src, size) => {
                     let up_i = cls_i.unwrap();
-                    let cls = &self.closures[up_i.0 as usize];
+                    let cls = self.get_closure(up_i);
                     let upper_base = cls.base_ptr as usize;
                     let upvalues = &cls.upvalues;
                     let rv: &UpValue = &upvalues[index as usize];
                     match rv {
                         UpValue::Open(OpenUpValue(i, size)) => {
                             let (range, _v) = self.get_stack_range(src as i64, *size);
-                            self.stack.copy_within(range, upper_base + *i);
+                            let dest = upper_base + i;
+                            self.stack.copy_within(range, dest);
                         }
                         UpValue::Closed(i) => {
                             let mut uv = i.borrow_mut();
@@ -614,7 +635,6 @@ impl Machine {
                     let (_, slice) = self.get_stack_range(src as i64, size);
                     gvs.copy_from_slice(slice);
                 }
-                // Instruction::Close() => todo!(),
                 Instruction::Jmp(offset) => {
                     // -1 is for the offset in last increment
                     increment = offset;
