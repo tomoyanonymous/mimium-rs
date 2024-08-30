@@ -42,7 +42,7 @@ pub enum Expr {
     Apply(ExprNodeId, Vec<ExprNodeId>),
     Lambda(Vec<TypedId>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprNodeId),
-    Then(ExprNodeId, ExprNodeId),
+    Then(ExprNodeId, Option<ExprNodeId>),
     Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedPattern, ExprNodeId, Option<ExprNodeId>),
     LetRec(TypedId, ExprNodeId, Option<ExprNodeId>),

@@ -8,7 +8,7 @@ macro_rules! test_string {
         let srcstr = $src.to_string();
         match parse(&srcstr) {
             Ok(ast) => {
-                assert_eq!(ast, $ans);
+                assert_eq!(ast.to_expr(), $ans.to_expr());
             }
             Err(errs) => {
                 utils::error::report(&srcstr, PathBuf::new(), &errs);
@@ -229,7 +229,7 @@ fn test_tuple() {
     test_string!("(1.0, 2.0, )", ans);
 
     // trailing comma is mandatory for a single-element tuple
-    let ans = Expr::Tuple(vec![tuple_items[0].clone()]).into_id(0..7);
+    let ans = Expr::Tuple(vec![tuple_items[0]]).into_id(0..7);
     test_string!("(1.0, )", ans);
 
     // This is not a tuple
