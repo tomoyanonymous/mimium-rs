@@ -8,7 +8,7 @@ macro_rules! test_string {
         let srcstr = $src.to_string();
         match parse(&srcstr) {
             Ok(ast) => {
-                assert_eq!(ast, $ans);
+                assert_eq!(ast.to_expr(), $ans.to_expr());
             }
             Err(errs) => {
                 utils::error::report(&srcstr, PathBuf::new(), &errs);
@@ -26,7 +26,7 @@ fn test_let() {
             ty: Type::Unknown.into_id_with_span(4..8),
         },
         Expr::Literal(Literal::Int(36)).into_id(11..13),
-        Some(Expr::Var("goge".to_symbol(), None).into_id(15..19)),
+        Some(Expr::Var("goge".to_symbol()).into_id(15..19)),
     )
     .into_id(0..19);
     test_string!("let goge = 36\n goge", ans);
@@ -46,7 +46,7 @@ fn test_lettuple() {
             Expr::Literal(Literal::Int(89)).into_id(16..18),
         ])
         .into_id(12..19),
-        Some(Expr::Var("hoge".to_symbol(), None).into_id(21..25)),
+        Some(Expr::Var("hoge".to_symbol()).into_id(21..25)),
     )
     .into_id(0..25);
     test_string!("let (a,b) = (36,89)\n hoge", ans);
@@ -55,8 +55,8 @@ fn test_lettuple() {
 fn test_if() {
     let ans = Expr::If(
         Expr::Literal(Literal::Int(100)).into_id(4..7),
-        Expr::Var("hoge".to_symbol(), None).into_id(9..13),
-        Some(Expr::Var("fuga".to_symbol(), None).into_id(19..23)),
+        Expr::Var("hoge".to_symbol()).into_id(9..13),
+        Some(Expr::Var("fuga".to_symbol()).into_id(19..23)),
     )
     .into_id(0..23);
     test_string!("if (100) hoge else fuga", ans);
@@ -65,7 +65,7 @@ fn test_if() {
 fn test_if_noelse() {
     let ans = Expr::If(
         Expr::Literal(Literal::Int(100)).into_id(4..7),
-        Expr::Var("hoge".to_symbol(), None).into_id(9..13),
+        Expr::Var("hoge".to_symbol()).into_id(9..13),
         None,
     )
     .into_id(0..13);
@@ -91,7 +91,7 @@ fn test_block() {
                 ty: Type::Unknown.into_id_with_span(5..9),
             },
             Expr::Literal(Literal::Int(100)).into_id(12..15),
-            Some(Expr::Var("hoge".to_symbol(), None).into_id(16..20)),
+            Some(Expr::Var("hoge".to_symbol()).into_id(16..20)),
         )
         .into_id(1..20),
     ))
@@ -105,7 +105,7 @@ hoge}",
 #[test]
 fn test_add() {
     let ans = Expr::Apply(
-        Expr::Var("add".to_symbol(), None).into_id(6..7),
+        Expr::Var("add".to_symbol()).into_id(6..7),
         vec![
             Expr::Literal(Literal::Float("3466.0".to_string())).into_id(0..6),
             Expr::Literal(Literal::Float("2000.0".to_string())).into_id(7..13),
@@ -116,25 +116,52 @@ fn test_add() {
 }
 #[test]
 fn test_var() {
-    let ans = Expr::Var("hoge".to_symbol(), None).into_id(0..4);
+    let ans = Expr::Var("hoge".to_symbol()).into_id(0..4);
     test_string!("hoge", ans);
 }
 #[test]
 fn test_apply() {
     let ans = Expr::Apply(
-        Expr::Var("myfun".to_symbol(), None).into_id(0..5),
-        vec![Expr::Var("callee".to_symbol(), None).into_id(6..12)],
+        Expr::Var("myfun".to_symbol()).into_id(0..5),
+        vec![Expr::Var("callee".to_symbol()).into_id(6..12)],
     )
     .into_id(0..13);
     test_string!("myfun(callee)", ans);
 }
+
+#[test]
+fn test_assign1() {
+    let ans = Expr::Then(
+        Expr::Assign(
+            "hoge".to_symbol(),
+            Expr::Var("fuga".to_symbol()).into_id(6..10),
+        )
+        .into_id(0..10),
+        None,
+    )
+    .into_id(0..10);
+    test_string!("hoge = fuga", ans);
+}
+#[test]
+fn test_assign2() {
+    let ans = Expr::Then(
+        Expr::Assign(
+            "hoge".to_symbol(),
+            Expr::Var("fuga".to_symbol()).into_id(6..10),
+        )
+        .into_id(0..10),
+        Some(Expr::Literal(Literal::Float("100.0".to_string())).into_id(13..18)),
+    )
+    .into_id(0..10);
+    test_string!("hoge = fuga\n 100.0", ans);
+}
 #[test]
 fn test_applynested() {
     let ans = Expr::Apply(
-        Expr::Var("myfun".to_symbol(), None).into_id(0..5),
+        Expr::Var("myfun".to_symbol()).into_id(0..5),
         vec![Expr::Apply(
-            Expr::Var("myfun2".to_symbol(), None).into_id(6..12),
-            vec![Expr::Var("callee".to_symbol(), None).into_id(13..19)],
+            Expr::Var("myfun2".to_symbol()).into_id(6..12),
+            vec![Expr::Var("callee".to_symbol()).into_id(13..19)],
         )
         .into_id(6..20)],
     )
@@ -145,8 +172,8 @@ fn test_applynested() {
 fn test_macroexpand() {
     let ans = Expr::Escape(
         Expr::Apply(
-            Expr::Var("myfun".to_symbol(), None).into_id(0..6),
-            vec![Expr::Var("callee".to_symbol(), None).into_id(7..13)],
+            Expr::Var("myfun".to_symbol()).into_id(0..6),
+            vec![Expr::Var("callee".to_symbol()).into_id(7..13)],
         )
         .into_id(0..14),
     )
@@ -178,7 +205,7 @@ fn test_fndef() {
                 },
             ],
             None,
-            Expr::Var("input".to_symbol(), None).into_id(21..26),
+            Expr::Var("input".to_symbol()).into_id(21..26),
         )
         .into_id(0..28),
         None,
@@ -205,7 +232,7 @@ fn test_macrodef() {
                 },
             ],
             None,
-            Expr::Bracket(Expr::Var("input".to_symbol(), None).into_id(24..29)).into_id(24..29),
+            Expr::Bracket(Expr::Var("input".to_symbol()).into_id(24..29)).into_id(24..29),
         )
         .into_id(0..31),
         None,
@@ -229,7 +256,7 @@ fn test_tuple() {
     test_string!("(1.0, 2.0, )", ans);
 
     // trailing comma is mandatory for a single-element tuple
-    let ans = Expr::Tuple(vec![tuple_items[0].clone()]).into_id(0..7);
+    let ans = Expr::Tuple(vec![tuple_items[0]]).into_id(0..7);
     test_string!("(1.0, )", ans);
 
     // This is not a tuple

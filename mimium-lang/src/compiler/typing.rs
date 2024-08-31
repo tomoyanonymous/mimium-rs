@@ -5,9 +5,9 @@ use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
-use crate::{function, numeric};
+use crate::{function, numeric, unit};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -130,25 +130,25 @@ impl InferContext {
             .collect::<Vec<_>>();
         env.add_bind(&binds);
     }
-    pub fn gen_intermediate_type(&mut self) -> TypeNodeId {
+    fn gen_intermediate_type(&mut self) -> TypeNodeId {
         let res =
             Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx)))).into_id();
         self.interm_idx += 1;
         res
     }
-    pub fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
+    fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx))))
             .into_id_with_span(span);
         self.interm_idx += 1;
         res
     }
-    pub fn convert_unknown_to_intermediate(&mut self, t: TypeNodeId) -> TypeNodeId {
+    fn convert_unknown_to_intermediate(&mut self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Unknown => self.gen_intermediate_type(),
             _ => t,
         }
     }
-    pub fn convert_unknown_function(
+    fn convert_unknown_function(
         &mut self,
         atypes: &[TypeNodeId],
         rty: TypeNodeId,
@@ -162,8 +162,8 @@ impl InferContext {
         Type::Function(a, r, s).into_id()
     }
     // return true when the circular loop of intermediate variable exists.
-    pub fn occur_check(&self, id1: u64, t2: TypeNodeId) -> bool {
-        let cls = |t2dash: TypeNodeId| -> bool { self.occur_check(id1, t2dash) };
+    fn occur_check(id1: u64, t2: TypeNodeId) -> bool {
+        let cls = |t2dash: TypeNodeId| -> bool { Self::occur_check(id1, t2dash) };
 
         let vec_cls = |t: &[_]| -> bool { t.iter().any(|a| cls(*a)) };
 
@@ -171,7 +171,7 @@ impl InferContext {
             Type::Intermediate(cell) => cell
                 .try_borrow()
                 .map(|tv2| match tv2.parent {
-                    Some(tid2) => id1 == tv2.var || self.occur_check(id1, tid2),
+                    Some(tid2) => id1 == tv2.var || Self::occur_check(id1, tid2),
                     None => id1 == tv2.var,
                 })
                 .unwrap_or(true),
@@ -187,32 +187,23 @@ impl InferContext {
         }
     }
 
-    // fn substitute_intermediate_type(&self, id: i64) -> TypeNodeId {
-    //     match self.subst_map.get(&id) {
-    //         Some(t) => match t.to_type() {
-    //             Type::Intermediate(tv) => self.substitute_intermediate_type(i),
-    //             _ => *t,
-    //         },
-    //         None => None,
-    //     }
-    // }
-    fn substitute_type(&self, t: TypeNodeId) -> TypeNodeId {
+    fn substitute_type(t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Intermediate(cell) => {
                 let TypeVar { parent, var: _ } = &cell.borrow() as &TypeVar;
                 match parent {
-                    Some(p) => self.substitute_type(*p),
+                    Some(p) => Self::substitute_type(*p),
                     None => t,
                 }
             }
-            _ => t.apply_fn(|ty| self.substitute_type(ty)),
+            _ => t.apply_fn(Self::substitute_type),
         }
     }
     fn substitute_all_intermediates(&mut self) {
         let mut e_list = self
             .result_map
             .iter()
-            .map(|(e, t)| (*e, self.substitute_type(*t)))
+            .map(|(e, t)| (*e, Self::substitute_type(*t)))
             .collect::<Vec<_>>();
 
         e_list.iter_mut().for_each(|(e, t)| {
@@ -221,8 +212,8 @@ impl InferContext {
         })
     }
 
-    pub fn unify_types(&mut self, t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
-        let mut unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
+    fn unify_types(t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
+        let unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
             if a1.len() != a2.len() {
                 return Err(Error(
                     ErrorKind::TypeMismatch(t1.to_type(), t2.to_type()),
@@ -232,7 +223,7 @@ impl InferContext {
 
             a1.iter()
                 .zip(a2.iter())
-                .map(|(v1, v2)| self.unify_types(*v1, *v2))
+                .map(|(v1, v2)| Self::unify_types(*v1, *v2))
                 .try_collect()
         };
         log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
@@ -241,7 +232,7 @@ impl InferContext {
         match &(t1r.to_type(), t2r.to_type()) {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
-                if self.occur_check(tv1.var, t2) {
+                if Self::occur_check(tv1.var, t2) {
                     return Ok(t1r);
                 }
                 let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
@@ -276,16 +267,16 @@ impl InferContext {
                 Ok(t1r)
             }
             (Type::Array(a1), Type::Array(a2)) => {
-                Ok(Type::Array(self.unify_types(*a1, *a2)?).into_id())
+                Ok(Type::Array(Self::unify_types(*a1, *a2)?).into_id())
             }
-            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(self.unify_types(*x1, *x2)?).into_id()),
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(Self::unify_types(*x1, *x2)?).into_id()),
             (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?).into_id()),
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
-                self.unify_types(*r1, *r2)?,
+                Self::unify_types(*r1, *r2)?,
                 match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(self.unify_types(*e1, *e2)?),
+                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2)?),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
@@ -301,11 +292,7 @@ impl InferContext {
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
         }
     }
-    pub fn bind_pattern(
-        &mut self,
-        t: TypeNodeId,
-        ty_pat: &TypedPattern,
-    ) -> Result<TypeNodeId, Error> {
+    fn bind_pattern(&mut self, t: TypeNodeId, ty_pat: &TypedPattern) -> Result<TypeNodeId, Error> {
         let TypedPattern { pat, .. } = ty_pat;
         let span = ty_pat.to_span();
         let pat_t = match pat {
@@ -328,7 +315,7 @@ impl InferContext {
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-        self.unify_types(t, pat_t)
+        Self::unify_types(t, pat_t)
     }
 
     pub fn lookup(&self, name: &Symbol, span: &Span) -> Result<TypeNodeId, Error> {
@@ -380,7 +367,7 @@ impl InferContext {
                 let feedv = self.gen_intermediate_type();
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body)?;
-                let res = self.unify_types(b, feedv)?;
+                let res = Self::unify_types(b, feedv)?;
                 if res.to_type().contains_function() {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
                 } else {
@@ -403,7 +390,7 @@ impl InferContext {
                     .collect();
                 let bty = if let Some(r) = rtype {
                     let bty = self.infer_type(*body)?;
-                    self.unify_types(*r, bty)?
+                    Self::unify_types(*r, bty)?
                 } else {
                     self.infer_type(*body)?
                 };
@@ -423,14 +410,13 @@ impl InferContext {
                     self.gen_intermediate_type()
                 };
 
-                let bodyt_u = self.unify_types(idt, bodyt)?;
+                let bodyt_u = Self::unify_types(idt, bodyt)?;
                 let _ = self.bind_pattern(bodyt_u, tpat)?;
 
-                let res = match then {
+                match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
-                };
-                res
+                }
             }
             Expr::LetRec(id, body, then) => {
                 let idt = match (id.is_unknown(), id.ty.to_type()) {
@@ -443,21 +429,30 @@ impl InferContext {
                 let body_i = self.gen_intermediate_type();
                 self.env.add_bind(&[(id.id, body_i)]);
                 let bodyt = self.infer_type(*body)?;
-                let _ = self.unify_types(idt, bodyt)?;
+                let _ = Self::unify_types(idt, bodyt)?;
 
-                let res = match then {
+                match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
-                };
-                res
+                }
             }
-            Expr::Var(name, _time) => self.lookup(name, &span),
+            Expr::Assign(name, expr) => {
+                let assignee_t = self.lookup(name, &span)?;
+                let e_t = self.infer_type(*expr)?;
+                Self::unify_types(assignee_t, e_t)?;
+                Ok(unit!())
+            }
+            Expr::Then(e, then) => {
+                let _ = self.infer_type(*e)?;
+                then.map_or(Ok(unit!()), |t| self.infer_type(t))
+            }
+            Expr::Var(name) => self.lookup(name, &span),
             Expr::Apply(fun, callee) => {
                 let fnl = self.infer_type(*fun)?;
                 let callee_t = self.infer_vec(callee.as_slice())?;
                 let res_t = self.gen_intermediate_type();
                 let fntype = Type::Function(callee_t, res_t, None).into_id();
-                let restype = self.unify_types(fnl, fntype)?;
+                let restype = Self::unify_types(fnl, fntype)?;
                 if let Type::Function(_, r, _) = restype.to_type() {
                     Ok(r)
                 } else {
@@ -469,12 +464,12 @@ impl InferContext {
             }
             Expr::If(cond, then, opt_else) => {
                 let condt = self.infer_type(*cond)?;
-                let _bt = self.unify_types(Type::Primitive(PType::Numeric).into_id(), condt); //todo:boolean type
+                let _bt = Self::unify_types(Type::Primitive(PType::Numeric).into_id(), condt); //todo:boolean type
                 let thent = self.infer_type(*then)?;
                 let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                     self.infer_type(e)
                 })?;
-                self.unify_types(thent, elset)
+                Self::unify_types(thent, elset)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                 self.infer_type(e)
@@ -484,9 +479,8 @@ impl InferContext {
                 Ok(Type::Primitive(PType::Unit).into_id())
             }
         };
-        res.map(|ty| {
-            self.result_map.insert(e.0, ty);
-            ty
+        res.inspect(|ty| {
+            self.result_map.insert(e.0, *ty);
         })
     }
     pub fn lookup_res(&self, e: ExprNodeId) -> TypeNodeId {

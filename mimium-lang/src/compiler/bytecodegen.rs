@@ -360,7 +360,7 @@ impl ByteCodeGenerator {
             mir::Instruction::Call(v, args, r_ty) => {
                 let rsize = Self::word_size_for_type(*r_ty);
                 match v.as_ref() {
-                    mir::Value::Register(address) => {
+                    mir::Value::Register(_address) => {
                         let bytecodes_dst =
                             bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
                         let d = self.get_destination(dst.clone(), rsize);
@@ -447,20 +447,20 @@ impl ByteCodeGenerator {
                     Self::word_size_for_type(*ty),
                 ))
             }
-            mir::Instruction::SetUpValue(i, ty) => {
-                let upval = &mirfunc.upindexes[*i as usize];
+            mir::Instruction::SetUpValue(dst, src, ty) => {
+                let upval = &mirfunc.upindexes[*dst as usize];
                 let v = self.find_upvalue(upval);
                 let size: u8 = Self::word_size_for_type(*ty);
                 let ouv = mir::OpenUpValue(v as usize, size);
-                if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
+                if let Some(ui) = funcproto.upindexes.get_mut(*dst as usize) {
                     *ui = ouv;
                 } else {
                     funcproto.upindexes.push(ouv);
                 }
-                let d = self.vregister.get_top().add_newvalue_range(&dst, size as _);
+                let s = self.find(src);
                 Some(VmInstruction::SetUpValue(
-                    d,
-                    *i as Reg,
+                    *dst as Reg,
+                    s,
                     Self::word_size_for_type(*ty),
                 ))
             }

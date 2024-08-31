@@ -35,14 +35,14 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Var(Symbol, Option<Time>),
+    Var(Symbol),
     Block(Option<ExprNodeId>),
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
     Apply(ExprNodeId, Vec<ExprNodeId>),
     Lambda(Vec<TypedId>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprNodeId),
-    Then(ExprNodeId, ExprNodeId),
+    Then(ExprNodeId, Option<ExprNodeId>),
     Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedPattern, ExprNodeId, Option<ExprNodeId>),
     LetRec(TypedId, ExprNodeId, Option<ExprNodeId>),
@@ -102,10 +102,7 @@ impl MiniPrint for Expr {
     fn simple_print(&self) -> String {
         match self {
             Expr::Literal(l) => l.simple_print(),
-            Expr::Var(v, t) => match t {
-                Some(t) => format!("{}@{}", v, t),
-                None => v.to_string(),
-            },
+            Expr::Var(v) => format!("{v}"),
             Expr::Block(e) => e.map_or("".to_string(), |eid| {
                 format!("(block {})", eid.to_expr().simple_print())
             }),

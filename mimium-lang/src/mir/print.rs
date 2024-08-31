@@ -130,7 +130,9 @@ impl std::fmt::Display for Instruction {
                 write!(f, "close {}", *cls)
             }
             Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {}", ty.to_type()),
-            Instruction::SetUpValue(idx, ty) => write!(f, "setupval {idx} {}", ty.to_type()),
+            Instruction::SetUpValue(dst, src, ty) => {
+                write!(f, "setupval {dst} {} {}", src, ty.to_type())
+            }
             Instruction::GetGlobal(v, ty) => write!(f, "getglobal {} {}", *v, ty.to_type()),
             Instruction::SetGlobal(dst, src, ty) => {
                 write!(f, "setglobal {} {} {}", *dst, *src, ty.to_type())

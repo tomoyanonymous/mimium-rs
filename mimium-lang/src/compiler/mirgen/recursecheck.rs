@@ -7,7 +7,7 @@ use crate::{
 
 fn try_find_recurse(e_s: ExprNodeId, name: &Symbol) -> bool {
     match &e_s.to_expr() {
-        Expr::Var(n, _) => n == name,
+        Expr::Var(n) => n == name,
         Expr::Let(_id, body, then) => {
             try_find_recurse(*body, name) || then.map_or(false, |e| try_find_recurse(e, name))
         }

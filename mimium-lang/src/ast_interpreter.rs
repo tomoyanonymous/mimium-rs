@@ -248,7 +248,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
     let span = e_meta.to_span();
     match &e_meta.to_expr() {
         ast::Expr::Literal(l) => Ok(eval_literal(l)),
-        ast::Expr::Var(v, _time) => env
+        ast::Expr::Var(v) => env
             .lookup(v)
             .map(|v| v.clone())
             .or(ctx

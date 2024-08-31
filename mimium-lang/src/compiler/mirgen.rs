@@ -101,12 +101,11 @@ impl Context {
                 }
                 let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
-                let res = Ok(Some(self.push_inst(Instruction::Delay(
+                Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
                     args[0].clone(),
                     args[1].clone(),
-                ))));
-                res
+                ))))
             }
             _ => Err(CompileError(
                 CompileErrorKind::UnboundedDelay,
@@ -247,8 +246,7 @@ impl Context {
     ) -> usize {
         let newf = mir::Function::new(name, args, argtypes, parent_i);
         self.program.functions.push(newf);
-        let idx = self.program.functions.len() - 1;
-        idx
+        self.program.functions.len() - 1
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -305,7 +303,7 @@ impl Context {
         };
         Ok(v)
     }
-    pub fn eval_var(
+    fn eval_rvar(
         &mut self,
         name: Symbol,
         t: TypeNodeId,
@@ -319,13 +317,12 @@ impl Context {
                 }
                 _ => self.push_inst(Instruction::Load(v.clone(), t)),
             },
-            LookupRes::UpValue(level, v) => (0..level).into_iter().rev().fold(v, |upv, i| {
+            LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
                 let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                let upi = currentf.get_or_insert_upvalue(&upv) as _;
                 let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
-                currentf.upindexes.push(upv.clone());
-                let upi = (currentf.upindexes.len() - 1) as u64;
 
                 currentbb
                     .0
@@ -346,6 +343,43 @@ impl Context {
             }
         };
         Ok(v)
+    }
+    fn eval_assign(
+        &mut self,
+        name: Symbol,
+        src: VPtr,
+        t: TypeNodeId,
+        span: &Span,
+    ) -> Result<(), CompileError> {
+        match self.lookup(&name) {
+            LookupRes::Local(v) => match v.as_ref() {
+                Value::Argument(_i, _a) => Err(CompileError(
+                    CompileErrorKind::AssignmentToArg,
+                    span.clone(),
+                )),
+                _ => {
+                    self.push_inst(Instruction::Store(v.clone(), src, t));
+                    Ok(())
+                }
+            },
+            LookupRes::UpValue(_level, upv) => {
+                //todo: nested closure
+                let currentf = self.get_current_fn();
+                let upi = currentf.get_or_insert_upvalue(&upv) as _;
+                self.push_inst(Instruction::SetUpValue(upi, src, t));
+                Ok(())
+            }
+            LookupRes::Global(dst) => match dst.as_ref() {
+                Value::Global(_gv) => {
+                    self.push_inst(Instruction::SetGlobal(dst.clone(), src.clone(), t));
+                    Ok(())
+                }
+                _ => unreachable!("non global_value"),
+            },
+            LookupRes::None => {
+                unreachable!("invalid value assignment")
+            }
+        }
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
         // stack size of the function to be called
@@ -428,7 +462,7 @@ impl Context {
                 let t = InferContext::infer_type_literal(lit).map_err(CompileError::from)?;
                 Ok((v, t))
             }
-            Expr::Var(name, _time) => Ok((self.eval_var(*name, ty, &span)?, ty)),
+            Expr::Var(name) => Ok((self.eval_rvar(*name, ty, &span)?, ty)),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)
@@ -472,7 +506,7 @@ impl Context {
                 let (f, ft) = self.eval_expr(*f)?;
                 let del = self.make_delay(&f, args)?;
                 if let Some(d) = del {
-                    Ok((d, Type::Primitive(PType::Numeric).into_id()))
+                    Ok((d, numeric!()))
                 } else {
                     let atvvec = self.eval_args(args)?;
                     let rt = if let Type::Function(_, rt, _) = ft.to_type() {
@@ -535,8 +569,7 @@ impl Context {
                     .map(|((idx, name), t)| {
                         let label = name.id;
                         let a = Argument(label, *t);
-                        let res = (label, Arc::new(Value::Argument(idx, Arc::new(a))));
-                        res
+                        (label, Arc::new(Value::Argument(idx, Arc::new(a))))
                     })
                     .collect::<Vec<_>>();
 
@@ -567,10 +600,9 @@ impl Context {
                         (_, _) => {
                             if rt.to_type().contains_function() {
                                 let newres = ctx.push_inst(Instruction::CloseUpValue(res.clone()));
-                                let _ =
-                                    ctx.push_inst(Instruction::Return(newres.clone(), rt.clone()));
+                                let _ = ctx.push_inst(Instruction::Return(newres.clone(), rt));
                             } else {
-                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt.clone()));
+                                let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
                             }
                         }
                     };
@@ -629,13 +661,12 @@ impl Context {
                         if t.to_type().is_function() {
                             //globally allocated closures are immidiately closed, not to be disposed
                             let b = self.push_inst(Instruction::CloseUpValue(bodyv.clone()));
-                            let _greg =
-                                self.push_inst(Instruction::SetGlobal(gv.clone(), b, t.clone()));
+                            let _greg = self.push_inst(Instruction::SetGlobal(gv.clone(), b, t));
                         } else {
                             let _greg = self.push_inst(Instruction::SetGlobal(
                                 gv.clone(),
                                 bodyv.clone(),
-                                t.clone(),
+                                t,
                             ));
                         }
                         self.add_bind_pattern(pat, gv, t)?;
@@ -682,6 +713,18 @@ impl Context {
                     Ok((Arc::new(Value::None), unit!()))
                 }
             }
+            Expr::Assign(assignee, body) => {
+                let (src, ty) = self.eval_expr(*body)?;
+                self.eval_assign(*assignee, src, ty, &span)?;
+                Ok((Arc::new(Value::None), unit!()))
+            }
+            Expr::Then(body, then) => {
+                let _ = self.eval_expr(*body)?;
+                match then {
+                    Some(t) => self.eval_expr(*t),
+                    None => Ok((Arc::new(Value::None), unit!())),
+                }
+            }
             Expr::If(cond, then, else_) => {
                 let (c, _) = self.eval_expr(*cond)?;
                 let bbidx = self.get_ctxdata().current_bb;
@@ -703,8 +746,6 @@ impl Context {
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
             Expr::Error => todo!(),
-            Expr::Assign(_, _) => todo!(),
-            Expr::Then(_, _) => todo!(),
         }
     }
 }
@@ -712,6 +753,7 @@ impl Context {
 #[derive(Clone, Debug)]
 pub enum CompileErrorKind {
     TypingFailure(typing::ErrorKind),
+    AssignmentToArg,
     UnboundedDelay,
     TooManyConstants,
     VariableNotFound(String),
@@ -724,6 +766,7 @@ impl std::fmt::Display for CompileError {
         let CompileError(kind, _span) = self;
         match kind {
             CompileErrorKind::TypingFailure(k) => write!(f, "{k}"),
+            CompileErrorKind::AssignmentToArg => write!(f, "Arguments can not be mutated"),
             CompileErrorKind::UnboundedDelay => {
                 write!(f, "Maximium delay time needs to be a number literal.")
             }

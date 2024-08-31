@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::interner::{ExprNodeId, ToSymbol, TypeNodeId};
+use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
@@ -46,17 +46,22 @@ fn type_parser() -> impl Parser<Token, TypeNodeId, Error = Simple<Token>> + Clon
         func.or(atom).boxed().labelled("Type")
     })
 }
-
-fn val_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
+    select! { Token::Ident(s) => s }.labelled("ident")
+}
+fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     select! {
-        Token::Ident(s) => Expr::Var(s,None),
-        Token::Int(x) => Expr::Literal(Literal::Int(x)),
-        Token::Float(x) =>Expr::Literal(Literal::Float(x.parse().unwrap())),
-        Token::Str(s) => Expr::Literal(Literal::String(s)),
-        Token::SelfLit => Expr::Literal(Literal::SelfLit),
-        Token::Now => Expr::Literal(Literal::Now),
+        Token::Int(x) => Literal::Int(x),
+        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
+        Token::Str(s) => Literal::String(s),
+        Token::SelfLit => Literal::SelfLit,
+        Token::Now => Literal::Now,
     }
-    .labelled("value")
+    .map_with_span(|e, s| Expr::Literal(e).into_id(s))
+    .labelled("literal")
+}
+fn var_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+    ident_parser().map_with_span(|e, s| Expr::Var(e).into_id(s))
 }
 fn with_type_annotation<P, O>(
     parser: P,
@@ -68,8 +73,14 @@ where
         .then(just(Token::Colon).ignore_then(type_parser()).or_not())
         .map(|(id, t)| (id, t))
 }
-fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
-    with_type_annotation(select! { Token::Ident(s) => s })
+
+fn placement_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
+    //todo! it can be the left hand expression of assignment i.e. they can have memory address,
+    //including var(`v`), Tuple dot access(`v.0`), array access(`v[2]`), struct member access...
+    ident_parser().labelled("placement_values")
+}
+fn lvar_parser_typed() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
+    with_type_annotation(ident_parser())
         .map_with_span(|(sym, t), span| match t {
             Some(ty) => TypedId { id: sym, ty },
             None => TypedId {
@@ -77,7 +88,7 @@ fn lvar_parser() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
                 ty: Type::Unknown.into_id_with_span(span),
             },
         })
-        .labelled("lvar")
+        .labelled("lvar_typed")
 }
 fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> + Clone {
     let pat = recursive(|pat| {
@@ -85,7 +96,7 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map(|ptns| Pattern::Tuple(ptns))
+            .map(Pattern::Tuple)
             .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
@@ -97,187 +108,170 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
         },
     })
 }
+fn binop_folder<'a, I, OP>(prec: I, op: OP) -> BoxedParser<'a, Token, ExprNodeId, Simple<Token>>
+where
+    I: Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a,
+    OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
+{
+    prec.clone()
+        .then(op.then(prec).repeated())
+        .foldl(move |x, ((op, opspan), y)| {
+            Expr::Apply(
+                Expr::Var(op.get_associated_fn_name()).into_id(opspan),
+                vec![x, y],
+            )
+            .into_id(x.to_span().start..y.to_span().end)
+        })
+        .boxed()
+}
 
-fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let lvar = lvar_parser();
-    let pattern = pattern_parser();
-    let val = val_parser();
-    let expr_group = recursive(|expr_group| {
-        let expr = recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
-            let parenexpr = expr
-                .clone()
-                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .labelled("paren_expr");
-            let let_e = just(Token::Let)
-                .ignore_then(pattern.clone())
-                .then_ignore(just(Token::Assign))
-                .then(expr.clone())
-                .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-                .then(expr_group.clone().or_not())
-                .map(|((ident, body), then)| Expr::Let(ident, body, then))
-                .boxed()
-                .labelled("let");
+type ExprParser<'a> = Recursive<'a, Token, ExprNodeId, Simple<Token>>;
 
-            let lambda = lvar
-                .clone()
-                .separated_by(just(Token::Comma))
-                .delimited_by(
-                    just(Token::LambdaArgBeginEnd),
-                    just(Token::LambdaArgBeginEnd),
-                )
-                .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
-                .then(expr_group.clone())
-                .map(|((ids, r_type), body)| Expr::Lambda(ids, r_type, body))
-                .labelled("lambda");
+fn items_parser<'a>(
+    expr: ExprParser<'a>,
+) -> impl Parser<Token, Vec<ExprNodeId>, Error = Simple<Token>> + Clone + 'a {
+    expr.separated_by(just(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+}
 
-            let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s,None) }
-                .map_with_span(|e, s| e.into_id(s))
-                .then_ignore(just(Token::ParenBegin))
-                .then(expr_group.clone())
-                .then_ignore(just(Token::ParenEnd))
-                .map_with_span(|(id, then), s| {
-                    Expr::Escape(Expr::Apply(id, vec![then]).into_id(s.clone()))
-                })
-                .labelled("macroexpand");
+fn op_parser<'a, I>(apply: I) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a
+where
+    I: Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a,
+{
+    let unary = select! { Token::Op(Op::Minus) => {} }
+        .map_with_span(|e, s| (e, s))
+        .repeated()
+        .then(apply.clone())
+        .foldr(|(_op, op_span), rhs| {
+            let rhs_span = rhs.to_span();
+            let neg_op = Expr::Var("neg".to_symbol()).into_id(op_span.start..rhs_span.start);
+            Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
+        })
+        .labelled("unary");
 
-            let tuple = expr
-                .clone()
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .map_with_span(|e, s| Expr::Tuple(e).into_id(s))
-                .labelled("tuple");
+    let optoken = move |o: Op| {
+        just(Token::Op(o))
+            .try_map(|e, s| match e {
+                Token::Op(o) => Ok((o, s)),
+                _ => Err(Simple::custom(s, "Invalid operator used")),
+            })
+            .boxed()
+    };
+    //defining binary operators in order of precedence.
+    let ops = [
+        optoken(Op::Exponent),
+        choice((
+            optoken(Op::Product),
+            optoken(Op::Divide),
+            optoken(Op::Modulo),
+        ))
+        .boxed(),
+        optoken(Op::Sum).or(optoken(Op::Minus)).boxed(),
+        optoken(Op::Equal).or(optoken(Op::NotEqual)).boxed(),
+        optoken(Op::And),
+        optoken(Op::Or),
+        choice((
+            optoken(Op::LessThan),
+            optoken(Op::LessEqual),
+            optoken(Op::GreaterThan),
+            optoken(Op::GreaterEqual),
+        ))
+        .boxed(),
+        optoken(Op::Pipe),
+    ];
+    ops.into_iter().fold(unary.boxed(), binop_folder)
+}
+fn atom_parser<'a>(
+    expr: ExprParser<'a>,
+    expr_group: ExprParser<'a>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a {
+    let lambda = lvar_parser_typed()
+        .separated_by(just(Token::Comma))
+        .delimited_by(
+            just(Token::LambdaArgBeginEnd),
+            just(Token::LambdaArgBeginEnd),
+        )
+        .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
+        .then(expr_group.clone())
+        .map_with_span(|((ids, r_type), body), span| Expr::Lambda(ids, r_type, body).into_id(span))
+        .labelled("lambda");
+    let macro_expand = select! { Token::MacroExpand(s) => Expr::Var(s) }
+        .map_with_span(|e, s| e.into_id(s))
+        .then_ignore(just(Token::ParenBegin))
+        .then(expr_group.clone())
+        .then_ignore(just(Token::ParenEnd))
+        .map_with_span(|(id, then), s| {
+            Expr::Escape(Expr::Apply(id, vec![then]).into_id(s.clone())).into_id(s)
+        })
+        .labelled("macroexpand");
 
-            let atom = val
-                .or(lambda)
-                .or(macro_expand)
-                .or(let_e)
-                .map_with_span(|e, s| e.into_id(s))
-                .or(parenexpr)
-                .or(tuple)
-                .boxed()
-                .labelled("atoms");
-
-            let items = expr
-                .clone()
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .collect::<Vec<_>>();
-
-            let parenitems = items
-                .clone()
-                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-                .repeated();
-            let folder = |f: ExprNodeId, args: Vec<ExprNodeId>| {
-                let f_span = f.to_span();
-                // TODO: this doesn't include the span of the closing parenthesis
-                let span_end = match args.as_slice() {
-                    [.., end] => end.to_span().end,
-                    _ => f_span.end,
-                };
-                let span = f_span.start..span_end;
-                Expr::Apply(f, args).into_id(span)
+    let tuple = items_parser(expr.clone())
+        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+        .map_with_span(|e, s| Expr::Tuple(e).into_id(s))
+        .labelled("tuple");
+    let parenexpr = expr
+        .clone()
+        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+        .labelled("paren_expr");
+    //tuple must  lower precedence than parenexpr, not to parse single element tuple without trailing comma
+    choice((
+        literals_parser(),
+        var_parser(),
+        lambda,
+        macro_expand,
+        parenexpr,
+        tuple,
+    ))
+}
+fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
+    recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
+        let parenitems =
+            items_parser(expr.clone()).delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
+        let folder = |f: ExprNodeId, args: Vec<ExprNodeId>| {
+            let f_span = f.to_span();
+            // TODO: this doesn't include the span of the closing parenthesis
+            let span_end = match args.as_slice() {
+                [.., end] => end.to_span().end,
+                _ => f_span.end,
             };
-            let apply = atom.then(parenitems).foldl(folder).labelled("apply");
-
-            let unary = select! { Token::Op(Op::Minus) => {} }
-                .map_with_span(|e, s| (e, s))
-                .repeated()
-                .then(apply)
-                .foldr(|(_op, op_span), rhs| {
-                    let rhs_span = rhs.to_span();
-                    let neg_op =
-                        Expr::Var("neg".to_symbol(), None).into_id(op_span.start..rhs_span.start);
-                    Expr::Apply(neg_op, vec![rhs]).into_id(op_span.start..rhs_span.end)
-                })
-                .labelled("unary");
-
-            let op_cls = |x: ExprNodeId, y: ExprNodeId, op: Op, opspan: Span| {
-                Expr::Apply(
-                    Expr::Var(op.get_associated_fn_name(), None).into_id(opspan),
-                    vec![x, y],
-                )
-                .into_id(x.to_span().start..y.to_span().end)
-            };
-            let optoken = move |o: Op| {
-                just(Token::Op(o)).map_with_span(|e, s| {
-                    (
-                        match e {
-                            Token::Op(o) => o,
-                            _ => Op::Unknown(String::from("invalid")),
-                        },
-                        s,
-                    )
-                })
-            };
-
-            let op = optoken(Op::Exponent);
-            let exponent = unary
-                .clone()
-                .then(op.then(unary).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = choice((
-                optoken(Op::Product),
-                optoken(Op::Divide),
-                optoken(Op::Modulo),
-            ));
-            let product = exponent
-                .clone()
-                .then(op.then(exponent).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = optoken(Op::Sum).or(optoken(Op::Minus));
-            let add = product
-                .clone()
-                .then(op.then(product).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-
-            let op = optoken(Op::Equal).or(optoken(Op::NotEqual));
-
-            let cmp = add
-                .clone()
-                .then(op.then(add).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = optoken(Op::And);
-            let cmp = cmp
-                .clone()
-                .then(op.then(cmp).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = optoken(Op::Or);
-            let cmp = cmp
-                .clone()
-                .then(op.then(cmp).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = choice((
-                optoken(Op::LessThan),
-                optoken(Op::LessEqual),
-                optoken(Op::GreaterThan),
-                optoken(Op::GreaterEqual),
-            ));
-            let cmp = cmp
-                .clone()
-                .then(op.then(cmp).repeated())
-                .foldl(move |x, ((op, opspan), y)| op_cls(x, y, op, opspan))
-                .boxed();
-            let op = optoken(Op::Pipe);
-
-            let pipe = cmp
-                .clone()
-                .then(op.then(cmp).repeated())
-                .foldl(|lhs, ((_, _), rhs)| {
-                    let span = lhs.to_span().start..rhs.to_span().end;
-                    Expr::Apply(rhs, vec![lhs]).into_id(span)
-                })
-                .boxed();
-
-            pipe
-        });
-        // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
+            let span = f_span.start..span_end;
+            Expr::Apply(f, args).into_id(span)
+        };
+        let apply = atom_parser(expr, expr_group)
+            .then(parenitems.repeated())
+            .foldl(folder)
+            .labelled("apply");
+        op_parser(apply)
+    })
+}
+fn expr_statement_parser<'a>(
+    expr_group: ExprParser<'a>,
+    then: ExprParser<'a>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a {
+    let let_stmt = just(Token::Let)
+        .ignore_then(pattern_parser().clone())
+        .then_ignore(just(Token::Assign))
+        .then(expr_group.clone())
+        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+        .then(then.clone().or_not())
+        .map_with_span(|((ident, body), then), span| Expr::Let(ident, body, then).into_id(span))
+        .labelled("let_stmt");
+    let assign = placement_parser()
+        .then_ignore(just(Token::Assign))
+        .then(expr_group.clone())
+        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+        .then(then.or_not())
+        .map_with_span(|((ident, body), then), span| {
+            Expr::Then(Expr::Assign(ident, body).into_id(span.clone()), then).into_id(span)
+        })
+        .labelled("assign");
+    let_stmt.or(assign)
+}
+// expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
+fn exprgroup_parser<'a>() -> ExprParser<'a> {
+    recursive(|expr_group: ExprParser<'a>| {
+        let expr = expr_parser(expr_group.clone());
 
         let block = expr_group
             .clone()
@@ -300,17 +294,17 @@ fn expr_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         block
             .map_with_span(|e, s| e.into_id(s))
             .or(if_)
+            .or(expr_statement_parser(expr_group.clone(), expr_group))
             .or(expr.clone())
-    });
-    expr_group
+    })
 }
 fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
     select! {Token::Comment(Comment::SingleLine(_t))=>(),
     Token::Comment(Comment::MultiLine(_t))=>()}
 }
 fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let expr = expr_parser();
-    let lvar = lvar_parser();
+    let exprgroup = exprgroup_parser();
+    let lvar = lvar_parser_typed();
     let blockstart = just(Token::BlockBegin)
         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated());
     let blockend = just(Token::LineBreak)
@@ -329,7 +323,8 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .then(fnparams.clone())
             .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
             .then(
-                expr.clone()
+                exprgroup
+                    .clone()
                     .delimited_by(blockstart.clone(), blockend.clone()),
             )
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
@@ -366,11 +361,12 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .ignore_then(lvar.clone())
             .then(fnparams.clone())
             .then(
-                expr.clone()
+                exprgroup
+                    .clone()
                     .delimited_by(blockstart.clone(), blockend.clone())
                     .map(Expr::Bracket),
             )
-            .then(expr.clone().or_not())
+            .then(exprgroup.clone().or_not())
             .map_with_span(|(((fname, ids), block), then), s| {
                 Expr::LetRec(
                     fname,
@@ -380,16 +376,8 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                 .into_id(s)
             })
             .labelled("macro definition");
-        let let_stmt = just(Token::Let)
-            .ignore_then(pattern_parser().clone())
-            .then_ignore(just(Token::Assign))
-            .then(expr.clone())
-            .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-            .then(stmt.clone().or_not())
-            .map_with_span(|((ident, body), then), span| Expr::Let(ident, body, then).into_id(span))
-            .boxed()
-            .labelled("let_stmt");
-        function_s.or(macro_s).or(let_stmt).or(expr_parser())
+        let global_stmts = expr_statement_parser(exprgroup.clone(), stmt);
+        function_s.or(macro_s).or(global_stmts).or(exprgroup)
     });
     stmt
     // expr_parser().then_ignore(end())

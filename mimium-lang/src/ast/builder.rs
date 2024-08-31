@@ -30,7 +30,7 @@ macro_rules! string {
 #[macro_export]
 macro_rules! var {
     ($n:literal) => {
-        Expr::Var($crate::ast::builder::str_to_symbol($n), None).into_id(0..0)
+        Expr::Var($crate::ast::builder::str_to_symbol($n)).into_id(0..0)
     };
 }
 
