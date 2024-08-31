@@ -241,6 +241,12 @@ fn closure_counter() {
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
     assert_eq!(res, ans);
 }
+#[test]
+fn closure_counter2() {
+    let res = run_file_test_mono("closure_counter2.mmm", 5).unwrap();
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
 
 #[test]
 fn hof_state() {
