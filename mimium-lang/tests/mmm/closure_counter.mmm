@@ -12,4 +12,3 @@ let myc = makecounter();
 fn dsp(){
     myc()
 }
-

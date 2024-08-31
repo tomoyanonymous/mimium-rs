@@ -1,0 +1,18 @@
+//deeply nested closure with destructive assignment
+fn makemakecounter(){
+    let makecounter = | |{
+        let x = 0.0
+        let countup = | |{
+            let res = x
+            x = x+1.0
+            res 
+        }
+        countup
+    }
+    makecounter
+}
+let mymc = makemakecounter();
+let myc = mymc();
+fn dsp(){
+    myc()
+}
