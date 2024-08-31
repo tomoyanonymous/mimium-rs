@@ -1,9 +1,12 @@
-use crate::driver::{Driver, RuntimeData, SampleRate};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{self, BufferSize, Stream, StreamConfig};
+use cpal::{self, BufferSize, StreamConfig};
 use mimium_lang::interner::ToSymbol;
 use mimium_lang::runtime::vm;
-use ringbuf::traits::{Consumer, Observer, Producer, Split};
+use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
@@ -13,6 +16,7 @@ pub struct NativeDriver {
     is_playing: bool,
     istream: Option<cpal::Stream>,
     ostream: Option<cpal::Stream>,
+    count: Arc<AtomicU64>,
 }
 impl Default for NativeDriver {
     fn default() -> Self {
@@ -23,6 +27,7 @@ impl Default for NativeDriver {
             is_playing: false,
             istream: None,
             ostream: None,
+            count: Default::default(),
         }
     }
 }
@@ -33,12 +38,12 @@ struct NativeAudioData {
     dsp_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
-    count: u64,
+    count: Arc<AtomicU64>,
 }
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(program: vm::Program, buffer: HeapCons<f64>) -> Self {
+    pub fn new(program: vm::Program, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         let dsp_i = program
             .get_fun_index(&"dsp".to_symbol())
             .expect("no dsp function found");
@@ -53,7 +58,7 @@ impl NativeAudioData {
             dsp_ochannels,
             buffer,
             localbuffer,
-            count: 0,
+            count,
         }
     }
     pub fn process(&mut self, dst: &mut [f32], h_ochannels: usize) {
@@ -69,7 +74,8 @@ impl NativeAudioData {
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
             // let phase = ((self.count as f64) *440f64 / 44100f64) % 1.0;
             // let res = (phase* std::f64::consts::PI *2.0).sin();
-            self.count += 1;
+            self.count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             match (h_ochannels, self.dsp_ochannels) {
                 (i1, i2) if i1 == i2 => {
                     for i in 0..i1 {
@@ -210,7 +216,7 @@ impl Driver for NativeDriver {
             let h_ichannels = self.hardware_ichannels;
             let in_stream = idevice.build_input_stream(
                 &iconfig,
-                move |data: &[f32], s: &cpal::InputCallbackInfo| {
+                move |data: &[f32], _s: &cpal::InputCallbackInfo| {
                     receiver.receive_data(data, h_ichannels)
                 },
                 |e| {
@@ -225,7 +231,7 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(program, cons);
+            let mut processor = NativeAudioData::new(program, cons, self.count.clone());
             processor.vmdata.vm.execute_main(&processor.vmdata.program);
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((buffer_size / BUFFER_RATIO) as u32);
@@ -319,5 +325,9 @@ impl Driver for NativeDriver {
 
     fn get_samplerate(&self) -> crate::driver::SampleRate {
         self.sr
+    }
+
+    fn get_current_sample(&self) -> crate::driver::Time {
+        Time(self.count.load(Ordering::Relaxed))
     }
 }

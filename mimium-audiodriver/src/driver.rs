@@ -29,6 +29,9 @@ pub trait Component {
 #[derive(Clone, Copy)]
 pub struct SampleRate(pub u32);
 
+#[derive(Clone, Copy)]
+pub struct Time(pub u64);
+
 pub trait Driver {
     type Sample: Float;
     fn init(
@@ -40,6 +43,7 @@ pub trait Driver {
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
+    fn get_current_sample(&self) -> Time;
     fn is_playing(&self) -> bool;
 }
 
