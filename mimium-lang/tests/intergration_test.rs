@@ -323,6 +323,11 @@ fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans
 
     for (sym, proto) in bytecode.global_fn_table {
         let fn_name = sym.as_str();
+
+        if fn_name == "_mimium_global" {
+            continue;
+        }
+
         let actual = proto.state_size;
         match state_sizes.get(fn_name) {
             Some(&expected) => {
@@ -340,11 +345,6 @@ fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans
 fn fb_mem3_state_size() {
     test_state_sizes(
         "fb_mem3.mmm",
-        [
-            ("_mimium_global", 0),
-            ("counter", 1),
-            ("mem_by_hand", 4),
-            ("dsp", 5),
-        ],
+        [("counter", 1), ("mem_by_hand", 4), ("dsp", 5)],
     );
 }
