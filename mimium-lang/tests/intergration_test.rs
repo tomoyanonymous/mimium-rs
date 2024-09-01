@@ -1,7 +1,11 @@
 extern crate mimium_lang;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use mimium_lang::{
+    compiler,
     runtime::run_source_test,
     utils::{error::report, fileloader},
 };
@@ -51,11 +55,7 @@ fn simple_arithmetic() {
 }
 
 fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
-    let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
-        .iter()
-        .collect();
-    println!("{}", file.to_str().unwrap());
-    let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
+    let (file, src) = load_src(path);
     let res = run_source_test(&src, times, stereo);
     match res {
         Ok(res) => Ok(res),
@@ -64,6 +64,15 @@ fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
             Err(())
         }
     }
+}
+
+fn load_src(path: &str) -> (PathBuf, String) {
+    let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
+        .iter()
+        .collect();
+    println!("{}", file.to_str().unwrap());
+    let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
+    (file, src)
 }
 
 fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
@@ -301,14 +310,41 @@ fn fb_mem2() {
     assert_eq!(res, ans);
 }
 
-#[test]
-fn fb_mem3_uninitialized_memory() {
-    // It seems a function with a long state size might refer to an
-    // uninitialized memory. Since this happens randomly, we need to repeat the
-    // same test several times to reproduce the error.
-    for _ in 0..100 {
-        let res = run_file_test_stereo("fb_mem3.mmm", 1).unwrap();
-        let ans = vec![0.0, 0.0];
-        assert_eq!(res, ans);
+fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
+    let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans.into_iter());
+    let (file, src) = load_src(path);
+    let bytecode = match compiler::emit_bytecode(&src) {
+        Ok(res) => res,
+        Err(errs) => {
+            report(&src, file, &errs);
+            panic!("failed to emit bytecode");
+        }
+    };
+
+    for (sym, proto) in bytecode.global_fn_table {
+        let fn_name = sym.as_str();
+        let actual = proto.state_size;
+        match state_sizes.get(fn_name) {
+            Some(&expected) => {
+                assert_eq!(
+                    actual, expected,
+                    "state size of function `{fn_name}` is wrong"
+                );
+            }
+            None => panic!("no such function: {fn_name}"),
+        };
     }
+}
+
+#[test]
+fn fb_mem3_state_size() {
+    test_state_sizes(
+        "fb_mem3.mmm",
+        [
+            ("_mimium_global", 0),
+            ("counter", 1),
+            ("mem_by_hand", 4),
+            ("dsp", 5),
+        ],
+    );
 }
