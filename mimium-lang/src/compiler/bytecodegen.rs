@@ -260,6 +260,67 @@ impl ByteCodeGenerator {
         }
         (faddress, offset)
     }
+    fn get_or_insert_extfunid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
+        self.program
+            .ext_fun_table
+            .iter()
+            .position(|(name, _ty)| *name == label)
+            .unwrap_or_else(|| {
+                self.program.ext_fun_table.push((label, ty));
+                self.program.ext_fun_table.len() - 1
+            }) as ConstPos
+    }
+    fn get_or_insert_extclsid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
+        self.program
+            .ext_cls_table
+            .iter()
+            .position(|(name, _ty)| *name == label)
+            .unwrap_or_else(|| {
+                self.program.ext_cls_table.push((label, ty));
+                self.program.ext_cls_table.len() - 1
+            }) as ConstPos
+    }
+    fn prepare_extfun_or_cls(
+        &mut self,
+        funcproto: &mut vm::FuncProto,
+        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+        dst: Arc<mir::Value>,
+        args: &[(Arc<mir::Value>, TypeNodeId)],
+        idx: ConstPos,
+        ty: TypeNodeId,
+    ) -> (Reg, Reg, TypeSize) {
+        let fi = funcproto.add_new_constant(idx as u64);
+        let rsize = Self::word_size_for_type(ty);
+        let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+        let f = self.vregister.push_stack(&dst, rsize as _);
+        bytecodes_dst.push(VmInstruction::MoveConst(f, fi as ConstPos));
+        let (dst, argsize) = self.prepare_function(bytecodes_dst, &dst, args);
+        (dst, argsize, rsize)
+    }
+    fn prepare_extfun(
+        &mut self,
+        funcproto: &mut vm::FuncProto,
+        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+        dst: Arc<mir::Value>,
+        args: &[(Arc<mir::Value>, TypeNodeId)],
+        label: Symbol,
+        ty: TypeNodeId,
+    ) -> (Reg, Reg, TypeSize) {
+        let idx = self.get_or_insert_extfunid(label, ty);
+        self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
+    }
+    fn prepare_extcls(
+        &mut self,
+        funcproto: &mut vm::FuncProto,
+        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+        dst: Arc<mir::Value>,
+        args: &[(Arc<mir::Value>, TypeNodeId)],
+        label: Symbol,
+        ty: TypeNodeId,
+    ) -> (Reg, Reg, TypeSize) {
+        let idx = self.get_or_insert_extclsid(label, ty);
+        self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
+    }
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
@@ -374,18 +435,9 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::ExtFunction(label, ty) => {
                         //todo: use btreemap
-                        let idx = {
-                            self.program.ext_fun_table.push((*label, *ty));
-                            self.program.ext_fun_table.len() - 1
-                        };
-                        let fi = funcproto.add_new_constant(idx as u64);
-                        let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        let f = self.vregister.push_stack(&dst, rsize as _);
-                        bytecodes_dst.push(VmInstruction::MoveConst(f, fi as ConstPos));
-                        let (dst, argsize) = self.prepare_function(bytecodes_dst, &dst, args);
-                        let nret = Self::word_size_for_type(*ty);
-                        Some(VmInstruction::CallExtFun(dst as Reg, argsize, nret))
+                        let (dst, argsize, nret) =
+                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *ty);
+                        Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
                     mir::Value::FixPoint(_) => {
                         unreachable!("fixpoint should be called with callcls.")
@@ -413,9 +465,10 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(_idx, _) => {
-                        todo!()
-                        // VmInstruction::CallExtFun(idx as Reg, nargs, 1)
+                    mir::Value::ExtFunction(label, ty) => {
+                        let (dst, argsize, nret) =
+                        self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *ty);
+                    Some(VmInstruction::CallExtCls(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }

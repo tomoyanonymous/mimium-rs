@@ -51,7 +51,7 @@ pub enum Instruction {
         array_idx: u64,
         tuple_offset: u64,
     },
-    // call function, arguments
+    // call function, arguments, type of return value
     Call(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
     CallCls(VPtr, Vec<(VPtr, TypeNodeId)>, TypeNodeId),
     GetGlobal(VPtr, TypeNodeId),

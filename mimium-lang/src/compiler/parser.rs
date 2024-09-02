@@ -127,9 +127,9 @@ where
 
 type ExprParser<'a> = Recursive<'a, Token, ExprNodeId, Simple<Token>>;
 
-fn items_parser<'a>(
-    expr: ExprParser<'a>,
-) -> impl Parser<Token, Vec<ExprNodeId>, Error = Simple<Token>> + Clone + 'a {
+fn items_parser(
+    expr: ExprParser<'_>,
+) -> impl Parser<Token, Vec<ExprNodeId>, Error = Simple<Token>> + Clone + '_ {
     expr.separated_by(just(Token::Comma))
         .allow_trailing()
         .collect::<Vec<_>>()
