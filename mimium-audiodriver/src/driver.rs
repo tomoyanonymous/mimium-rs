@@ -1,4 +1,8 @@
-use mimium_lang::runtime::vm;
+use mimium_lang::{
+    interner::{Symbol, ToSymbol},
+    runtime::vm::{self, ExtClsType, ExtFunType, Machine, ReturnCode},
+    utils::error::ReportableError,
+};
 use num_traits::Float;
 
 #[derive(Clone)]
@@ -32,6 +36,24 @@ pub struct SampleRate(pub u32);
 #[derive(Clone, Copy)]
 pub struct Time(pub u64);
 
+#[derive(Debug)]
+pub enum Error {
+    Unknown,
+}
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Unknown => write!(f, "unknown runtime error"),
+        }
+    }
+}
+impl std::error::Error for Error {}
+impl ReportableError for Error {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        0..0 //todo!
+    }
+}
+
 pub trait Driver {
     type Sample: Float;
     fn init(
@@ -50,12 +72,31 @@ pub trait Driver {
 pub struct RuntimeData {
     pub program: vm::Program,
     pub vm: vm::Machine,
+    dsp_i: usize,
 }
 impl RuntimeData {
-    pub fn new(program: vm::Program) -> Self {
+    pub fn new(
+        program: vm::Program,
+        ext_funs: &[(Symbol, ExtFunType)],
+        ext_clss: &[(Symbol, ExtClsType)],
+    ) -> Self {
         let mut vm = vm::Machine::new();
+        ext_funs.iter().for_each(|(name, f)| {
+            vm.install_extern_fn(*name, *f);
+        });
+        ext_clss.iter().for_each(|(name, f)| {
+            vm.install_extern_cls(*name, f.clone());
+        });
         vm.link_functions(&program);
-        Self { program, vm }
+        //todo:error handling
+        let dsp_i = program.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
+        Self { program, vm, dsp_i }
+    }
+    pub fn run_main(&mut self) -> ReturnCode {
+        self.vm.execute_main(&self.program)
+    }
+    pub fn run_dsp(&mut self) -> ReturnCode {
+        self.vm.execute_idx(&self.program, self.dsp_i)
     }
 }
 

@@ -13,7 +13,7 @@ pub mod builtin;
 pub mod bytecode;
 pub mod program;
 mod ringbuffer;
-use bytecode::*;
+pub use bytecode::*;
 use ringbuffer::Ringbuffer;
 
 use program::OpenUpValue;
@@ -27,7 +27,7 @@ pub type RawVal = u64;
 pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
-pub type ExtClsType = Arc<Mutex<dyn FnMut(&mut Machine) -> ReturnCode>>;
+pub type ExtClsType = Arc<dyn Fn(&mut Machine) -> ReturnCode>;
 
 #[derive(Debug, Default, PartialEq)]
 struct StateStorage {
@@ -277,7 +277,7 @@ impl Machine {
     pub fn clear_stack(&mut self) {
         self.stack.fill(0);
     }
-    fn get_stack(&self, offset: i64) -> RawVal {
+    pub fn get_stack(&self, offset: i64) -> RawVal {
         // unsafe {
         //     *self
         //         .stack
@@ -285,7 +285,7 @@ impl Machine {
         // }
         self.get_stack_range(offset, 1).1[0]
     }
-    fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> (Range<usize>, &[RawVal]) {
+    pub fn get_stack_range(&self, offset: i64, word_size: TypeSize) -> (Range<usize>, &[RawVal]) {
         let addr_start = self.base_pointer as usize + offset as usize;
         let addr_end = addr_start + word_size as usize;
         let start = self.stack.as_slice().as_ptr();
@@ -299,10 +299,10 @@ impl Machine {
         (addr_start..addr_end, slice)
     }
 
-    fn set_stack(&mut self, offset: i64, v: RawVal) {
+    pub fn set_stack(&mut self, offset: i64, v: RawVal) {
         self.set_stack_range(offset, &v as *const RawVal, 1)
     }
-    fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
+    pub fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
         debug_assert!(!v.is_null());
         // debug_assert!(v.is_aligned());
         let vs = unsafe { slice::from_raw_parts(v, size) };
@@ -430,8 +430,7 @@ impl Machine {
             .iter()
             .map(|upv| {
                 if let UpValue::Open(i) = upv {
-                    let (_range, ov) =
-                        self.get_open_upvalue(self.base_pointer as usize, *i);
+                    let (_range, ov) = self.get_open_upvalue(self.base_pointer as usize, *i);
                     UpValue::Closed(Rc::new(RefCell::new(ov.to_vec())))
                 } else {
                     upv.clone()
@@ -532,14 +531,9 @@ impl Machine {
                     //     .cls_map
                     //     .get(&(self.get_stack(func as i64) as usize))
                     //     .expect("closure map not resolved.");
-                    let (_name, cls_mutex) = self.ext_cls_table[func as usize].clone();
-                    self.call_function(func, nargs, nret_req, move |machine| {
-                        if let Ok(mut cls) = cls_mutex.lock() {
-                            cls(machine)
-                        } else {
-                            0
-                        }
-                    });
+                    let (_name, cls) = self.ext_cls_table[func as usize].clone();
+                    let cls = cls.clone();
+                    self.call_function(func, nargs, nret_req, move |machine| cls(machine));
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;

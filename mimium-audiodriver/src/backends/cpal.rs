@@ -4,8 +4,8 @@ use std::sync::Arc;
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
-use mimium_lang::interner::ToSymbol;
-use mimium_lang::runtime::vm;
+use mimium_lang::interner::{Symbol, ToSymbol};
+use mimium_lang::runtime::vm::{self, ExtClsType, Machine, ReturnCode};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 const BUFFER_RATIO: usize = 2;
@@ -32,6 +32,7 @@ impl Default for NativeDriver {
     }
 }
 
+//Runtime data, which will be created and immidiately send to audio thread.
 struct NativeAudioData {
     pub vmdata: RuntimeData,
     dsp_i: usize,
@@ -49,8 +50,12 @@ impl NativeAudioData {
             .expect("no dsp function found");
         let (_, dsp_func) = &program.global_fn_table[dsp_i];
         let dsp_ochannels = dsp_func.nret;
-
-        let vmdata = RuntimeData::new(program);
+        //todo: split as trait interface method
+        let getnow_fn: (Symbol, ExtClsType) = (
+            "_mimium_getnow".to_symbol(),
+            crate::runtime_fn::gen_getnowfn(count.clone()),
+        );
+        let vmdata = RuntimeData::new(program, &[], &[getnow_fn]);
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
         Self {
             vmdata,
