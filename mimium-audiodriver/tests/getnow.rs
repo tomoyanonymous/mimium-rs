@@ -1,8 +1,9 @@
 use mimium_audiodriver::{backends::mock::MockDriver, driver::SampleRate};
 use mimium_lang::{
+    function,
     interner::ToSymbol as _,
     numeric,
-    runtime::vm::{FuncProto, Instruction, Machine, Program},
+    runtime::vm::{FuncProto, Instruction, Program},
     types::{PType, Type},
 };
 
@@ -22,15 +23,16 @@ fn getnow_test() {
         state_size: 0,
     };
     let inner_insts = vec![
-        Instruction::CallExtCls(0, 0, 1), //call getnow, 7 should be set at reg 0
-        Instruction::Return(0, 1),        // return single value at 1
+        Instruction::MoveConst(0, 0),     //load constant 0 for closure index
+        Instruction::CallExtCls(0, 0, 1), //call getnow
+        Instruction::Return(0, 1),        // return single value at 0
     ];
     let dsp_f = FuncProto {
         nparam: 0,
         nret: 1,
         upindexes: vec![],
         bytecodes: inner_insts,
-        constants: vec![], //cls, int 4
+        constants: vec![0], //cls,
         delay_sizes: vec![],
         state_size: 0,
     };
@@ -39,7 +41,7 @@ fn getnow_test() {
     let prog = Program {
         global_fn_table: fns,
         ext_fun_table: vec![],
-        ext_cls_table: vec![("_mimium_getnow".to_symbol(), numeric!())],
+        ext_cls_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
         global_vals: vec![],
     };
 
