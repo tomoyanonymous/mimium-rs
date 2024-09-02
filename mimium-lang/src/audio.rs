@@ -1,3 +1,1 @@
-pub trait AudioDriver{
-    
-}
+pub trait AudioDriver {}

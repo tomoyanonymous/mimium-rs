@@ -186,14 +186,14 @@ fn rust_closure_test() {
     let fnames = vec!["main".to_symbol()];
     let global_fn_table = fnames.into_iter().zip(fns.into_iter()).collect::<Vec<_>>();
     // let mut count = 0;
-    let cls = Arc::new(Mutex::new(|m: &mut Machine| {
+    let cls = Arc::new(|m: &mut Machine| {
         let v = m.get_top_n(1)[0];
         let i = Machine::get_as::<u64>(v) + 3;
         println!("Call from closure: {}", i);
         //?????
         m.set_stack(-1, Machine::to_value(i));
         return 1;
-    }));
+    });
     let mut machine = Machine::new();
     machine.install_extern_fn("lib_printi".to_symbol(), lib_printi);
     machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());

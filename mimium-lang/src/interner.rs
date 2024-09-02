@@ -138,7 +138,7 @@ impl PartialEq for ExprNodeId {
     fn eq(&self, other: &Self) -> bool {
         self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
     }
-} 
+}
 
 impl PartialEq for TypeNodeId {
     fn eq(&self, other: &Self) -> bool {

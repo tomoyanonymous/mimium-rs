@@ -120,7 +120,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Closure(dst, src) => {
                 write!(f, "{:<10} {} {}", "closure", dst, src)
             }
-            Instruction::Close( src) => {
+            Instruction::Close(src) => {
                 write!(f, "{:<10} {}", "close", src)
             }
             Instruction::Delay(dst, src, time) => {

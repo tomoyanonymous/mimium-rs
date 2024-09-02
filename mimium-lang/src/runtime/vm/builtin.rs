@@ -18,7 +18,7 @@ pub fn probef(machine: &mut Machine) -> ReturnCode {
 pub fn probelnf(machine: &mut Machine) -> ReturnCode {
     let rv = machine.get_stack(0);
     let i = super::Machine::get_as::<f64>(rv);
-    println!("{:10} ",i);
+    println!("{} ", i);
     machine.set_stack(0, rv);
     1
 }
