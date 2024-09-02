@@ -2,7 +2,7 @@ use super::intrinsics;
 use super::typing::{self, infer_root, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
-use crate::{numeric, unit};
+use crate::{function, numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value};
@@ -299,7 +299,12 @@ impl Context {
                 f.parse::<f64>().expect("illegal float format"),
             )),
             Literal::SelfLit => unreachable!(),
-            Literal::Now => todo!(),
+            Literal::Now => {
+                let ftype = numeric!();
+                let fntype = function!(vec![], ftype);
+                let getnow = Arc::new(Value::ExtFunction("_mimium_getnow".to_symbol(), fntype));
+                self.push_inst(Instruction::CallCls(getnow, vec![], ftype))
+            }
         };
         Ok(v)
     }

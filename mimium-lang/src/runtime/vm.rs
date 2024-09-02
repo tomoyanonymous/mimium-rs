@@ -300,12 +300,12 @@ impl Machine {
     }
 
     pub fn set_stack(&mut self, offset: i64, v: RawVal) {
-        self.set_stack_range(offset, &v as *const RawVal, 1)
+        self.set_stack_range(offset, &[v])
     }
-    pub fn set_stack_range(&mut self, offset: i64, v: *const RawVal, size: usize) {
-        debug_assert!(!v.is_null());
+    pub fn set_stack_range(&mut self, offset: i64, vs: &[RawVal]) {
+        // debug_assert!(!v.is_null());
         // debug_assert!(v.is_aligned());
-        let vs = unsafe { slice::from_raw_parts(v, size) };
+        // let vs = unsafe { slice::from_raw_parts(v, size) };
         set_vec_range(
             &mut self.stack,
             (self.base_pointer as i64 + offset) as usize,
@@ -526,12 +526,11 @@ impl Machine {
                     self.stack.truncate(base + func as usize + nret as usize);
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
-                    // todo: load closure index via constant for the case of more than 255 closures in program
-                    // let cls_idx = self
-                    //     .cls_map
-                    //     .get(&(self.get_stack(func as i64) as usize))
-                    //     .expect("closure map not resolved.");
-                    let (_name, cls) = self.ext_cls_table[func as usize].clone();
+                    let cls_idx = self
+                        .cls_map
+                        .get(&(self.get_stack(func as i64) as usize))
+                        .expect("closure map not resolved.");
+                    let (_name, cls) = &self.ext_cls_table[*cls_idx];
                     let cls = cls.clone();
                     self.call_function(func, nargs, nret_req, move |machine| cls(machine));
                 }
@@ -568,7 +567,7 @@ impl Machine {
                         match rv {
                             UpValue::Open(i) => {
                                 let upper_base = cls.base_ptr as usize;
-                                let (range, rawv) = self.get_open_upvalue(upper_base, *i);
+                                let (range, _rawv) = self.get_open_upvalue(upper_base, *i);
                                 // log::trace!("open {}", unsafe {
                                 //     std::mem::transmute::<u64, f64>(rawv[0])
                                 // });
@@ -576,17 +575,10 @@ impl Machine {
                                 self.move_stack_range(dst as _, range);
                             }
                             UpValue::Closed(rawval) => {
-                                let (ptr, len) = {
-                                    let rawv = rawval.borrow();
-                                    // log::trace!("close{:?}", unsafe {
-                                    //     std::mem::transmute::<u64, f64>(rawv[0])
-                                    // });
-                                    let ptr = rawv.as_ptr();
-                                    let len = rawv.len();
-                                    assert_eq!(rawv.len(), size as usize);
-                                    (ptr, len)
-                                };
-                                self.set_stack_range(dst as i64, ptr, len);
+                                //force borrow because closure cell and stack never collisions
+                                let rawv: &[RawVal] =
+                                    unsafe { std::mem::transmute(rawval.borrow().as_slice()) };
+                                self.set_stack_range(dst as i64, rawv);
                             }
                         };
                     };
@@ -617,7 +609,7 @@ impl Machine {
                         // debug_assert!(vstart.is_aligned());
                         slice::from_raw_parts(vstart, size as _)
                     };
-                    self.set_stack_range(dst as i64, gvs.as_ptr(), gvs.len())
+                    self.set_stack_range(dst as i64, gvs)
                 }
                 Instruction::SetGlobal(gid, src, size) => {
                     let gvs = unsafe {
@@ -686,10 +678,11 @@ impl Machine {
                     Self::to_value::<bool>(Self::get_as::<i64>(self.get_stack(src as i64)) != 0),
                 ),
                 Instruction::GetState(dst, size) => {
-                    let v = self.get_current_state().get_state(size as _);
-                    let ptr = v.as_ptr();
-                    let size = v.len();
-                    self.set_stack_range(dst as i64, ptr, size);
+                    //force borrow because state storage and stack never collisions
+                    let v: &[RawVal] = unsafe {
+                        std::mem::transmute(self.get_current_state().get_state(size as _))
+                    };
+                    self.set_stack_range(dst as i64, v);
                 }
                 Instruction::SetState(src, size) => {
                     let vs = {

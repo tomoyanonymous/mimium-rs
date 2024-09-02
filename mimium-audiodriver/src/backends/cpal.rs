@@ -77,8 +77,6 @@ impl NativeAudioData {
             let _rc = self.vmdata.vm.execute_idx(&self.vmdata.program, self.dsp_i);
             let res =
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
-            // let phase = ((self.count as f64) *440f64 / 44100f64) % 1.0;
-            // let res = (phase* std::f64::consts::PI *2.0).sin();
             self.count
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             match (h_ochannels, self.dsp_ochannels) {
