@@ -526,12 +526,11 @@ impl Machine {
                     self.stack.truncate(base + func as usize + nret as usize);
                 }
                 Instruction::CallExtCls(func, nargs, nret_req) => {
-                    // todo: load closure index via constant for the case of more than 255 closures in program
-                    // let cls_idx = self
-                    //     .cls_map
-                    //     .get(&(self.get_stack(func as i64) as usize))
-                    //     .expect("closure map not resolved.");
-                    let (_name, cls) = self.ext_cls_table[func as usize].clone();
+                    let cls_idx = self
+                        .cls_map
+                        .get(&(self.get_stack(func as i64) as usize))
+                        .expect("closure map not resolved.");
+                    let (_name, cls) = &self.ext_cls_table[*cls_idx];
                     let cls = cls.clone();
                     self.call_function(func, nargs, nret_req, move |machine| cls(machine));
                 }
