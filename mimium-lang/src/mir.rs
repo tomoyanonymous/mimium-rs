@@ -208,8 +208,8 @@ pub struct Mir {
     pub functions: Vec<Function>,
 }
 
-pub(crate) const GLOBAL_FN_INDEX: usize = 0;
-pub(crate) const DSP_FN_INDEX: usize = 1;
+pub const FN_INDEX_GLOBAL: usize = 0;
+pub const FN_INDEX_DSP: usize = 1;
 
 impl Default for Mir {
     fn default() -> Self {

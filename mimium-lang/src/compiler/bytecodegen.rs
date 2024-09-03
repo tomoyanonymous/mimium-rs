@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::interner::{Symbol, TypeNodeId};
-use crate::mir::{self, Mir, StateSize, DSP_FN_INDEX, GLOBAL_FN_INDEX};
+use crate::mir::{self, Mir, StateSize, FN_INDEX_DSP, FN_INDEX_GLOBAL};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{Type, TypeSize};
@@ -710,7 +710,7 @@ impl ByteCodeGenerator {
         let functions = if has_entry_point {
             // if the code has entry points, _mimium_global and dsp must be
             // defined at this point.
-            for i in [GLOBAL_FN_INDEX, DSP_FN_INDEX] {
+            for i in [FN_INDEX_GLOBAL, FN_INDEX_DSP] {
                 if !mir.functions[i].is_defined {
                     let e = Box::new(Error(ErrorKind::NoMainFunction, 0..0));
                     return Err(vec![e]);
@@ -718,7 +718,7 @@ impl ByteCodeGenerator {
             }
             &mut mir.functions
         } else {
-            &mut mir.functions[(DSP_FN_INDEX + 1)..]
+            &mut mir.functions[(FN_INDEX_DSP + 1)..]
         };
 
         self.program.global_fn_table = functions

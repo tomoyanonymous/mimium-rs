@@ -23,10 +23,9 @@ impl MockDriver {
         program: mimium_lang::runtime::vm::Program,
         sample_rate: Option<SampleRate>,
     ) -> Self {
-        let dsp_i = program
-            .get_fun_index(&"dsp".to_symbol())
-            .expect("no dsp function found");
-        let (_, dsp_func) = &program.global_fn_table[dsp_i];
+        let dsp_func = program
+            .get_dsp_fn()
+            .expect("Program should have dsp function");
         let ochannels = dsp_func.nret as u64;
         let count = Arc::new(AtomicU64::new(0));
         //todo: split as trait interface method

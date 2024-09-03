@@ -1,5 +1,6 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    mir::FN_INDEX_DSP,
     runtime::vm::{self, ExtClsType, ExtFunType, Machine, ReturnCode},
     utils::error::ReportableError,
 };
@@ -72,7 +73,6 @@ pub trait Driver {
 pub struct RuntimeData {
     pub program: vm::Program,
     pub vm: vm::Machine,
-    dsp_i: usize,
 }
 impl RuntimeData {
     pub fn new(
@@ -89,14 +89,16 @@ impl RuntimeData {
         });
         vm.link_functions(&program);
         //todo:error handling
-        let dsp_i = program.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
-        Self { program, vm, dsp_i }
+        if program.get_dsp_fn().is_none() {
+            panic!("Program doesn't have `dsp` function")
+        }
+        Self { program, vm }
     }
     pub fn run_main(&mut self) -> ReturnCode {
         self.vm.execute_main(&self.program)
     }
     pub fn run_dsp(&mut self) -> ReturnCode {
-        self.vm.execute_idx(&self.program, self.dsp_i)
+        self.vm.execute_idx(&self.program, FN_INDEX_DSP)
     }
 }
 

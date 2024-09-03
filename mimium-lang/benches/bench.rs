@@ -11,6 +11,7 @@ mod tests {
     mod runtime {
         use mimium_lang::compiler::emit_bytecode;
         use mimium_lang::interner::ToSymbol;
+        use mimium_lang::mir::FN_INDEX_DSP;
         use mimium_lang::runtime::vm::Machine;
         use test::Bencher;
 
@@ -50,8 +51,7 @@ fn dsp(){{
             let mut machine = Machine::new();
             machine.link_functions(&program);
             machine.execute_main(&program);
-            let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");
-            b.iter(move || machine.execute_idx(&program, idx));
+            b.iter(move || machine.execute_idx(&program, FN_INDEX_DSP));
         }
         #[bench]
         fn bench_multiosc5(b: &mut Bencher) {
