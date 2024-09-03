@@ -2,12 +2,14 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::interner::{Symbol, TypeNodeId};
-use crate::mir::{self, Mir, StateSize};
+use crate::mir::{self, Mir, StateSize, DSP_FN_INDEX, GLOBAL_FN_INDEX};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{Type, TypeSize};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
+
+use super::{Error, ErrorKind};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Region {
@@ -467,8 +469,8 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::ExtFunction(label, ty) => {
                         let (dst, argsize, nret) =
-                        self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
-                    Some(VmInstruction::CallExtCls(dst, argsize, nret))
+                            self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
+                        Some(VmInstruction::CallExtCls(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }
@@ -700,9 +702,26 @@ impl ByteCodeGenerator {
         });
         (mirfunc.label, func)
     }
-    pub fn generate(&mut self, mir: Mir) -> vm::Program {
-        self.program.global_fn_table = mir
-            .functions
+    pub fn generate(
+        &mut self,
+        mut mir: Mir,
+        has_entry_point: bool,
+    ) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+        let functions = if has_entry_point {
+            // if the code has entry points, _mimium_global and dsp must be
+            // defined at this point.
+            for i in [GLOBAL_FN_INDEX, DSP_FN_INDEX] {
+                if !mir.functions[i].is_defined {
+                    let e = Box::new(Error(ErrorKind::NoMainFunction, 0..0));
+                    return Err(vec![e]);
+                }
+            }
+            &mut mir.functions
+        } else {
+            &mut mir.functions[(DSP_FN_INDEX + 1)..]
+        };
+
+        self.program.global_fn_table = functions
             .iter()
             .enumerate()
             .map(|(i, func)| {
@@ -711,7 +730,7 @@ impl ByteCodeGenerator {
             })
             .collect();
 
-        self.program.clone()
+        Ok(self.program.clone())
     }
 }
 fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
@@ -766,9 +785,12 @@ fn optimize(program: vm::Program) -> vm::Program {
     // remove_redundunt_mov(program)
     program
 }
-pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+pub fn gen_bytecode(
+    mir: mir::Mir,
+    has_entry_point: bool,
+) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
     let mut generator = ByteCodeGenerator::default();
-    let program = generator.generate(mir);
+    let program = generator.generate(mir, has_entry_point)?;
     Ok(optimize(program))
 }
 
@@ -810,7 +832,7 @@ mod test {
         func.body = vec![block];
         src.functions.push(func);
         let mut generator = ByteCodeGenerator::default();
-        let res = generator.generate(src);
+        let res = generator.generate(src, false).unwrap();
 
         let mut answer = vm::Program::default();
         let mut main = vm::FuncProto::new(1, 1);

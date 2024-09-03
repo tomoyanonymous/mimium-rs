@@ -1,7 +1,8 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::{
-    interner::{Symbol, TypeNodeId},
+    interner::{Symbol, ToSymbol, TypeNodeId},
     types::TypeSize,
+    utils::metadata::{DSP_LABEL, GLOBAL_LABEL},
 };
 use std::{cell::OnceCell, sync::Arc};
 
@@ -146,6 +147,7 @@ pub struct Function {
     pub upperfn_i: Option<usize>,
     pub body: Vec<Block>,
     pub state_sizes: Vec<StateSize>,
+    pub is_defined: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,11 +157,12 @@ pub struct StateSize {
 }
 
 impl Function {
-    pub fn new(
+    fn new_inner(
         name: Symbol,
         args: &[VPtr],
         argtypes: &[TypeNodeId],
         upperfn_i: Option<usize>,
+        is_defined: bool,
     ) -> Self {
         Self {
             label: name,
@@ -170,8 +173,21 @@ impl Function {
             upperfn_i,
             body: vec![Block::default()],
             state_sizes: vec![],
+            is_defined,
         }
     }
+    pub fn new(
+        name: Symbol,
+        args: &[VPtr],
+        argtypes: &[TypeNodeId],
+        upperfn_i: Option<usize>,
+    ) -> Self {
+        Self::new_inner(name, args, argtypes, upperfn_i, true)
+    }
+    pub fn new_stub(name: Symbol) -> Self {
+        Self::new_inner(name, &[], &[], None, false)
+    }
+
     pub fn add_new_basicblock(&mut self) -> usize {
         self.body.push(Block(vec![]));
         self.body.len() - 1
@@ -187,7 +203,22 @@ impl Function {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Mir {
     pub functions: Vec<Function>,
+}
+
+pub(crate) const GLOBAL_FN_INDEX: usize = 0;
+pub(crate) const DSP_FN_INDEX: usize = 1;
+
+impl Default for Mir {
+    fn default() -> Self {
+        Self {
+            // preserve index for the main entry points
+            functions: vec![
+                Function::new_stub(GLOBAL_LABEL.to_symbol()),
+                Function::new_stub(DSP_LABEL.to_symbol()),
+            ],
+        }
+    }
 }

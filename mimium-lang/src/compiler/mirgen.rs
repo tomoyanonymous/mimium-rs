@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::Span;
+use crate::utils::metadata::{Span, GLOBAL_LABEL};
 
 use crate::ast::{Expr, Literal};
 // pub mod closure_convert;
@@ -245,8 +245,20 @@ impl Context {
         parent_i: Option<usize>,
     ) -> usize {
         let newf = mir::Function::new(name, args, argtypes, parent_i);
-        self.program.functions.push(newf);
-        self.program.functions.len() - 1
+        match name.as_str() {
+            GLOBAL_LABEL => {
+                self.program.functions[0] = newf;
+                0
+            }
+            "dsp" => {
+                self.program.functions[1] = newf;
+                1
+            }
+            _ => {
+                self.program.functions.push(newf);
+                self.program.functions.len() - 1
+            }
+        }
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -646,7 +658,7 @@ impl Context {
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
-                let insert_pos = if self.program.functions.is_empty() {
+                let insert_pos = if !self.program.functions.iter().any(|f| f.is_defined) {
                     0
                 } else {
                     self.get_current_basicblock().0.len()

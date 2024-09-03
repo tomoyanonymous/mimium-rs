@@ -14,6 +14,7 @@ pub enum ErrorKind {
     VariableNotFound(String),
     NonPrimitiveInFeed,
     NotApplicable, //need?
+    NoMainFunction,
     Unknown,
 }
 #[derive(Debug, Clone)]
@@ -48,6 +49,7 @@ impl std::fmt::Display for ErrorKind {
             }
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::NonPrimitiveInFeed => write!(f, "Feed can take only non-funtion type."),
+            ErrorKind::NoMainFunction => write!(f, "`dsp` function is not defined."),
             ErrorKind::Unknown => write!(f, "unknwon error."),
         }
     }
@@ -90,7 +92,7 @@ pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
 }
 pub fn emit_bytecode(src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
     let mir = emit_mir(src)?;
-    bytecodegen::gen_bytecode(mir)
+    bytecodegen::gen_bytecode(mir, true)
 }
 
 pub fn interpret_top(
