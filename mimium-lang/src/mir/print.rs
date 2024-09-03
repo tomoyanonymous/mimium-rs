@@ -25,7 +25,7 @@ fn display_state_sizes<T: AsRef<[StateSize]>>(x: T) -> String {
 
 impl std::fmt::Display for Mir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for fun in self.functions.iter() {
+        for fun in self.iter() {
             let af = fun
                 .args
                 .iter()
