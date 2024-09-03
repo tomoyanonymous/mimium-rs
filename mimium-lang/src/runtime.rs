@@ -1,5 +1,4 @@
 use crate::compiler;
-use crate::interner::ToSymbol;
 use crate::mir::{FN_INDEX_DSP, FN_INDEX_GLOBAL};
 use crate::utils::{error::ReportableError, metadata::Span};
 

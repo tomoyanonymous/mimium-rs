@@ -1,5 +1,5 @@
 use super::{Instruction, RawVal};
-use crate::interner::{Symbol, ToSymbol, TypeNodeId};
+use crate::interner::{Symbol, TypeNodeId};
 use crate::mir::{self, FN_INDEX_DSP};
 pub use mir::OpenUpValue;
 

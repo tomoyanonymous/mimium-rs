@@ -1,5 +1,6 @@
 // Mid-level intermediate representation that is more like imperative form than hir.
 use crate::{
+    compiler::mirgen::{CompileError, CompileErrorKind},
     interner::{Symbol, ToSymbol, TypeNodeId},
     types::TypeSize,
     utils::metadata::{DSP_LABEL, GLOBAL_LABEL},
@@ -206,6 +207,7 @@ impl Function {
 #[derive(Debug, Clone)]
 pub struct Mir {
     functions: Vec<Function>,
+    defined_symbols: Vec<Symbol>,
 }
 
 pub const FN_INDEX_GLOBAL: usize = 0;
@@ -219,24 +221,33 @@ impl Default for Mir {
                 Function::new_stub(GLOBAL_LABEL.to_symbol()),
                 Function::new_stub(DSP_LABEL.to_symbol()),
             ],
+            defined_symbols: vec![],
         }
     }
 }
 
 impl Mir {
-    pub fn add_function(&mut self, func: Function) -> usize {
+    pub fn add_function(&mut self, func: Function) -> Result<usize, CompileError> {
+        if self.defined_symbols.contains(&func.label) {
+            return Err(CompileError::new(
+                CompileErrorKind::DuplicatedFunctionName(func.label.to_string()),
+                0..0, // TODO: Add proper span
+            ));
+        }
+        self.defined_symbols.push(func.label);
+
         match func.label.as_str() {
             GLOBAL_LABEL => {
                 self.functions[FN_INDEX_GLOBAL] = func;
-                FN_INDEX_GLOBAL
+                Ok(FN_INDEX_GLOBAL)
             }
             DSP_LABEL => {
                 self.functions[FN_INDEX_DSP] = func;
-                FN_INDEX_DSP
+                Ok(FN_INDEX_DSP)
             }
             _ => {
                 self.functions.push(func);
-                self.functions.len() - 1
+                Ok(self.functions.len() - 1)
             }
         }
     }

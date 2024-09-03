@@ -828,7 +828,7 @@ mod test {
             mir::Instruction::Return(res.clone(), numeric!()),
         ));
         func.body = vec![block];
-        src.add_function(func);
+        src.add_function(func).unwrap();
         let mut generator = ByteCodeGenerator::default();
         let res = generator.generate(src);
 

@@ -5,16 +5,14 @@ use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{function, numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
-use crate::mir::{
-    self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value, FN_INDEX_DSP, FN_INDEX_GLOBAL,
-};
+use crate::mir::{self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value};
 
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::{Span, DSP_LABEL, GLOBAL_LABEL};
+use crate::utils::metadata::Span;
 
 use crate::ast::{Expr, Literal};
 // pub mod closure_convert;
@@ -245,7 +243,7 @@ impl Context {
         args: &[VPtr],
         argtypes: &[TypeNodeId],
         parent_i: Option<usize>,
-    ) -> usize {
+    ) -> Result<usize, CompileError> {
         self.program
             .add_function(mir::Function::new(name, args, argtypes, parent_i))
     }
@@ -260,7 +258,7 @@ impl Context {
         self.valenv.add_bind(abinds);
         let args = abinds.iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
         let label = self.get_ctxdata().func_i;
-        let c_idx = self.make_new_function(fname, &args, types, Some(label));
+        let c_idx = self.make_new_function(fname, &args, types, Some(label))?;
 
         self.data.push(ContextData {
             func_i: c_idx,
@@ -768,6 +766,7 @@ pub enum CompileErrorKind {
     UnboundedDelay,
     TooManyConstants,
     VariableNotFound(String),
+    DuplicatedFunctionName(String),
 }
 #[derive(Clone, Debug)]
 pub struct CompileError(CompileErrorKind, Span);
@@ -784,9 +783,19 @@ impl std::fmt::Display for CompileError {
 
             CompileErrorKind::TooManyConstants => write!(f, "too many constants."),
             CompileErrorKind::VariableNotFound(s) => write!(f, "Variable {s} not found."),
+            CompileErrorKind::DuplicatedFunctionName(fn_name) => {
+                write!(f, "`{fn_name}` is defined multiple times.")
+            }
         }
     }
 }
+
+impl CompileError {
+    pub fn new(kind: CompileErrorKind, span: Span) -> Self {
+        Self(kind, span)
+    }
+}
+
 impl std::error::Error for CompileError {}
 impl From<typing::Error> for CompileError {
     fn from(value: typing::Error) -> Self {
