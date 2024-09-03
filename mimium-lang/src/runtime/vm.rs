@@ -61,10 +61,10 @@ impl StateStorage {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClosureIdx(pub slotmap::DefaultKey);
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct StateStorageStack(Vec<ClosureIdx>);
 
 impl StateStorageStack {
@@ -352,7 +352,7 @@ impl Machine {
         };
         (abs_pos..end, slice)
     }
-    fn get_closure(&self, idx: ClosureIdx) -> &Closure {
+    pub(crate) fn get_closure(&self, idx: ClosureIdx) -> &Closure {
         debug_assert!(
             self.closures.contains_key(idx.0),
             "Invalid Closure Id referred"
