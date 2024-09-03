@@ -1,5 +1,6 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    runtime::scheduler::{Scheduler,SyncScheduler},
     runtime::vm::{self, ExtClsType, ExtFunType, Machine, ReturnCode},
     utils::error::ReportableError,
 };
@@ -80,7 +81,7 @@ impl RuntimeData {
         ext_funs: &[(Symbol, ExtFunType)],
         ext_clss: &[(Symbol, ExtClsType)],
     ) -> Self {
-        let mut vm = vm::Machine::new();
+        let mut vm = vm::Machine::new(Box::new(SyncScheduler::new()));
         ext_funs.iter().for_each(|(name, f)| {
             vm.install_extern_fn(*name, *f);
         });

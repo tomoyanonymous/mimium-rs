@@ -23,6 +23,8 @@ use crate::{
     interner::{Symbol, ToSymbol},
     types::TypeSize,
 };
+
+use super::scheduler::{DummyScheduler, Scheduler};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
@@ -140,6 +142,7 @@ pub struct Machine {
     states_stack: StateStorageStack,
     delaysizes_pos_stack: Vec<usize>,
     global_vals: Vec<RawVal>,
+    pub(crate) scheduler: Box<dyn Scheduler>,
     debug_stacktype: Vec<RawValType>,
 }
 
@@ -254,7 +257,7 @@ where
 }
 
 impl Machine {
-    pub fn new() -> Self {
+    pub fn new(scheduler: Box<dyn Scheduler>) -> Self {
         let ext_fun_table = builtin::get_builtin_fns()
             .iter()
             .map(|(name, f, _t)| (name.to_symbol(), *f))
@@ -271,8 +274,12 @@ impl Machine {
             states_stack: Default::default(),
             delaysizes_pos_stack: vec![0],
             global_vals: vec![],
+            scheduler,
             debug_stacktype: vec![RawValType::Int; 255],
         }
+    }
+    pub fn new_without_scheduler()->Self{
+        Self::new(Box::new(DummyScheduler))
     }
     pub fn clear_stack(&mut self) {
         self.stack.fill(0);

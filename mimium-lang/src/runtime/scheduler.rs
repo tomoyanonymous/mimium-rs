@@ -1,7 +1,7 @@
-use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::{cmp::Reverse, sync::Arc};
 
-use super::vm::{self, ClosureIdx};
+use super::vm::{self, ClosureIdx, ExtClsType, ExtFunType, ReturnCode};
 
 pub struct RuntimeCtx<'a> {
     machine: &'a mut vm::Machine,
@@ -26,36 +26,62 @@ impl Ord for Task {
         self.partial_cmp(other).unwrap()
     }
 }
-
-pub enum Error {
-    QueueIsFull,
-}
 pub trait Scheduler {
-    fn schedule_at(&mut self, time: Time, task: ClosureIdx) -> Result<(), Error>;
-    fn run_task<'a>(&mut self, now: Time, ctx: &mut RuntimeCtx<'a>) -> Result<(), Error>;
+    fn new() -> Self
+    where
+        Self: Sized;
+    fn schedule_at(&mut self, time: Time, task: ClosureIdx);
+    fn run_task<'a>(&mut self, now: Time, ctx: &mut RuntimeCtx<'a>);
 }
 
-struct SyncScheduler {
+pub struct SyncScheduler {
     tasks: BinaryHeap<Reverse<Task>>,
 }
+
 impl Scheduler for SyncScheduler {
-    fn schedule_at(&mut self, when: Time, cls: ClosureIdx) -> Result<(), Error> {
+    fn new() -> Self {
+        Self {
+            tasks: Default::default(),
+        }
+    }
+    fn schedule_at(&mut self, when: Time, cls: ClosureIdx) {
         self.tasks.push(Reverse(Task { when, cls }));
-        Ok(())
     }
 
-    fn run_task(&mut self, now: Time, ctx: &mut RuntimeCtx<'_>) -> Result<(), Error> {
-        if let Some(Reverse(Task { when, cls })) = self.tasks.peek() {
-            if *when <= now {
+    fn run_task(&mut self, now: Time, ctx: &mut RuntimeCtx<'_>) {
+        match self.tasks.peek() {
+            Some(Reverse(Task { when, cls })) if *when <= now => {
                 let closure = ctx.machine.get_closure(*cls);
                 ctx.machine
                     .execute(closure.fn_proto_pos, ctx.prog, Some(*cls));
-                Ok(())
-            } else {
-                Ok(())
+                let _ = self.tasks.pop();
             }
-        } else {
-            Ok(())
+            _ => {}
         }
     }
+}
+
+pub(crate) struct DummyScheduler;
+impl Scheduler for DummyScheduler {
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
+        Self
+    }
+
+    fn schedule_at(&mut self, time: Time, task: ClosureIdx) {
+        debug_assert!(false, "dummy scheduler invoked");
+    }
+
+    fn run_task<'a>(&mut self, now: Time, ctx: &mut RuntimeCtx<'a>) {
+        debug_assert!(false, "dummy scheduler invoked");
+    }
+}
+
+pub(crate) fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
+    let time = Time(machine.get_stack(0));
+    let cls = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
+    machine.scheduler.schedule_at(time, cls);
+    0
 }
