@@ -704,21 +704,23 @@ impl ByteCodeGenerator {
     }
     pub fn generate(
         &mut self,
-        mut mir: Mir,
+        mir: Mir,
         has_entry_point: bool,
     ) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+        let mut mir_functions = mir.into_functions();
+
         let functions = if has_entry_point {
             // if the code has entry points, _mimium_global and dsp must be
             // defined at this point.
             for i in [FN_INDEX_GLOBAL, FN_INDEX_DSP] {
-                if !mir.functions[i].is_defined {
+                if !mir_functions[i].is_defined {
                     let e = Box::new(Error(ErrorKind::NoDspFunction, 0..0));
                     return Err(vec![e]);
                 }
             }
-            &mut mir.functions
+            &mut mir_functions
         } else {
-            &mut mir.functions[(FN_INDEX_DSP + 1)..]
+            &mut mir_functions[(FN_INDEX_DSP + 1)..]
         };
 
         self.program.global_fn_table = functions
@@ -830,7 +832,7 @@ mod test {
             mir::Instruction::Return(res.clone(), numeric!()),
         ));
         func.body = vec![block];
-        src.functions.push(func);
+        src.add_function(func);
         let mut generator = ByteCodeGenerator::default();
         let res = generator.generate(src, false).unwrap();
 

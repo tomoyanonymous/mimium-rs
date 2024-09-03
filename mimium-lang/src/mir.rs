@@ -205,7 +205,7 @@ impl Function {
 
 #[derive(Debug, Clone)]
 pub struct Mir {
-    pub functions: Vec<Function>,
+    functions: Vec<Function>,
 }
 
 pub const FN_INDEX_GLOBAL: usize = 0;
@@ -220,5 +220,48 @@ impl Default for Mir {
                 Function::new_stub(DSP_LABEL.to_symbol()),
             ],
         }
+    }
+}
+
+impl Mir {
+    pub fn add_function(&mut self, func: Function) -> usize {
+        match func.label.as_str() {
+            GLOBAL_LABEL => {
+                self.functions[FN_INDEX_GLOBAL] = func;
+                FN_INDEX_GLOBAL
+            }
+            DSP_LABEL => {
+                self.functions[FN_INDEX_DSP] = func;
+                FN_INDEX_DSP
+            }
+            _ => {
+                self.functions.push(func);
+                self.functions.len() - 1
+            }
+        }
+    }
+
+    pub fn into_functions(self) -> Vec<Function> {
+        self.functions
+    }
+
+    pub fn get_function_ref(&self, idx: usize) -> &Function {
+        self.functions.get(idx).unwrap()
+    }
+
+    pub fn get_function_ref_mut(&mut self, idx: usize) -> &mut Function {
+        self.functions.get_mut(idx).unwrap()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.functions.iter().any(|f| f.is_defined)
+    }
+
+    pub fn cur_idx(&self) -> usize {
+        self.functions.len() - 1
+    }
+
+    pub fn next_idx(&self) -> usize {
+        self.functions.len()
     }
 }

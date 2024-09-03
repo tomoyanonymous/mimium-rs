@@ -73,7 +73,7 @@ impl Context {
 
     fn get_current_fn(&mut self) -> &mut mir::Function {
         let i = self.get_ctxdata().func_i;
-        &mut self.program.functions[i]
+        self.program.get_function_ref_mut(i)
     }
     fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
         let rt = match f.as_ref() {
@@ -246,21 +246,8 @@ impl Context {
         argtypes: &[TypeNodeId],
         parent_i: Option<usize>,
     ) -> usize {
-        let newf = mir::Function::new(name, args, argtypes, parent_i);
-        match name.as_str() {
-            GLOBAL_LABEL => {
-                self.program.functions[FN_INDEX_GLOBAL] = newf;
-                FN_INDEX_GLOBAL
-            }
-            DSP_LABEL => {
-                self.program.functions[FN_INDEX_DSP] = newf;
-                FN_INDEX_DSP
-            }
-            _ => {
-                self.program.functions.push(newf);
-                self.program.functions.len() - 1
-            }
-        }
+        self.program
+            .add_function(mir::Function::new(name, args, argtypes, parent_i))
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -287,7 +274,7 @@ impl Context {
         let (fptr, ty) = action(self, c_idx)?;
 
         // TODO: ideally, type should be infered before the actual action
-        let f = self.program.functions.get_mut(c_idx).unwrap();
+        let f = self.program.get_function_ref_mut(c_idx);
         f.return_type.get_or_init(|| ty);
 
         //post action
@@ -339,7 +326,7 @@ impl Context {
             LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
-                let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                let currentf = self.program.get_function_ref_mut(current.func_i);
                 let upi = currentf.get_or_insert_upvalue(&upv) as _;
                 let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
 
@@ -402,7 +389,11 @@ impl Context {
     }
     fn emit_fncall(&mut self, idx: u64, args: Vec<(VPtr, TypeNodeId)>, ret_t: TypeNodeId) -> VPtr {
         // stack size of the function to be called
-        let state_sizes = self.program.functions[idx as usize].state_sizes.clone();
+        let state_sizes = self
+            .program
+            .get_function_ref(idx as usize)
+            .state_sizes
+            .clone();
 
         if let Some(offset) = self.get_ctxdata().next_state_offset.take() {
             self.get_ctxdata().push_sum.extend_from_slice(&offset);
@@ -629,7 +620,7 @@ impl Context {
                     let f = Arc::new(Value::Function(c_idx));
                     Ok((f, rt))
                 })?;
-                let child = self.program.functions.get_mut(c_idx).unwrap();
+                let child = self.program.get_function_ref_mut(c_idx);
                 let res = if child.upindexes.is_empty() {
                     //todo:make Closure
                     f
@@ -660,7 +651,7 @@ impl Context {
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
-                let insert_pos = if !self.program.functions.iter().any(|f| f.is_defined) {
+                let insert_pos = if self.program.is_empty() {
                     0
                 } else {
                     self.get_current_basicblock().0.len()
@@ -710,7 +701,7 @@ impl Context {
             }
             Expr::LetRec(id, body, then) => {
                 self.fn_label = Some(id.id);
-                let nextfunid = self.program.functions.len();
+                let nextfunid = self.program.next_idx();
                 let fix = Arc::new(Value::FixPoint(nextfunid));
 
                 // let alloc = self.push_inst(Instruction::Alloc(t.clone()));
