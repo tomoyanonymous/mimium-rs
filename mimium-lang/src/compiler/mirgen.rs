@@ -73,7 +73,7 @@ impl Context {
 
     fn get_current_fn(&mut self) -> &mut mir::Function {
         let i = self.get_ctxdata().func_i;
-        self.program.get_function_ref_mut(i)
+        self.program.get_function_ref_mut(i).unwrap()
     }
     fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
         let rt = match f.as_ref() {
@@ -274,7 +274,7 @@ impl Context {
         let (fptr, ty) = action(self, c_idx)?;
 
         // TODO: ideally, type should be infered before the actual action
-        let f = self.program.get_function_ref_mut(c_idx);
+        let f = self.program.get_function_ref_mut(c_idx).unwrap();
         f.return_type.get_or_init(|| ty);
 
         //post action
@@ -326,7 +326,7 @@ impl Context {
             LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
                 let res = self.gen_new_register();
                 let current = self.data.get_mut(self.data_i - i).unwrap();
-                let currentf = self.program.get_function_ref_mut(current.func_i);
+                let currentf = self.program.get_function_ref_mut(current.func_i).unwrap();
                 let upi = currentf.get_or_insert_upvalue(&upv) as _;
                 let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
 
@@ -392,6 +392,7 @@ impl Context {
         let state_sizes = self
             .program
             .get_function_ref(idx as usize)
+            .unwrap()
             .state_sizes
             .clone();
 
@@ -620,7 +621,7 @@ impl Context {
                     let f = Arc::new(Value::Function(c_idx));
                     Ok((f, rt))
                 })?;
-                let child = self.program.get_function_ref_mut(c_idx);
+                let child = self.program.get_function_ref_mut(c_idx).unwrap();
                 let res = if child.upindexes.is_empty() {
                     //todo:make Closure
                     f
@@ -811,5 +812,5 @@ pub fn compile(root_expr_id: ExprNodeId) -> Result<Mir, Box<dyn ReportableError>
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
-    Ok(ctx.program.clone())
+    Ok(ctx.program)
 }

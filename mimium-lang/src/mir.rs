@@ -241,22 +241,6 @@ impl Mir {
         }
     }
 
-    pub fn into_functions(mut self, with_entry_point: bool) -> Vec<Function> {
-        if !with_entry_point {
-            self.functions.drain(0..=FN_INDEX_DSP);
-        }
-
-        self.functions
-    }
-
-    pub fn get_function_ref(&self, idx: usize) -> &Function {
-        self.functions.get(idx).unwrap()
-    }
-
-    pub fn get_function_ref_mut(&mut self, idx: usize) -> &mut Function {
-        self.functions.get_mut(idx).unwrap()
-    }
-
     pub fn is_empty(&self) -> bool {
         !self.functions.iter().any(|f| f.is_defined)
     }
@@ -267,5 +251,25 @@ impl Mir {
 
     pub fn next_idx(&self) -> usize {
         self.functions.len()
+    }
+
+    // outputs contain functions that are actually defined
+
+    pub fn iter(&self) -> impl Iterator<Item = &Function> {
+        self.functions.iter().filter(|f| f.is_defined)
+    }
+
+    pub fn get_function_ref(&self, idx: usize) -> Option<&Function> {
+        match self.functions.get(idx) {
+            Some(func) if func.is_defined => Some(func),
+            _ => None,
+        }
+    }
+
+    pub fn get_function_ref_mut(&mut self, idx: usize) -> Option<&mut Function> {
+        match self.functions.get_mut(idx) {
+            Some(func) if func.is_defined => Some(func),
+            _ => None,
+        }
     }
 }
