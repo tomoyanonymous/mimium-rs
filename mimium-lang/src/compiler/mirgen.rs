@@ -5,14 +5,16 @@ use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{function, numeric, unit};
 pub(crate) mod recursecheck;
 pub mod selfconvert;
-use crate::mir::{self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value};
+use crate::mir::{
+    self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value, FN_INDEX_DSP, FN_INDEX_GLOBAL,
+};
 
 use std::sync::Arc;
 
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::{Span, GLOBAL_LABEL};
+use crate::utils::metadata::{Span, DSP_LABEL, GLOBAL_LABEL};
 
 use crate::ast::{Expr, Literal};
 // pub mod closure_convert;
@@ -247,12 +249,12 @@ impl Context {
         let newf = mir::Function::new(name, args, argtypes, parent_i);
         match name.as_str() {
             GLOBAL_LABEL => {
-                self.program.functions[0] = newf;
-                0
+                self.program.functions[FN_INDEX_GLOBAL] = newf;
+                FN_INDEX_GLOBAL
             }
-            "dsp" => {
-                self.program.functions[1] = newf;
-                1
+            DSP_LABEL => {
+                self.program.functions[FN_INDEX_DSP] = newf;
+                FN_INDEX_DSP
             }
             _ => {
                 self.program.functions.push(newf);
