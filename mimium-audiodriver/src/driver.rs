@@ -1,7 +1,6 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
-    runtime::scheduler::{Scheduler,SyncScheduler},
-    runtime::vm::{self, ExtClsType, ExtFunType, Machine, ReturnCode},
+    runtime::{scheduler::{Scheduler,SyncScheduler}, vm::{self, ExtClsType, ExtFunType, Machine, Program, ReturnCode}},
     utils::error::ReportableError,
 };
 use num_traits::Float;

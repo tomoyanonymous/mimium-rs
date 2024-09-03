@@ -5,6 +5,7 @@ use std::sync::{
 
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    runtime::scheduler,
     runtime::vm::{ExtClsType, Machine},
 };
 
@@ -30,11 +31,10 @@ impl MockDriver {
         let ochannels = dsp_func.nret as u64;
         let count = Arc::new(AtomicU64::new(0));
         //todo: split as trait interface method
-        let getnow_fn: (Symbol, ExtClsType) = (
-            "_mimium_getnow".to_symbol(),
-            crate::runtime_fn::gen_getnowfn(count.clone()),
-        );
-        let vmdata = RuntimeData::new(program, &[], &[getnow_fn]);
+        let schedule_fn = scheduler::gen_schedule_at();
+        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
+
+        let vmdata = RuntimeData::new(program, &[schedule_fn], &[getnow_fn]);
         let localbuffer: Vec<f64> = vec![];
         let samplerate = sample_rate.unwrap_or(SampleRate(48000));
         Self {

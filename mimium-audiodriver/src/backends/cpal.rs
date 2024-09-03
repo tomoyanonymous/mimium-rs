@@ -5,6 +5,7 @@ use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
 use mimium_lang::interner::{Symbol, ToSymbol};
+use mimium_lang::runtime::scheduler;
 use mimium_lang::runtime::vm::{self, ExtClsType, Machine, ReturnCode};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
@@ -51,11 +52,9 @@ impl NativeAudioData {
         let (_, dsp_func) = &program.global_fn_table[dsp_i];
         let dsp_ochannels = dsp_func.nret;
         //todo: split as trait interface method
-        let getnow_fn: (Symbol, ExtClsType) = (
-            "_mimium_getnow".to_symbol(),
-            crate::runtime_fn::gen_getnowfn(count.clone()),
-        );
-        let vmdata = RuntimeData::new(program, &[], &[getnow_fn]);
+        let schedule_fn = scheduler::gen_schedule_at();
+        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
+        let vmdata = RuntimeData::new(program, &[schedule_fn], &[getnow_fn]);
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
         Self {
             vmdata,

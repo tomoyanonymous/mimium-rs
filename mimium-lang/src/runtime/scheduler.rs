@@ -1,6 +1,8 @@
 use std::collections::BinaryHeap;
 use std::{cmp::Reverse, sync::Arc};
 
+use crate::interner::{Symbol, ToSymbol};
+
 use super::vm::{self, ClosureIdx, ExtClsType, ExtFunType, ReturnCode};
 
 pub struct RuntimeCtx<'a> {
@@ -79,9 +81,12 @@ impl Scheduler for DummyScheduler {
     }
 }
 
-pub(crate) fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
+fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
     let time = Time(machine.get_stack(0));
     let cls = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
     machine.scheduler.schedule_at(time, cls);
     0
+}
+pub fn gen_schedule_at() -> (Symbol, ExtFunType) {
+    ("_mimium_schedule_at".to_symbol(), mimium_schedule_at)
 }
