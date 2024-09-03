@@ -14,7 +14,7 @@ pub enum ErrorKind {
     VariableNotFound(String),
     NonPrimitiveInFeed,
     NotApplicable, //need?
-    NoMainFunction,
+    NoDspFunction,
     Unknown,
 }
 #[derive(Debug, Clone)]
@@ -49,7 +49,7 @@ impl std::fmt::Display for ErrorKind {
             }
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::NonPrimitiveInFeed => write!(f, "Feed can take only non-funtion type."),
-            ErrorKind::NoMainFunction => write!(f, "`dsp` function is not defined."),
+            ErrorKind::NoDspFunction => write!(f, "`dsp` function is not defined."),
             ErrorKind::Unknown => write!(f, "unknwon error."),
         }
     }

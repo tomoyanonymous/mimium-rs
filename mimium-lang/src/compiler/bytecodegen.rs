@@ -712,7 +712,7 @@ impl ByteCodeGenerator {
             // defined at this point.
             for i in [FN_INDEX_GLOBAL, FN_INDEX_DSP] {
                 if !mir.functions[i].is_defined {
-                    let e = Box::new(Error(ErrorKind::NoMainFunction, 0..0));
+                    let e = Box::new(Error(ErrorKind::NoDspFunction, 0..0));
                     return Err(vec![e]);
                 }
             }
