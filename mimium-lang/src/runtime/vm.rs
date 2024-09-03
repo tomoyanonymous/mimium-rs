@@ -1,13 +1,6 @@
 use core::slice;
 use slotmap::{DefaultKey, SlotMap};
-use std::{
-    cell::RefCell,
-    cmp::Ordering,
-    collections::HashMap,
-    ops::{Not, Range},
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 pub mod builtin;
 pub mod bytecode;
@@ -24,7 +17,7 @@ use crate::{
     types::TypeSize,
 };
 
-use super::scheduler::{DummyScheduler, Scheduler};
+use super::scheduler::{DummyScheduler, Scheduler, Time};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
@@ -142,7 +135,7 @@ pub struct Machine {
     states_stack: StateStorageStack,
     delaysizes_pos_stack: Vec<usize>,
     global_vals: Vec<RawVal>,
-    pub(crate) scheduler: Box<dyn Scheduler>,
+    pub scheduler: Box<dyn Scheduler>,
     debug_stacktype: Vec<RawValType>,
 }
 
@@ -278,7 +271,7 @@ impl Machine {
             debug_stacktype: vec![RawValType::Int; 255],
         }
     }
-    pub fn new_without_scheduler()->Self{
+    pub fn new_without_scheduler() -> Self {
         Self::new(Box::new(DummyScheduler))
     }
     pub fn clear_stack(&mut self) {
@@ -795,6 +788,12 @@ impl Machine {
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
         self.execute(0, &prog, None)
+    }
+    pub fn execute_task(&mut self, now: Time, prog: &Program) {
+        if let Some(task_cls) = self.scheduler.pop_task(now, prog) {
+            let closure = self.get_closure(task_cls);
+            self.execute(closure.fn_proto_pos, prog, Some(task_cls));
+        }
     }
 }
 

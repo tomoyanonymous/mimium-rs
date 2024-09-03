@@ -1,6 +1,9 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
-    runtime::{scheduler::{Scheduler,SyncScheduler}, vm::{self, ExtClsType, ExtFunType, Machine, Program, ReturnCode}},
+    runtime::{
+        scheduler::{Scheduler, SyncScheduler},
+        vm::{self, ExtClsType, ExtFunType, ReturnCode},
+    },
     utils::error::ReportableError,
 };
 use num_traits::Float;
@@ -33,8 +36,7 @@ pub trait Component {
 #[derive(Clone, Copy)]
 pub struct SampleRate(pub u32);
 
-#[derive(Clone, Copy)]
-pub struct Time(pub u64);
+pub use mimium_lang::runtime::scheduler::Time;
 
 #[derive(Debug)]
 pub enum Error {
@@ -95,7 +97,9 @@ impl RuntimeData {
     pub fn run_main(&mut self) -> ReturnCode {
         self.vm.execute_main(&self.program)
     }
-    pub fn run_dsp(&mut self) -> ReturnCode {
+    pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
+        //TODO: this depends on the structure of Synchronous Scheduler.
+        self.vm.execute_task(time, &self.program);
         self.vm.execute_idx(&self.program, self.dsp_i)
     }
 }

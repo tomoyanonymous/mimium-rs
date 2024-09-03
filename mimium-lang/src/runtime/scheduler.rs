@@ -1,17 +1,12 @@
+use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::{cmp::Reverse, sync::Arc};
 
 use crate::interner::{Symbol, ToSymbol};
 
-use super::vm::{self, ClosureIdx, ExtClsType, ExtFunType, ReturnCode};
-
-pub struct RuntimeCtx<'a> {
-    machine: &'a mut vm::Machine,
-    prog: &'a vm::Program,
-}
+use super::vm::{self, ClosureIdx, ExtFunType, ReturnCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Time(u64);
+pub struct Time(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Task {
@@ -33,7 +28,7 @@ pub trait Scheduler {
     where
         Self: Sized;
     fn schedule_at(&mut self, time: Time, task: ClosureIdx);
-    fn run_task<'a>(&mut self, now: Time, ctx: &mut RuntimeCtx<'a>);
+    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx>;
 }
 
 pub struct SyncScheduler {
@@ -50,15 +45,10 @@ impl Scheduler for SyncScheduler {
         self.tasks.push(Reverse(Task { when, cls }));
     }
 
-    fn run_task(&mut self, now: Time, ctx: &mut RuntimeCtx<'_>) {
+    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
         match self.tasks.peek() {
-            Some(Reverse(Task { when, cls })) if *when <= now => {
-                let closure = ctx.machine.get_closure(*cls);
-                ctx.machine
-                    .execute(closure.fn_proto_pos, ctx.prog, Some(*cls));
-                let _ = self.tasks.pop();
-            }
-            _ => {}
+            Some(Reverse(Task { when, cls })) if *when <= now => Some(*cls),
+            _ => None,
         }
     }
 }
@@ -76,8 +66,8 @@ impl Scheduler for DummyScheduler {
         debug_assert!(false, "dummy scheduler invoked");
     }
 
-    fn run_task<'a>(&mut self, now: Time, ctx: &mut RuntimeCtx<'a>) {
-        debug_assert!(false, "dummy scheduler invoked");
+    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
+        panic!("dummy scheduler invoked")
     }
 }
 

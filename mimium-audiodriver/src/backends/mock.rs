@@ -50,13 +50,14 @@ impl MockDriver {
         let _ = self.vmdata.run_main();
         self.localbuffer.clear();
         for _ in 0..times {
-            let _ = self.vmdata.run_dsp();
+            let now = self.count.load(Ordering::Relaxed);
+
+            let _ = self.vmdata.run_dsp(Time(now));
             let res = Machine::get_as_array::<<MockDriver as Driver>::Sample>(
                 self.vmdata.vm.get_top_n(self.ochannels as _),
             );
             self.localbuffer.extend_from_slice(res);
             //update current time.
-            let now = self.count.load(Ordering::Relaxed);
             self.count.store(now + 1, Ordering::Relaxed);
         }
         &self.localbuffer
