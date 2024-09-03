@@ -241,7 +241,11 @@ impl Mir {
         }
     }
 
-    pub fn into_functions(self) -> Vec<Function> {
+    pub fn into_functions(mut self, with_entry_point: bool) -> Vec<Function> {
+        if !with_entry_point {
+            self.functions.drain(0..=FN_INDEX_DSP);
+        }
+
         self.functions
     }
 

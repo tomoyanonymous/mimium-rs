@@ -702,28 +702,9 @@ impl ByteCodeGenerator {
         });
         (mirfunc.label, func)
     }
-    pub fn generate(
-        &mut self,
-        mir: Mir,
-        has_entry_point: bool,
-    ) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
-        let mut mir_functions = mir.into_functions();
-
-        let functions = if has_entry_point {
-            // if the code has entry points, _mimium_global and dsp must be
-            // defined at this point.
-            for i in [FN_INDEX_GLOBAL, FN_INDEX_DSP] {
-                if !mir_functions[i].is_defined {
-                    let e = Box::new(Error(ErrorKind::NoDspFunction, 0..0));
-                    return Err(vec![e]);
-                }
-            }
-            &mut mir_functions
-        } else {
-            &mut mir_functions[(FN_INDEX_DSP + 1)..]
-        };
-
-        self.program.global_fn_table = functions
+    pub fn generate(&mut self, mir: Mir, has_entry_point: bool) -> vm::Program {
+        self.program.global_fn_table = mir
+            .into_functions(has_entry_point)
             .iter()
             .enumerate()
             .map(|(i, func)| {
@@ -732,7 +713,7 @@ impl ByteCodeGenerator {
             })
             .collect();
 
-        Ok(self.program.clone())
+        self.program.clone()
     }
 }
 fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
@@ -791,9 +772,25 @@ pub fn gen_bytecode(
     mir: mir::Mir,
     has_entry_point: bool,
 ) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+    validate_mir(&mir, has_entry_point)?;
     let mut generator = ByteCodeGenerator::default();
-    let program = generator.generate(mir, has_entry_point)?;
+    let program = generator.generate(mir, has_entry_point);
     Ok(optimize(program))
+}
+
+fn validate_mir(mir: &Mir, has_entry_point: bool) -> Result<(), Vec<Box<dyn ReportableError>>> {
+    if has_entry_point {
+        // if the code has entry points, _mimium_global and dsp must be
+        // defined at this point.
+        for i in [FN_INDEX_GLOBAL, FN_INDEX_DSP] {
+            if !mir.get_function_ref(i).is_defined {
+                let e = Box::new(Error(ErrorKind::NoDspFunction, 0..0));
+                return Err(vec![e]);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -834,7 +831,7 @@ mod test {
         func.body = vec![block];
         src.add_function(func);
         let mut generator = ByteCodeGenerator::default();
-        let res = generator.generate(src, false).unwrap();
+        let res = generator.generate(src, false);
 
         let mut answer = vm::Program::default();
         let mut main = vm::FuncProto::new(1, 1);
