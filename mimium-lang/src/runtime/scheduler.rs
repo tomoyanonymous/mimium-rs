@@ -72,7 +72,7 @@ impl Scheduler for DummyScheduler {
     }
 }
 
-fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
+pub(crate) fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
     let time = Time(machine.get_stack(0));
     let cls = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
     machine.scheduler.schedule_at(time, cls);
