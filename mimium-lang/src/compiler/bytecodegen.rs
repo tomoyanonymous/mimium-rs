@@ -5,7 +5,7 @@ use crate::interner::{Symbol, TypeNodeId};
 use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
-use crate::types::{Type, TypeSize};
+use crate::types::{PType, Type, TypeSize};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
@@ -143,6 +143,7 @@ impl ByteCodeGenerator {
     //The base word size may change depending on the backend in the future.
     fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
         match ty.to_type() {
+            Type::Primitive(PType::Unit) => 0,
             Type::Primitive(_) => 1,
             Type::Array(_ty) => todo!(),
             Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(*t)).sum(),
@@ -436,7 +437,7 @@ impl ByteCodeGenerator {
                     mir::Value::ExtFunction(label, ty) => {
                         //todo: use btreemap
                         let (dst, argsize, nret) =
-                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *ty);
+                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
                         Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
                     mir::Value::FixPoint(_) => {
