@@ -15,12 +15,13 @@ pub struct Task {
 }
 impl PartialOrd for Task {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.when.partial_cmp(&other.when)
+        Some(self.cmp(other))
+
     }
 }
 impl Ord for Task {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+        self.when.cmp(&other.when)
     }
 }
 pub trait Scheduler {
