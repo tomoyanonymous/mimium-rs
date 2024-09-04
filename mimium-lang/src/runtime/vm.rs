@@ -815,7 +815,7 @@ impl Machine {
                 self.stack[0] = 0;
             }
             self.base_pointer = 1;
-            self.execute(idx, &prog, None)
+            self.execute(idx, prog, None)
         } else {
             0
         }
@@ -833,12 +833,14 @@ impl Machine {
             .resize(prog.global_fn_table[0].1.state_size as usize);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
-        self.execute(0, &prog, None)
+        self.execute(0, prog, None)
     }
     pub fn execute_task(&mut self, now: Time, prog: &Program) {
         if let Some(task_cls) = self.scheduler.pop_task(now, prog) {
+            log::debug!("task id {:?}", task_cls);
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, prog, Some(task_cls));
+            // self.closures.remove(task_cls.0);
         }
     }
 }

@@ -74,7 +74,7 @@ pub trait Driver {
 pub struct RuntimeData {
     pub program: vm::Program,
     pub vm: vm::Machine,
-    dsp_i: usize,
+    pub dsp_i: usize,
 }
 impl RuntimeData {
     pub fn new(
