@@ -47,7 +47,11 @@ impl Scheduler for SyncScheduler {
 
     fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
         match self.tasks.peek() {
-            Some(Reverse(Task { when, cls })) if *when <= now => Some(*cls),
+            Some(Reverse(Task { when, cls })) if *when <= now => {
+                let res = Some(*cls);
+                self.tasks.pop();
+                res
+            }
             _ => None,
         }
     }
