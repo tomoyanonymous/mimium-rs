@@ -423,10 +423,11 @@ impl Context {
                 let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
                     // for the higher order function, make closure regardless it is global function
-                    Value::Function(idx) => {
+                    Value::Function(idx) | Value::FixPoint(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
                         self.push_inst(Instruction::Closure(f))
                     }
+
                     _ => v.clone(),
                 };
                 let res = if t.to_type().contains_function() {
