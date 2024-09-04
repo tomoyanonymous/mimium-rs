@@ -35,7 +35,7 @@ fn run_bytecode_test_multiple(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new_without_scheduler();
+    let mut machine = vm::Machine::new();
     machine.link_functions(bytecodes);
     let _retcode = machine.execute_entry(bytecodes, &"_mimium_global".to_symbol());
     let n = if stereo { 2 } else { 1 };
