@@ -1,11 +1,11 @@
 fn makecounter(){
     let x = 0.0
-
-    let gen = | |{
+    let updater = | |{
         x = x+1.0
-        _mimium_schedule_at(now+1.0, | |{
-            x = x+1.0
-        })
+    }
+    let gen = | |{
+        let _ = _mimium_schedule_at(now+1.0, gen)
+        updater()
     }
     let getter = | | {x}
     let _ = _mimium_schedule_at(1.0,gen)
