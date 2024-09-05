@@ -1,13 +1,15 @@
 extern crate mimium_lang;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
+use mimium_audiodriver::backends::mock::MockDriver;
 use mimium_lang::{
     compiler,
     interner::ToSymbol,
-    runtime::{self, vm},
+    runtime::{
+        self,
+        scheduler::{Scheduler, SyncScheduler},
+        vm,
+    },
     utils::{
         error::{report, ReportableError},
         fileloader,
@@ -35,7 +37,8 @@ fn run_bytecode_test_multiple(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new();
+    let mut machine = vm::Machine::new_without_scheduler();
+
     machine.link_functions(bytecodes);
     let _retcode = machine.execute_entry(bytecodes, &"_mimium_global".to_symbol());
     let n = if stereo { 2 } else { 1 };
@@ -48,8 +51,18 @@ fn run_bytecode_test_multiple(
     Ok(ret)
 }
 
+fn run_source_with_scheduler(
+    src: &str,
+    times: u64,
+) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
+    let bytecode = compiler::emit_bytecode(src)?;
+
+    let mut driver = MockDriver::new(bytecode, None);
+    Ok(driver.play_times(times as _).to_vec())
+}
+
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
-fn run_source_test(
+pub(crate) fn run_source_test(
     src: &str,
     times: u64,
     stereo: bool,
@@ -57,30 +70,18 @@ fn run_source_test(
     let bytecode = compiler::emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
 }
-
-pub(crate) fn run_simple_test(expr: &str, expect: f64, times: u64) {
-    let src = format!(
-        "fn test(hoge){{
-    {expr}
-}}
-fn dsp(){{
-    test(2.0)
-}}"
-    );
-    let res = run_source_test(&src, times, false);
+pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+    let (file, src) = load_src(path);
+    let res = run_source_with_scheduler(&src, times);
     match res {
-        Ok(res) => {
-            let ans = [expect].repeat(times as usize);
-            assert_eq!(res, ans, "expr: {expr}");
-        }
+        Ok(res) => Ok(res),
         Err(errs) => {
-            report(&src, Path::new("(from template)"), &errs);
-            panic!("invalid syntax");
+            report(&src, file, &errs);
+            Err(())
         }
     }
 }
-
-fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
+pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
     let res = run_source_test(&src, times, stereo);
     match res {
@@ -109,9 +110,8 @@ pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, (
     run_file_test(path, times, true)
 }
 
-
 pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
-    let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans.into_iter());
+    let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
     let bytecode = match compiler::emit_bytecode(&src) {
         Ok(res) => res,

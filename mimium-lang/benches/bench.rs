@@ -47,7 +47,7 @@ fn dsp(){{
         fn bench_multiosc(b: &mut Bencher, n: usize) {
             let content = make_multiosc_src(n);
             let program = Box::new(emit_bytecode(&content).expect("ok"));
-            let mut machine = Machine::new();
+            let mut machine = Machine::new_without_scheduler();
             machine.link_functions(&program);
             machine.execute_main(&program);
             let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");

@@ -1,6 +1,9 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
-    runtime::vm::{self, ExtClsType, ExtFunType, Machine, ReturnCode},
+    runtime::{
+        scheduler::{Scheduler, SyncScheduler},
+        vm::{self, ExtClsType, ExtFunType, ReturnCode},
+    },
     utils::error::ReportableError,
 };
 use num_traits::Float;
@@ -33,8 +36,7 @@ pub trait Component {
 #[derive(Clone, Copy)]
 pub struct SampleRate(pub u32);
 
-#[derive(Clone, Copy)]
-pub struct Time(pub u64);
+pub use mimium_lang::runtime::scheduler::Time;
 
 #[derive(Debug)]
 pub enum Error {
@@ -72,7 +74,7 @@ pub trait Driver {
 pub struct RuntimeData {
     pub program: vm::Program,
     pub vm: vm::Machine,
-    dsp_i: usize,
+    pub dsp_i: usize,
 }
 impl RuntimeData {
     pub fn new(
@@ -80,7 +82,7 @@ impl RuntimeData {
         ext_funs: &[(Symbol, ExtFunType)],
         ext_clss: &[(Symbol, ExtClsType)],
     ) -> Self {
-        let mut vm = vm::Machine::new();
+        let mut vm = vm::Machine::new(Box::new(SyncScheduler::new()));
         ext_funs.iter().for_each(|(name, f)| {
             vm.install_extern_fn(*name, *f);
         });
@@ -95,7 +97,9 @@ impl RuntimeData {
     pub fn run_main(&mut self) -> ReturnCode {
         self.vm.execute_main(&self.program)
     }
-    pub fn run_dsp(&mut self) -> ReturnCode {
+    pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
+        //TODO: this depends on the structure of Synchronous Scheduler.
+        self.vm.execute_task(time, &self.program);
         self.vm.execute_idx(&self.program, self.dsp_i)
     }
 }

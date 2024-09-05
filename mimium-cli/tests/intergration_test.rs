@@ -1,8 +1,30 @@
 mod common;
+use std::path::Path;
+
 use common::*;
+use mimium_lang::utils::error::report;
 
-
-
+fn run_simple_test(expr: &str, expect: f64, times: u64) {
+    let src = format!(
+        "fn test(hoge){{
+    {expr}
+}}
+fn dsp(){{
+    test(2.0)
+}}"
+    );
+    let res = run_source_test(&src, times, false);
+    match res {
+        Ok(res) => {
+            let ans = [expect].repeat(times as usize);
+            assert_eq!(res, ans, "expr: {expr}");
+        }
+        Err(errs) => {
+            report(&src, Path::new("(from template)"), &errs);
+            panic!("invalid syntax");
+        }
+    }
+}
 #[test]
 fn simple_arithmetic() {
     // unary
@@ -24,7 +46,6 @@ fn simple_arithmetic() {
     run_simple_test("hoge*10.0+hoge/10.0+1.0", 21.2, 3);
     run_simple_test("1.0+hoge^2.0*1.5", 7.0, 3);
 }
-
 
 #[test]
 fn parser_firstbreak() {
@@ -252,7 +273,6 @@ fn fb_mem2() {
     ];
     assert_eq!(res, ans);
 }
-
 
 #[test]
 fn fb_mem3_state_size() {
