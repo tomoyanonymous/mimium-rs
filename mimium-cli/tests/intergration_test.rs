@@ -120,6 +120,25 @@ fn sinewave() {
     assert_eq!(res, ans);
 }
 
+// same with sinwave.mmm, but written with unnecessary pipe operators
+#[test]
+fn sinewave_pipe() {
+    let res = run_file_test_mono("sinwave_pipe.mmm", 10).unwrap();
+    let ans = vec![
+        0.0,
+        0.021408545756451732,
+        0.04281382071922544,
+        0.06421255470540224,
+        0.08560147875345994,
+        0.10697732573366744,
+        0.12833683095811457,
+        0.1496767327902555,
+        0.17099377325384513,
+        0.19228469864114656,
+    ];
+    assert_eq!(res, ans);
+}
+
 #[test]
 fn ifblock() {
     let res = run_file_test_mono("if.mmm", 1).unwrap();
