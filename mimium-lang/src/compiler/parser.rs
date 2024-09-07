@@ -114,15 +114,34 @@ where
     OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
 {
     prec.clone()
-        .then(op.then(prec).repeated())
+        .then(
+            op.then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+                .then(prec)
+                .repeated(),
+        )
         .foldl(move |x, ((op, opspan), y)| {
-            let arg = match op {
+            let new_span = x.to_span().start..y.to_span().end;
+            let expr = match op {
+                Op::Pipe => {
+                    if let Expr::Apply(f, mut args) = y.to_expr() {
+                        args.insert(0, x);
+                        Expr::Apply(f, args)
+                    } else {
+                        panic!("")
+                    }
+                }
+
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
-                Op::At => vec![y, x],
-                _ => vec![x, y],
+                Op::At => Expr::Apply(
+                    Expr::Var(op.get_associated_fn_name()).into_id(opspan),
+                    vec![y, x],
+                ),
+                _ => Expr::Apply(
+                    Expr::Var(op.get_associated_fn_name()).into_id(opspan),
+                    vec![x, y],
+                ),
             };
-            Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
-                .into_id(x.to_span().start..y.to_span().end)
+            expr.into_id(new_span)
         })
         .boxed()
 }
