@@ -8,6 +8,13 @@ fn scheduler_global_recursion() {
     assert_eq!(res, ans);
 }
 
+#[test]
+#[should_panic]
+fn scheduler_invalid() {
+    // recursion with @now would cause infinite recursion, so this should be errored.
+    let _ = run_file_with_scheduler("scheduler_invalid.mmm", 10);
+}
+
 // #[test]
 // fn scheduler_counter() {
 //     let res = run_file_with_scheduler("scheduler_counter.mmm", 10).unwrap();

@@ -29,19 +29,29 @@ pub trait Scheduler {
         Self: Sized;
     fn schedule_at(&mut self, time: Time, task: ClosureIdx);
     fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx>;
+    fn set_cur_time(&mut self, time: Time);
 }
 
 pub struct SyncScheduler {
     tasks: BinaryHeap<Reverse<Task>>,
+    cur_time: Time,
 }
 
 impl Scheduler for SyncScheduler {
     fn new() -> Self {
         Self {
             tasks: Default::default(),
+            cur_time: Time(0),
         }
     }
     fn schedule_at(&mut self, when: Time, cls: ClosureIdx) {
+        if when <= self.cur_time {
+            // TODO: ideally, this should not stop runtime.
+            panic!(
+                "A task must be scheduled in future (current time: {}, schedule: {})",
+                self.cur_time.0, when.0
+            )
+        }
         self.tasks.push(Reverse(Task { when, cls }));
     }
 
@@ -54,6 +64,10 @@ impl Scheduler for SyncScheduler {
             }
             _ => None,
         }
+    }
+
+    fn set_cur_time(&mut self, time: Time) {
+        self.cur_time = time
     }
 }
 
@@ -72,6 +86,10 @@ impl Scheduler for DummyScheduler {
 
     fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
         panic!("dummy scheduler invoked")
+    }
+
+    fn set_cur_time(&mut self, _time: Time) {
+        // do nothing
     }
 }
 
