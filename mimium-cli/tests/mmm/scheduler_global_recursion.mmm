@@ -2,9 +2,9 @@ let x = 0.0
 
 fn updater(){
     x = x + 1.0
-    _mimium_schedule_at(now+1.0,updater)
+    updater@(now+1.0)
 }
-let _ = _mimium_schedule_at(1.0,updater)
+let _ = updater@1.0
 fn dsp(){
     x
 }

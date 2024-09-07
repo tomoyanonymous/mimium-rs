@@ -29,6 +29,8 @@ pub enum Op {
     And, // &&
     Or,  // ||
 
+    At, // @
+
     Pipe, // |>
     Unknown(String),
 }
@@ -105,6 +107,7 @@ impl Op {
             Op::Exponent => intrinsics::EXP,
             Op::And => intrinsics::AND,
             Op::Or => intrinsics::OR,
+            Op::At => "_mimium_schedule_at",
             Op::Pipe => "pipe",
             Op::Unknown(x) => x.as_str(),
         }
@@ -129,6 +132,7 @@ impl fmt::Display for Op {
             Op::Exponent => write!(f, "^"),
             Op::And => write!(f, "&&"),
             Op::Or => write!(f, "||"),
+            Op::At => write!(f, "@"),
             Op::Pipe => write!(f, "|>"),
             Op::Unknown(x) => write!(f, "{}", x),
         }
