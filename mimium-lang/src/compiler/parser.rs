@@ -120,14 +120,14 @@ where
                 .repeated(),
         )
         .foldl(move |x, ((op, opspan), y)| {
-            let new_span = x.to_span().start..y.to_span().end;
             let expr = match op {
                 Op::Pipe => {
                     if let Expr::Apply(f, mut args) = y.to_expr() {
                         args.insert(0, x);
                         Expr::Apply(f, args)
                     } else {
-                        panic!("")
+                        // return Err(Simple::custom(y.to_span(), "Not a function call"));
+                        todo!("How can I propagate an error from here?")
                     }
                 }
 
@@ -141,7 +141,7 @@ where
                     vec![x, y],
                 ),
             };
-            expr.into_id(new_span)
+            expr.into_id(x.to_span().start..y.to_span().end)
         })
         .boxed()
 }
@@ -182,6 +182,7 @@ where
     //defining binary operators in order of precedence.
     let ops = [
         optoken(Op::Exponent),
+        optoken(Op::Pipe),
         choice((
             optoken(Op::Product),
             optoken(Op::Divide),
@@ -199,7 +200,6 @@ where
             optoken(Op::GreaterEqual),
         ))
         .boxed(),
-        optoken(Op::Pipe),
         optoken(Op::At),
     ];
     ops.into_iter().fold(unary.boxed(), binop_folder)
