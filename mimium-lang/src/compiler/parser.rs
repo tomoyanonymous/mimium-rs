@@ -116,11 +116,13 @@ where
     prec.clone()
         .then(op.then(prec).repeated())
         .foldl(move |x, ((op, opspan), y)| {
-            Expr::Apply(
-                Expr::Var(op.get_associated_fn_name()).into_id(opspan),
-                vec![x, y],
-            )
-            .into_id(x.to_span().start..y.to_span().end)
+            let arg = match op {
+                // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
+                Op::At => vec![y, x],
+                _ => vec![x, y],
+            };
+            Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
+                .into_id(x.to_span().start..y.to_span().end)
         })
         .boxed()
 }
@@ -160,6 +162,7 @@ where
     };
     //defining binary operators in order of precedence.
     let ops = [
+        optoken(Op::At),
         optoken(Op::Exponent),
         choice((
             optoken(Op::Product),

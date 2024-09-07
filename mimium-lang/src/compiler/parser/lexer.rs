@@ -35,7 +35,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map(Token::Str);
 
     // A parser for operators
-    let op = one_of("+-*/!=&|%><^")
+    let op = one_of("+-*/!=&|%><^@")
         .repeated()
         .at_least(1)
         .collect::<String>()
@@ -55,6 +55,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "=" => Token::Assign,
             "%" => Token::Op(Op::Modulo),
             "^" => Token::Op(Op::Exponent),
+            "@" => Token::Op(Op::At),
             "&&" => Token::Op(Op::And),
             "||" => Token::Op(Op::Or),
             "|>" => Token::Op(Op::Pipe),

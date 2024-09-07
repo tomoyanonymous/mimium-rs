@@ -115,6 +115,30 @@ fn test_add() {
     test_string!("3466.0+2000.0", ans);
 }
 #[test]
+fn test_at() {
+    let ans1 = Expr::Apply(
+        Expr::Var("_mimium_schedule_at".to_symbol()).into_id(3..4),
+        vec![
+            Expr::Literal(Literal::Float("1.0".to_string())).into_id(4..7),
+            Expr::Var("foo".to_symbol()).into_id(0..3),
+        ],
+    )
+    .into_id(0..7);
+    test_string!("foo@1.0", ans1);
+
+    // Note: This expression cannot be compiled due to type mismatch. This test
+    //       is purely for testing the order of precedence of infix operators.
+    let ans2 = Expr::Apply(
+        Expr::Var("exp".to_symbol()).into_id(7..8),
+        vec![
+            ans1,
+            Expr::Literal(Literal::Float("2.0".to_string())).into_id(8..11),
+        ],
+    )
+    .into_id(0..7);
+    test_string!("foo@1.0^2.0", ans2);
+}
+#[test]
 fn test_var() {
     let ans = Expr::Var("hoge".to_symbol()).into_id(0..4);
     test_string!("hoge", ans);
