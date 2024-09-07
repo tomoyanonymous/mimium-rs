@@ -83,7 +83,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "float" => Token::FloatType,
         "int" => Token::IntegerType,
         "string" => Token::StringType,
-        "structt" => Token::StructType,
+        "struct" => Token::StructType,
         _ => Token::Ident(ident.to_symbol()),
     });
     let macro_expand = text::ident()
