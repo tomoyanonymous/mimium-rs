@@ -286,7 +286,7 @@ fn statement_parser<'a>(
         .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
         .labelled("assign");
     let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
-    let_.or(assign).or(single).debug("stmt")
+    let_.or(assign).or(single)
 }
 fn statements_parser(
     expr: ExprParser<'_>,
@@ -442,14 +442,14 @@ pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
-    let (tokens, lex_errs) = lexer::lexer().parse_recovery_verbose(src);
+    let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
     lex_errs
         .iter()
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
     if let Some(t) = tokens {
         let (ast, parse_errs) = parser()
-            .parse_recovery_verbose(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+            .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) => Ok(ast),
             None => {
