@@ -73,14 +73,10 @@ impl MiniPrint for Literal {
 }
 
 fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
-    let callee_str = vec
-        .iter()
-        .fold("".to_string(), |a, b| format!("{a} {}", b.simple_print()));
-    if vec.len() > 1 {
-        callee_str.split_at(1).1.to_string()
-    } else {
-        callee_str
-    }
+    vec.iter()
+        .map(|t| t.simple_print())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl MiniPrint for ExprNodeId {
@@ -93,7 +89,7 @@ impl MiniPrint for Option<ExprNodeId> {
     fn simple_print(&self) -> String {
         match self {
             Some(e) => e.to_expr().simple_print(),
-            None => "".to_string(),
+            None => "()".to_string(),
         }
     }
 }
@@ -112,20 +108,10 @@ impl MiniPrint for Expr {
             }
             Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
-                let es = e2
-                    .iter()
-                    .map(|e| e.to_expr().clone())
-                    .collect::<Vec<Expr>>();
-
-                format!("(app {} ({}))", e1.simple_print(), concat_vec(&es))
+                format!("(app {} ({}))", e1.simple_print(), concat_vec(e2))
             }
             Expr::Lambda(params, _, body) => {
-                let paramstr = params.iter().map(|e| e.clone()).collect::<Vec<_>>();
-                format!(
-                    "(lambda ({}) {})",
-                    concat_vec(&paramstr),
-                    body.simple_print()
-                )
+                format!("(lambda ({}) {})", concat_vec(params), body.simple_print())
             }
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.simple_print()),
             Expr::Let(id, body, then) => format!(
@@ -152,7 +138,37 @@ impl MiniPrint for Expr {
             ),
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
-            Expr::Error => todo!(),
+            Expr::Error => "(error)".to_string(),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Statement {
+    Let(TypedPattern, ExprNodeId),
+    LetRec(TypedId, ExprNodeId),
+    Assign(Symbol, ExprNodeId),
+    Single(ExprNodeId),
+}
+
+pub(crate) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> {
+    let e_pre = stmts
+        .iter()
+        .rev()
+        .fold(None, |then, (stmt, span)| match (then, stmt) {
+            (_,Statement::Let(pat, body)) => {
+                Some(Expr::Let(pat.clone(), *body, then).into_id(span.clone()))
+            }
+            (_,Statement::LetRec(id, body)) => {
+                Some(Expr::LetRec(id.clone(), *body, then).into_id(span.clone()))
+            }
+            (_,Statement::Assign(name, body))=> Some(
+                Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then)
+                    .into_id(span.clone()),
+            ),
+            (None,Statement::Single(e))=>Some(*e),
+            (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(span.clone())),
+        });
+    log::debug!("e_pre: {:?}", e_pre);
+    e_pre
 }

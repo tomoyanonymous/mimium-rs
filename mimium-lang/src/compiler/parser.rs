@@ -248,40 +248,68 @@ fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
         op_parser(apply)
     })
 }
-fn expr_statement_parser<'a>(
-    expr_group: ExprParser<'a>,
-    then: ExprParser<'a>,
-) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a {
-    let let_stmt = just(Token::Let)
+// fn expr_statement_parser<'a>(
+//     expr_group: ExprParser<'a>,
+//     then: ExprParser<'a>,
+// ) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + 'a {
+//     let let_stmt = just(Token::Let)
+//         .ignore_then(pattern_parser().clone())
+//         .then_ignore(just(Token::Assign))
+//         .then(expr_group.clone())
+//         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+//         .then(then.clone().or_not())
+//         .map_with_span(|((ident, body), then), span| Expr::Let(ident, body, then).into_id(span))
+//         .labelled("let_stmt");
+//     let assign = placement_parser()
+//         .then_ignore(just(Token::Assign))
+//         .then(expr_group.clone())
+//         .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+//         .then(then.or_not())
+//         .map_with_span(|((ident, body), then), span| {
+//             Expr::Then(Expr::Assign(ident, body).into_id(span.clone()), then).into_id(span)
+//         })
+//         .labelled("assign");
+//     let_stmt.or(assign)
+// }
+fn statement_parser<'a>(
+    expr: ExprParser<'a>,
+) -> impl Parser<Token, (Statement, Span), Error = Simple<Token>> + Clone + 'a {
+    let let_ = just(Token::Let)
         .ignore_then(pattern_parser().clone())
         .then_ignore(just(Token::Assign))
-        .then(expr_group.clone())
-        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-        .then(then.clone().or_not())
-        .map_with_span(|((ident, body), then), span| Expr::Let(ident, body, then).into_id(span))
+        .then(expr.clone())
+        .map_with_span(|(ident, body), span| (Statement::Let(ident, body), span))
         .labelled("let_stmt");
     let assign = placement_parser()
         .then_ignore(just(Token::Assign))
-        .then(expr_group.clone())
-        .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-        .then(then.or_not())
-        .map_with_span(|((ident, body), then), span| {
-            Expr::Then(Expr::Assign(ident, body).into_id(span.clone()), then).into_id(span)
-        })
+        .then(expr.clone())
+        .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
         .labelled("assign");
-    let_stmt.or(assign)
+    let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
+    let_.or(assign).or(single).debug("stmt")
+}
+fn statements_parser(
+    expr: ExprParser<'_>,
+) -> impl Parser<Token, Option<ExprNodeId>, Error = Simple<Token>> + Clone + '_ {
+    statement_parser(expr)
+        .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+        .map(|stmts| into_then_expr(&stmts))
+}
+
+fn block_parser(
+    expr: ExprParser<'_>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone + '_ {
+    let stmts = statements_parser(expr);
+    stmts
+        .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
+        .map_with_span(|stmts, span| Expr::Block(stmts).into_id(span))
 }
 // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
 fn exprgroup_parser<'a>() -> ExprParser<'a> {
     recursive(|expr_group: ExprParser<'a>| {
         let expr = expr_parser(expr_group.clone());
 
-        let block = expr_group
-            .clone()
-            .padded_by(just(Token::LineBreak).or_not())
-            .delimited_by(just(Token::BlockBegin), just(Token::BlockEnd))
-            .map(|e: ExprNodeId| Expr::Block(Some(e)));
-
+        let block = block_parser(expr.clone());
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
             .ignore_then(
@@ -295,9 +323,8 @@ fn exprgroup_parser<'a>() -> ExprParser<'a> {
             .labelled("if");
 
         block
-            .map_with_span(|e, s| e.into_id(s))
             .or(if_)
-            .or(expr_statement_parser(expr_group.clone(), expr_group))
+            // .or(expr_statement_parser(expr_group.clone(), expr_group))
             .or(expr.clone())
     })
 }
@@ -331,7 +358,7 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                     .delimited_by(blockstart.clone(), blockend.clone()),
             )
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-            .then(stmt.clone().or_not())
+            .then(stmt.clone())
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
                 let atypes = ids
                     .iter()
@@ -352,12 +379,14 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                     )
                     .into_id(),
                 };
-                Expr::LetRec(
-                    fname,
-                    Expr::Lambda(ids, r_type, block).into_id(s.clone()),
-                    then,
+                Some(
+                    Expr::LetRec(
+                        fname,
+                        Expr::Lambda(ids, r_type, block).into_id(s.clone()),
+                        then,
+                    )
+                    .into_id(s),
                 )
-                .into_id(s)
             })
             .labelled("function decl");
         let macro_s = just(Token::Macro)
@@ -369,20 +398,22 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
                     .delimited_by(blockstart.clone(), blockend.clone())
                     .map(Expr::Bracket),
             )
-            .then(exprgroup.clone().or_not())
+            .then(stmt.clone())
             .map_with_span(|(((fname, ids), block), then), s| {
-                Expr::LetRec(
-                    fname,
-                    Expr::Lambda(ids, None, block.into_id(s.clone())).into_id(s.clone()),
-                    then,
+                Some(
+                    Expr::LetRec(
+                        fname,
+                        Expr::Lambda(ids, None, block.into_id(s.clone())).into_id(s.clone()),
+                        then,
+                    )
+                    .into_id(s),
                 )
-                .into_id(s)
             })
             .labelled("macro definition");
-        let global_stmts = expr_statement_parser(exprgroup.clone(), stmt);
-        function_s.or(macro_s).or(global_stmts).or(exprgroup)
+        let global_stmts = statements_parser(exprgroup.clone());
+        function_s.or(macro_s).or(global_stmts)
     });
-    stmt
+    stmt.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
     // expr_parser().then_ignore(end())
 }
 
@@ -411,14 +442,14 @@ pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
-    let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
+    let (tokens, lex_errs) = lexer::lexer().parse_recovery_verbose(src);
     lex_errs
         .iter()
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
     if let Some(t) = tokens {
-        let (ast, parse_errs) =
-            parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+        let (ast, parse_errs) = parser()
+            .parse_recovery_verbose(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) => Ok(ast),
             None => {

@@ -2,13 +2,19 @@ use super::*;
 use crate::pattern::TypedId;
 use crate::utils;
 use std::path::PathBuf;
+use crate::utils::miniprint::MiniPrint;
 
 macro_rules! test_string {
     ($src:literal, $ans:expr) => {
         let srcstr = $src.to_string();
         match parse(&srcstr) {
             Ok(ast) => {
-                assert_eq!(ast.to_expr(), $ans.to_expr());
+                assert!(
+                    ast.to_expr() == $ans.to_expr(),
+                    "res:{} ans{}",
+                    ast.simple_print(),
+                    $ans.simple_print()
+                );
             }
             Err(errs) => {
                 utils::error::report(&srcstr, PathBuf::new(), &errs);
