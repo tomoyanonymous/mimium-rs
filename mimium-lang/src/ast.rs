@@ -156,19 +156,19 @@ pub(crate) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> 
         .iter()
         .rev()
         .fold(None, |then, (stmt, span)| match (then, stmt) {
-            (_,Statement::Let(pat, body)) => {
+            (_, Statement::Let(pat, body)) => {
                 Some(Expr::Let(pat.clone(), *body, then).into_id(span.clone()))
             }
-            (_,Statement::LetRec(id, body)) => {
+            (_, Statement::LetRec(id, body)) => {
                 Some(Expr::LetRec(id.clone(), *body, then).into_id(span.clone()))
             }
-            (_,Statement::Assign(name, body))=> Some(
+            (_, Statement::Assign(name, body)) => Some(
                 Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then)
                     .into_id(span.clone()),
             ),
-            (None,Statement::Single(e))=>Some(*e),
+            (None, Statement::Single(e)) => Some(*e),
             (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(span.clone())),
         });
-    log::debug!("e_pre: {:?}", e_pre);
+    log::debug!("stmts {:?}, e_pre: {:?}", stmts, e_pre);
     e_pre
 }

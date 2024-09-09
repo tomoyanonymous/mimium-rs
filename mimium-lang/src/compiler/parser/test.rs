@@ -1,8 +1,8 @@
 use super::*;
 use crate::pattern::TypedId;
-use crate::utils;
-use std::path::PathBuf;
 use crate::utils::miniprint::MiniPrint;
+use crate::{function, letrec, utils};
+use std::path::PathBuf;
 
 macro_rules! test_string {
     ($src:literal, $ans:expr) => {
@@ -10,7 +10,7 @@ macro_rules! test_string {
         match parse(&srcstr) {
             Ok(ast) => {
                 assert!(
-                    ast.to_expr() == $ans.to_expr(),
+                    ast.simple_print() == $ans.simple_print(),
                     "res:{} ans{}",
                     ast.simple_print(),
                     $ans.simple_print()
@@ -213,6 +213,7 @@ fn test_macroexpand() {
     .into_id(0..14);
     test_string!("myfun!(callee)", ans);
 }
+
 #[test]
 fn test_fndef() {
     let ans = Expr::LetRec(
@@ -246,6 +247,57 @@ fn test_fndef() {
     .into_id(0..28);
     test_string!("fn hoge(input,gue){\n input\n}", ans);
 }
+#[test]
+fn global_fnmultiple() {
+    let fnty = function!(
+        vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
+        Type::Unknown.into_id()
+    );
+    let ans = letrec!(
+        "hoge",
+        Some(fnty),
+        Expr::Lambda(
+            vec![
+                TypedId {
+                    id: "input".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(8..13),
+                },
+                TypedId {
+                    id: "gue".to_symbol(),
+                    ty: Type::Unknown.into_id_with_span(14..17),
+                },
+            ],
+            None,
+            Expr::Var("input".to_symbol()).into_id(21..26),
+        )
+        .into_id(0..28),
+        Some(letrec!(
+            "hoge",
+            Some(fnty),
+            Expr::Lambda(
+                vec![
+                    TypedId {
+                        id: "input".to_symbol(),
+                        ty: Type::Unknown.into_id_with_span(8..13),
+                    },
+                    TypedId {
+                        id: "gue".to_symbol(),
+                        ty: Type::Unknown.into_id_with_span(14..17),
+                    },
+                ],
+                None,
+                Expr::Var("input".to_symbol()).into_id(21..26),
+            )
+            .into_id(0..28),
+            None
+        ))
+    );
+    test_string!(
+        "fn hoge(input,gue){\n input\n}\nfn hoge(input,gue){\n input\n}",
+        ans
+    );
+}
+
 #[test]
 fn test_macrodef() {
     let ans = Expr::LetRec(

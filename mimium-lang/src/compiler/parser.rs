@@ -271,9 +271,9 @@ fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
 //         .labelled("assign");
 //     let_stmt.or(assign)
 // }
-fn statement_parser<'a>(
-    expr: ExprParser<'a>,
-) -> impl Parser<Token, (Statement, Span), Error = Simple<Token>> + Clone + 'a {
+fn statement_parser(
+    expr: ExprParser<'_>,
+) -> impl Parser<Token, (Statement, Span), Error = Simple<Token>> + Clone + '_ {
     let let_ = just(Token::Let)
         .ignore_then(pattern_parser().clone())
         .then_ignore(just(Token::Assign))
@@ -293,6 +293,8 @@ fn statements_parser(
 ) -> impl Parser<Token, Option<ExprNodeId>, Error = Simple<Token>> + Clone + '_ {
     statement_parser(expr)
         .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+        .allow_leading()
+        .allow_trailing()
         .map(|stmts| into_then_expr(&stmts))
 }
 
@@ -352,11 +354,7 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             .ignore_then(lvar.clone())
             .then(fnparams.clone())
             .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
-            .then(
-                exprgroup
-                    .clone()
-                    .delimited_by(blockstart.clone(), blockend.clone()),
-            )
+            .then(exprgroup.clone())
             .then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
             .then(stmt.clone())
             .map_with_span(|((((fname, ids), r_type), block), then), s| {
@@ -413,7 +411,8 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         let global_stmts = statements_parser(exprgroup.clone());
         function_s.or(macro_s).or(global_stmts)
     });
-    stmt.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
+    // stmt.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
+    stmt.map_with_span(|e, span| e.unwrap_or(Expr::Error.into_id(span)))
     // expr_parser().then_ignore(end())
 }
 
@@ -448,8 +447,8 @@ pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
     if let Some(t) = tokens {
-        let (ast, parse_errs) = parser()
-            .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+        let (ast, parse_errs) =
+            parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) => Ok(ast),
             None => {
