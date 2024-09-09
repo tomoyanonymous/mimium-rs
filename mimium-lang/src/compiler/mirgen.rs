@@ -211,7 +211,6 @@ impl Context {
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
             (Pattern::Single(id), t) => {
-                // even on global, Value::Function doesn't require SetGlobal
                 if (is_global && !matches!(v.as_ref(), Value::Function(_))) {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
@@ -227,15 +226,8 @@ impl Context {
                 }
             }
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
-                let v = if is_global {
-                    let gv = Arc::new(Value::Global(v.clone()));
-                    self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
-                    self.push_inst(Instruction::GetGlobal(gv.clone(), ty))
-                } else {
-                    v
-                };
                 for ((i, pat), cty) in patterns.iter().enumerate().zip(tvec.iter()) {
-                    let v = self.push_inst(Instruction::GetElement {
+                    let elem_v = self.push_inst(Instruction::GetElement {
                         value: v.clone(),
                         ty,
                         array_idx: 0,
@@ -246,7 +238,7 @@ impl Context {
                         pat: pat.clone(),
                         ty: tid,
                     };
-                    self.add_bind_pattern(&tpat, v, *cty, is_global)?;
+                    self.add_bind_pattern(&tpat, elem_v, *cty, is_global)?;
                 }
             }
             _ => {
