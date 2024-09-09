@@ -72,7 +72,7 @@ impl MiniPrint for Literal {
     }
 }
 
-fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
+fn concat_vec<T: MiniPrint>(vec: &[T]) -> String {
     vec.iter()
         .map(|t| t.simple_print())
         .collect::<Vec<_>>()
@@ -81,14 +81,20 @@ fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
 
 impl MiniPrint for ExprNodeId {
     fn simple_print(&self) -> String {
-        self.to_expr().simple_print()
+        let span = self.to_span();
+        format!(
+            "{}:{}..{}",
+            self.to_expr().simple_print(),
+            span.start,
+            span.end
+        )
     }
 }
 
 impl MiniPrint for Option<ExprNodeId> {
     fn simple_print(&self) -> String {
         match self {
-            Some(e) => e.to_expr().simple_print(),
+            Some(e) => e.simple_print(),
             None => "()".to_string(),
         }
     }
@@ -100,7 +106,7 @@ impl MiniPrint for Expr {
             Expr::Literal(l) => l.simple_print(),
             Expr::Var(v) => format!("{v}"),
             Expr::Block(e) => e.map_or("".to_string(), |eid| {
-                format!("(block {})", eid.to_expr().simple_print())
+                format!("(block {})", eid.simple_print())
             }),
             Expr::Tuple(e) => {
                 let e1 = e.iter().map(|e| e.to_expr().clone()).collect::<Vec<Expr>>();
@@ -146,7 +152,6 @@ impl MiniPrint for Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Statement {
     Let(TypedPattern, ExprNodeId),
-    FnDef(TypedId, ExprNodeId),
     MacroExpand(TypedId, ExprNodeId),
     LetRec(TypedId, ExprNodeId),
     Assign(Symbol, ExprNodeId),
@@ -154,27 +159,36 @@ pub(crate) enum Statement {
 }
 
 pub(crate) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> {
+    let get_span = |spana: Span, spanb: Option<ExprNodeId>| match spanb {
+        Some(b) => {
+            let start = spana.start;
+            start..b.to_span().end
+        }
+        None => spana,
+    };
     let e_pre = stmts
         .iter()
         .rev()
         .fold(None, |then, (stmt, span)| match (then, stmt) {
             (_, Statement::Let(pat, body)) => {
-                Some(Expr::Let(pat.clone(), *body, then).into_id(span.clone()))
+                Some(Expr::Let(pat.clone(), *body, then).into_id(get_span(span.clone(), then)))
             }
 
-            (_, Statement::LetRec(id, body)) | (_, Statement::FnDef(id, body)) => {
-                Some(Expr::LetRec(id.clone(), *body, then).into_id(span.clone()))
+            (_, Statement::LetRec(id, body)) => {
+                Some(Expr::LetRec(id.clone(), *body, then).into_id(get_span(span.clone(), then)))
             }
             (_, Statement::Assign(name, body)) => Some(
                 Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then)
-                    .into_id(span.clone()),
+                    .into_id(get_span(span.clone(), then)),
             ),
             (_, Statement::MacroExpand(fname, body)) => {
                 //todo!
-                Some(Expr::LetRec(fname.clone(), *body, then).into_id(span.clone()))
+                Some(Expr::LetRec(fname.clone(), *body, then).into_id(get_span(span.clone(), then)))
             }
             (None, Statement::Single(e)) => Some(*e),
-            (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(span.clone())),
+            (t, Statement::Single(e)) => {
+                Some(Expr::Then(*e, t).into_id(get_span(span.clone(), then)))
+            }
         });
     // log::debug!("stmts {:?}, e_pre: {:?}", stmts, e_pre);
     e_pre

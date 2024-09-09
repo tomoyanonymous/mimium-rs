@@ -126,10 +126,10 @@ pub enum NodeId {
     TypeArena(TypeKey),
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct ExprNodeId(pub ExprKey);
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct TypeNodeId(pub TypeKey);
 
 // traits required for Key trait
@@ -191,5 +191,31 @@ impl ToNodeId for ExprNodeId {
 impl ToNodeId for TypeNodeId {
     fn to_node_id(&self) -> NodeId {
         NodeId::TypeArena(self.0)
+    }
+}
+impl std::fmt::Display for ExprNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+        write!(f, "{:?},{}..{}", self.to_expr(), span.start, span.end)
+    }
+}
+impl std::fmt::Debug for ExprNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+        write!(f, "{:#?},{}..{}", self.to_expr(), span.start, span.end)
+    }
+}
+impl std::fmt::Display for TypeNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+
+        write!(f, "{:?},{}..{}", self.to_type(), span.start, span.end)
+    }
+}
+impl std::fmt::Debug for TypeNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+
+        write!(f, "{:#?},{}..{}", self.to_type(), span.start, span.end)
     }
 }
