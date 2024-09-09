@@ -102,13 +102,14 @@ mod test {
     fn recurse_remove() {
         let sample = letrec!(
             "testfn",
+            None,
             lambda!(
                 ["count"],
                 ifexpr!(
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     //this letrec should be converted to plain let
-                    letrec!("lettest", number!("12.0"), Some(number!("2.0")))
+                    letrec!("lettest", None, number!("12.0"), Some(number!("2.0")))
                 )
             ),
             None
@@ -116,6 +117,7 @@ mod test {
         // top letrec should not be converted
         let ans = letrec!(
             "testfn",
+            None,
             lambda!(
                 ["count"],
                 ifexpr!(
