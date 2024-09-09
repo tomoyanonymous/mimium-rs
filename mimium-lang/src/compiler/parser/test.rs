@@ -10,10 +10,10 @@ macro_rules! test_string {
         match parse(&srcstr) {
             Ok(ast) => {
                 assert!(
-                    ast == $ans,
-                    "res:{} ans{}",
-                    ast.simple_print(),
-                    $ans.simple_print()
+                    ast.to_expr() == $ans.to_expr(),
+                    "res:{:?}\nans:{:?}",
+                    ast,
+                    $ans
                 );
             }
             Err(errs) => {
@@ -139,12 +139,12 @@ fn test_at() {
             Expr::Literal(Literal::Float("2.0".to_string())).into_id(8..11),
         ],
     )
-    .into_id(0..7);
+    .into_id(4..11);
     let ans2 = Expr::Apply(
         Expr::Var("_mimium_schedule_at".to_symbol()).into_id(3..4),
         vec![time, Expr::Var("foo".to_symbol()).into_id(0..3)],
     )
-    .into_id(0..7);
+    .into_id(0..11);
     test_string!("foo@1.0^2.0", ans2);
 }
 #[test]
@@ -347,6 +347,61 @@ fn test_tuple() {
     // This is not a tuple
     let ans = tuple_items[0];
     test_string!("(1.0)", ans);
+}
+
+#[test]
+fn test_stmt_without_return() {
+    let ans = Expr::LetRec(
+        TypedId {
+            id: "test".to_symbol(),
+            ty: Type::Function(vec![Type::Unknown.into_id()], Type::Unknown.into_id(), None)
+                .into_id(),
+        },
+        Expr::Lambda(
+            vec![TypedId {
+                id: "input".to_symbol(),
+                ty: Type::Unknown.into_id_with_span(8..13),
+            }],
+            None,
+            Expr::Let(
+                TypedPattern {
+                    pat: Pattern::Single("v".to_symbol()),
+                    ty: Type::Unknown.into_id_with_span(24..25),
+                },
+                Expr::Apply(
+                    Expr::Var("add".to_symbol()).into_id(33..34),
+                    vec![
+                        Expr::Var("input".to_symbol()).into_id(28..33),
+                        Expr::Literal(Literal::Int(1)).into_id(34..35),
+                    ],
+                )
+                .into_id(28..35),
+                Some(
+                    Expr::Then(
+                        Expr::Apply(
+                            Expr::Var("print".to_symbol()).into_id(40..45),
+                            vec![Expr::Var("v".to_symbol()).into_id(46..47)],
+                        )
+                        .into_id(40..47),
+                        Some(Expr::Var("v".to_symbol()).into_id(53..54)),
+                    )
+                    .into_id(40..54),
+                ),
+            )
+            .into_id(20..54),
+        )
+        .into_id(0..56),
+        None,
+    )
+    .into_id(0..56);
+    test_string!(
+        r"fn test(input){
+    let v = input+1
+    print(v)
+    v
+}",
+        ans
+    );
 }
 
 #[test]
