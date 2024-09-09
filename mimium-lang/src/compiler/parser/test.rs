@@ -167,12 +167,12 @@ fn test_assign1() {
     let ans = Expr::Then(
         Expr::Assign(
             "hoge".to_symbol(),
-            Expr::Var("fuga".to_symbol()).into_id(6..10),
+            Expr::Var("fuga".to_symbol()).into_id(7..11),
         )
-        .into_id(0..10),
+        .into_id(0..11),
         None,
     )
-    .into_id(0..10);
+    .into_id(0..11);
     test_string!("hoge = fuga", ans);
 }
 #[test]
@@ -180,12 +180,12 @@ fn test_assign2() {
     let ans = Expr::Then(
         Expr::Assign(
             "hoge".to_symbol(),
-            Expr::Var("fuga".to_symbol()).into_id(6..10),
+            Expr::Var("fuga".to_symbol()).into_id(7..11),
         )
-        .into_id(0..10),
+        .into_id(0..11),
         Some(Expr::Literal(Literal::Float("100.0".to_string())).into_id(13..18)),
     )
-    .into_id(0..10);
+    .into_id(0..18);
     test_string!("hoge = fuga\n 100.0", ans);
 }
 #[test]
@@ -196,9 +196,9 @@ fn test_applynested() {
             Expr::Var("myfun2".to_symbol()).into_id(6..12),
             vec![Expr::Var("callee".to_symbol()).into_id(13..19)],
         )
-        .into_id(6..20)],
+        .into_id(6..19)],
     )
-    .into_id(0..21);
+    .into_id(0..19);
     test_string!("myfun(myfun2(callee))", ans);
 }
 #[test]
@@ -253,9 +253,11 @@ fn global_fnmultiple() {
         vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
         Type::Unknown.into_id()
     );
-    let ans = letrec!(
-        "hoge",
-        Some(fnty),
+    let ans = Expr::LetRec(
+        TypedId {
+            id: "hoge".to_symbol(),
+            ty: fnty,
+        },
         Expr::Lambda(
             vec![
                 TypedId {
@@ -271,27 +273,33 @@ fn global_fnmultiple() {
             Expr::Var("input".to_symbol()).into_id(21..26),
         )
         .into_id(0..28),
-        Some(letrec!(
-            "hoge",
-            Some(fnty),
-            Expr::Lambda(
-                vec![
-                    TypedId {
-                        id: "input".to_symbol(),
-                        ty: Type::Unknown.into_id_with_span(8..13),
-                    },
-                    TypedId {
-                        id: "gue".to_symbol(),
-                        ty: Type::Unknown.into_id_with_span(14..17),
-                    },
-                ],
+        Some(
+            Expr::LetRec(
+                TypedId {
+                    id: "hoge".to_symbol(),
+                    ty: fnty,
+                },
+                Expr::Lambda(
+                    vec![
+                        TypedId {
+                            id: "input".to_symbol(),
+                            ty: Type::Unknown.into_id_with_span(37..42),
+                        },
+                        TypedId {
+                            id: "gue".to_symbol(),
+                            ty: Type::Unknown.into_id_with_span(43..46),
+                        },
+                    ],
+                    None,
+                    Expr::Var("input".to_symbol()).into_id(50..55),
+                )
+                .into_id(29..57),
                 None,
-                Expr::Var("input".to_symbol()).into_id(21..26),
             )
-            .into_id(0..28),
-            None
-        ))
-    );
+            .into_id(29..57),
+        ),
+    )
+    .into_id(0..57);
     test_string!(
         "fn hoge(input,gue){\n input\n}\nfn hoge(input,gue){\n input\n}",
         ans
@@ -303,7 +311,7 @@ fn test_macrodef() {
     let ans = Expr::LetRec(
         TypedId {
             id: "hoge".to_symbol(),
-            ty: Type::Unknown.into_id(),
+            ty: Type::Unknown.into_id_with_span(6..10),
         },
         Expr::Lambda(
             vec![
@@ -317,7 +325,7 @@ fn test_macrodef() {
                 },
             ],
             None,
-            Expr::Bracket(Expr::Var("input".to_symbol()).into_id(24..29)).into_id(24..29),
+            Expr::Bracket(Expr::Var("input".to_symbol()).into_id(24..29)).into_id(0..31),
         )
         .into_id(0..31),
         None,
