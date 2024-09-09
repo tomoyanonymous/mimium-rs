@@ -205,13 +205,29 @@ impl Context {
         pattern: &TypedPattern,
         v: VPtr,
         ty: TypeNodeId,
+        is_global: bool,
     ) -> Result<(), CompileError> {
         let TypedPattern { pat, .. } = pattern;
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
-            (Pattern::Single(id), _) => Ok(self.add_bind((*id, v))),
+            (Pattern::Single(id), t) => {
+                let v = if is_global {
+                    let gv = Arc::new(Value::Global(v.clone()));
+                    if t.is_function() {
+                        //globally allocated closures are immidiately closed, not to be disposed
+                        let b = self.push_inst(Instruction::CloseUpValue(v.clone()));
+                        self.push_inst(Instruction::SetGlobal(gv.clone(), b, ty));
+                    } else {
+                        self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
+                    }
+                    gv
+                } else {
+                    v
+                };
+                self.add_bind((*id, v))
+            }
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
-                let v = if matches!(v.as_ref(), Value::Global(_)) {
+                let v = if is_global {
                     self.push_inst(Instruction::GetGlobal(v.clone(), ty))
                 } else {
                     v
@@ -228,14 +244,14 @@ impl Context {
                         pat: pat.clone(),
                         ty: tid,
                     };
-                    self.add_bind_pattern(&tpat, v, *cty)?;
+                    self.add_bind_pattern(&tpat, v, *cty, is_global)?;
                 }
-                Ok(())
             }
             _ => {
                 panic!("typing error in the previous stage")
             }
         }
+        Ok(())
     }
     fn make_new_function(
         &mut self,
@@ -657,42 +673,26 @@ impl Context {
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
-                match (
-                    is_global,
-                    matches!(bodyv.as_ref(), Value::Function(_)),
-                    then,
-                ) {
-                    (true, false, Some(then_e)) => {
-                        let gv = Arc::new(Value::Global(bodyv.clone()));
-                        if t.to_type().is_function() {
-                            //globally allocated closures are immidiately closed, not to be disposed
-                            let b = self.push_inst(Instruction::CloseUpValue(bodyv.clone()));
-                            let _greg = self.push_inst(Instruction::SetGlobal(gv.clone(), b, t));
-                        } else {
-                            let _greg = self.push_inst(Instruction::SetGlobal(
-                                gv.clone(),
-                                bodyv.clone(),
-                                t,
-                            ));
-                        }
-                        self.add_bind_pattern(pat, gv, t)?;
+                match (is_global, then) {
+                    (true, Some(then_e)) => {
+                        self.add_bind_pattern(pat, bodyv, t, is_global)?;
                         self.eval_expr(*then_e)
                     }
-                    (false, false, Some(then_e)) => {
+                    (false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
 
-                        self.add_bind_pattern(pat, alloc_res, t)?;
+                        self.add_bind_pattern(pat, alloc_res, t, is_global)?;
                         self.eval_expr(*then_e)
                     }
-                    (_, _, Some(then_e)) => {
-                        self.add_bind_pattern(pat, bodyv, t)?;
+                    (_, Some(then_e)) => {
+                        self.add_bind_pattern(pat, bodyv, t, is_global)?;
                         self.eval_expr(*then_e)
                     }
-                    (_, _, None) => Ok((Arc::new(Value::None), unit!())),
+                    (_, None) => Ok((Arc::new(Value::None), unit!())),
                 }
             }
             Expr::LetRec(id, body, then) => {
