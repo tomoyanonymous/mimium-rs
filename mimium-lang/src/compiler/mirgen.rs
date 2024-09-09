@@ -205,13 +205,14 @@ impl Context {
         pattern: &TypedPattern,
         v: VPtr,
         ty: TypeNodeId,
-        set_global: bool,
+        is_global: bool,
     ) -> Result<(), CompileError> {
         let TypedPattern { pat, .. } = pattern;
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
             (Pattern::Single(id), t) => {
-                if set_global {
+                // even on global, Value::Function doesn't require SetGlobal
+                if (is_global && !matches!(v.as_ref(), Value::Function(_))) {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
                         //globally allocated closures are immidiately closed, not to be disposed
@@ -226,7 +227,7 @@ impl Context {
                 }
             }
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
-                let v = if set_global {
+                let v = if is_global {
                     let gv = Arc::new(Value::Global(v.clone()));
                     self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
                     self.push_inst(Instruction::GetGlobal(gv.clone(), ty))
@@ -245,7 +246,7 @@ impl Context {
                         pat: pat.clone(),
                         ty: tid,
                     };
-                    self.add_bind_pattern(&tpat, v, *cty, set_global)?;
+                    self.add_bind_pattern(&tpat, v, *cty, is_global)?;
                 }
             }
             _ => {
@@ -687,10 +688,8 @@ impl Context {
                         self.add_bind_pattern(pat, alloc_res, t, false)?;
                         self.eval_expr(*then_e)
                     }
-                    (is_global, is_fn, Some(then_e)) => {
-                        // even on global, Value::Function doesn't require SetGlobal
-                        let set_global = is_global && !is_fn;
-                        self.add_bind_pattern(pat, bodyv, t, set_global)?;
+                    (is_global, _, Some(then_e)) => {
+                        self.add_bind_pattern(pat, bodyv, t, is_global)?;
                         self.eval_expr(*then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
