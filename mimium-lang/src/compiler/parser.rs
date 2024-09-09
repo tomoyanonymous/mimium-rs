@@ -10,6 +10,9 @@ mod token;
 use token::{Comment, Op, Token};
 mod error;
 mod lexer;
+mod statement;
+
+use statement::{into_then_expr, Statement};
 
 #[cfg(test)]
 mod test;
