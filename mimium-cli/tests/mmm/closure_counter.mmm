@@ -7,9 +7,9 @@ fn makecounter(){
         x = x+1.0
         res 
     }
-    (countup,init)
+    (init,countup)
 }
-let (myc,_) = makecounter();
+let (_,myc) = makecounter();
 fn dsp(){
     myc()
 }
