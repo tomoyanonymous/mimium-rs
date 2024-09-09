@@ -58,10 +58,7 @@ impl Type {
         }
     }
     pub fn is_function(&self) -> bool {
-        match self {
-            Type::Function(_, _, _) => true,
-            _ => false,
-        }
+        matches!(self, Type::Function(_, _, _))
     }
     pub fn is_intermediate(&self) -> Option<Rc<RefCell<TypeVar>>> {
         match self {
@@ -84,7 +81,7 @@ impl Type {
             Type::Tuple(v) => Type::Tuple(apply_vec(v)),
             Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => {
-                Type::Function(apply_vec(p), apply_scalar(*r), s.map(|a| apply_scalar(a)))
+                Type::Function(apply_vec(p), apply_scalar(*r), s.map(apply_scalar))
             }
             Type::Ref(x) => Type::Ref(apply_scalar(*x)),
             Type::Code(_c) => todo!(),

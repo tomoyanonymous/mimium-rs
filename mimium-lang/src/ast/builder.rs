@@ -101,11 +101,11 @@ macro_rules! let_ {
 
 #[macro_export]
 macro_rules! letrec {
-    ($id:literal,$body:expr,$then:expr) => {
+    ($id:literal,$ty:expr,$body:expr,$then:expr) => {
         Expr::LetRec(
             TypedId {
                 id: $crate::ast::builder::str_to_symbol($id),
-                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                ty: $ty.unwrap_or($crate::types::Type::Unknown.into_id_with_span(0..0)),
             },
             $body,
             $then,
