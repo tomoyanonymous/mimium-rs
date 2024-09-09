@@ -211,7 +211,7 @@ impl Context {
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
             (Pattern::Single(id), t) => {
-                let v = if set_global {
+                if set_global {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
                         //globally allocated closures are immidiately closed, not to be disposed
@@ -220,11 +220,10 @@ impl Context {
                     } else {
                         self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
                     }
-                    gv
+                    self.add_bind((*id, gv))
                 } else {
-                    v
-                };
-                self.add_bind((*id, v))
+                    self.add_bind((*id, v))
+                }
             }
             (Pattern::Tuple(patterns), Type::Tuple(tvec)) => {
                 let v = if set_global {
@@ -670,32 +669,28 @@ impl Context {
                 } else {
                     self.get_current_basicblock().0.len()
                 };
-                let is_global = self.get_ctxdata().func_i == 0;
                 let (bodyv, t) = self.eval_expr(*body)?;
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
                 match (
-                    is_global,
+                    self.get_ctxdata().func_i == 0,
                     matches!(bodyv.as_ref(), Value::Function(_)),
                     then,
                 ) {
-                    (true, false, Some(then_e)) => {
-                        self.add_bind_pattern(pat, bodyv, t, is_global)?;
-                        self.eval_expr(*then_e)
-                    }
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
                         let block = &mut self.get_current_basicblock().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
-
-                        self.add_bind_pattern(pat, alloc_res, t, is_global)?;
+                        self.add_bind_pattern(pat, alloc_res, t, false)?;
                         self.eval_expr(*then_e)
                     }
-                    (_, true, Some(then_e)) => {
-                        self.add_bind_pattern(pat, bodyv, t, false)?;
+                    (is_global, is_fn, Some(then_e)) => {
+                        // even on global, Value::Function doesn't require SetGlobal
+                        let set_global = is_global && !is_fn;
+                        self.add_bind_pattern(pat, bodyv, t, set_global)?;
                         self.eval_expr(*then_e)
                     }
                     (_, _, None) => Ok((Arc::new(Value::None), unit!())),
