@@ -146,6 +146,8 @@ impl MiniPrint for Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Statement {
     Let(TypedPattern, ExprNodeId),
+    FnDef(TypedId, ExprNodeId),
+    MacroExpand(TypedId, ExprNodeId),
     LetRec(TypedId, ExprNodeId),
     Assign(Symbol, ExprNodeId),
     Single(ExprNodeId),
@@ -159,16 +161,21 @@ pub(crate) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> 
             (_, Statement::Let(pat, body)) => {
                 Some(Expr::Let(pat.clone(), *body, then).into_id(span.clone()))
             }
-            (_, Statement::LetRec(id, body)) => {
+
+            (_, Statement::LetRec(id, body)) | (_, Statement::FnDef(id, body)) => {
                 Some(Expr::LetRec(id.clone(), *body, then).into_id(span.clone()))
             }
             (_, Statement::Assign(name, body)) => Some(
                 Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then)
                     .into_id(span.clone()),
             ),
+            (_, Statement::MacroExpand(fname, body)) => {
+                //todo!
+                Some(Expr::LetRec(fname.clone(), *body, then).into_id(span.clone()))
+            }
             (None, Statement::Single(e)) => Some(*e),
             (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(span.clone())),
         });
-    log::debug!("stmts {:?}, e_pre: {:?}", stmts, e_pre);
+    // log::debug!("stmts {:?}, e_pre: {:?}", stmts, e_pre);
     e_pre
 }

@@ -10,7 +10,7 @@ macro_rules! test_string {
         match parse(&srcstr) {
             Ok(ast) => {
                 assert!(
-                    ast.simple_print() == $ans.simple_print(),
+                    ast == $ans,
                     "res:{} ans{}",
                     ast.simple_print(),
                     $ans.simple_print()
