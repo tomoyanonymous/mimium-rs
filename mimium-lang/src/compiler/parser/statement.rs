@@ -28,24 +28,24 @@ pub(super) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> 
         None => spana,
     };
     let e_pre = stmts.iter().rev().fold(None, |then, (stmt, span)| {
-        let span = get_span(span.clone(), then);
+        let s = get_span(span.clone(), then);
         match (then, stmt) {
             (_, Statement::Let(pat, body)) => {
-                Some(Expr::Let(pat.clone(), *body, then).into_id(span))
+                Some(Expr::Let(pat.clone(), *body, then).into_id(s))
             }
 
             (_, Statement::LetRec(id, body)) => {
-                Some(Expr::LetRec(id.clone(), *body, then).into_id(span))
+                Some(Expr::LetRec(id.clone(), *body, then).into_id(s))
             }
             (_, Statement::Assign(name, body)) => Some(
-                Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then).into_id(span),
+                Expr::Then(Expr::Assign(*name, *body).into_id(span.clone()), then).into_id(s),
             ),
             (_, Statement::MacroExpand(fname, body)) => {
                 //todo!
-                Some(Expr::LetRec(fname.clone(), *body, then).into_id(span))
+                Some(Expr::LetRec(fname.clone(), *body, then).into_id(s))
             }
             (None, Statement::Single(e)) => Some(*e),
-            (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(span)),
+            (t, Statement::Single(e)) => Some(Expr::Then(*e, t).into_id(s)),
         }
     });
     // log::debug!("stmts {:?}, e_pre: {:?}", stmts, e_pre);
