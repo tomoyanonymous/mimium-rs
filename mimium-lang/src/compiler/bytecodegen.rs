@@ -480,6 +480,7 @@ impl ByteCodeGenerator {
                 vec![VmInstruction::Closure(dst, idx)]
             }
             mir::Instruction::CloseUpValues(src, ty) => {
+                // src might contain multiple upvalues (e.g. tuple)
                 let flattened = ty.flatten();
                 let base_addr = self.vregister.find_keep(src).unwrap();
 
