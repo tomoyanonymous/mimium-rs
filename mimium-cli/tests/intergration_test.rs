@@ -220,7 +220,19 @@ fn closure_counter2() {
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
     assert_eq!(res, ans);
 }
-
+#[test]
+fn closure_counter_tuple() {
+    let res = run_file_test_stereo("closure_counter_tuple.mmm", 5).unwrap();
+    #[rustfmt::skip]
+    let ans = vec![
+        0.0,  0.0,
+        1.0, -1.0,
+        2.0, -2.0,
+        3.0, -3.0,
+        4.0, -4.0
+    ];
+    assert_eq!(res, ans);
+}
 #[test]
 fn hof_state() {
     let res = run_file_test_mono("hof_state.mmm", 10).unwrap();
