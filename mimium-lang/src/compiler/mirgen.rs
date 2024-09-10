@@ -211,7 +211,7 @@ impl Context {
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
             (Pattern::Single(id), t) => {
-                if (is_global && !matches!(v.as_ref(), Value::Function(_))) {
+                if is_global && !matches!(v.as_ref(), Value::Function(_)) {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
                         //globally allocated closures are immidiately closed, not to be disposed
