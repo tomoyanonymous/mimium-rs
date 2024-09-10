@@ -610,13 +610,13 @@ impl Context {
                         (Value::Function(i), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
-                            let newres = ctx.push_inst(Instruction::CloseUpValues(cls.clone(), ty));
+                            let newres = ctx.push_inst(Instruction::CloseUpValues(cls.clone(), rt));
                             let _ = ctx.push_inst(Instruction::Return(newres, rt));
                         }
                         (_, _) => {
                             if rt.to_type().contains_function() {
                                 let newres =
-                                    ctx.push_inst(Instruction::CloseUpValues(res.clone(), ty));
+                                    ctx.push_inst(Instruction::CloseUpValues(res.clone(), rt));
                                 let _ = ctx.push_inst(Instruction::Return(newres.clone(), rt));
                             } else {
                                 let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));

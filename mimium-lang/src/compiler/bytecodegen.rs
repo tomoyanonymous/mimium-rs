@@ -471,23 +471,24 @@ impl ByteCodeGenerator {
                 vec![VmInstruction::Closure(dst, idx)]
             }
             mir::Instruction::CloseUpValues(src, ty) => {
-                let addrs = if matches!(ty.to_type(), Type::Tuple(_) | Type::Array(_)) {
-                    // TODO
-                    &[self.find_keep_and_get_element(src, *ty, 0, 0)]
-                } else {
-                    &[(self.vregister.find_keep(src).unwrap(), 1)]
-                };
+                let flattened = ty.flatten();
+                let base_addr = self.vregister.find_keep(src).unwrap();
 
-                addrs
-                    .iter()
-                    .map(|(addr, tsize)| {
+                let mut offset = 0;
+                let mut instructions = Vec::with_capacity(flattened.len());
+                for elem_t in flattened {
+                    let tsize = Self::word_size_for_type(elem_t);
+                    if elem_t.to_type().is_function() {
                         self.vregister
                             .get_top()
                             .0
-                            .insert(dst.clone(), MemoryRegion(*addr, *tsize));
-                        VmInstruction::Close(*addr)
-                    })
-                    .collect::<Vec<_>>()
+                            .insert(dst.clone(), MemoryRegion(base_addr + offset, tsize));
+                        instructions.push(VmInstruction::Close(base_addr + offset))
+                    }
+                    offset += tsize;
+                }
+
+                instructions
             }
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
