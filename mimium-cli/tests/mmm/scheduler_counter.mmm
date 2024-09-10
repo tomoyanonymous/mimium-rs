@@ -1,14 +1,13 @@
+//more abstract pattern of counter using scheduler.
+//this requires that compiler can define a recursive closure inside function using `letrec`.
 fn makecounter(){
     let x = 0.0
-    let updater = | |{
+    letrec gen = | |{
         x = x+1.0
+       gen@(now+1.0)
     }
-    let gen = | |{
-        let _ = _mimium_schedule_at(now+1.0, gen)
-        updater()
-    }
+    gen@1.0
     let getter = | | {x}
-    let _ = _mimium_schedule_at(1.0,gen)
     getter
 }
 let x_getter = makecounter();
