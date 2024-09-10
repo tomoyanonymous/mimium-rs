@@ -215,7 +215,7 @@ impl Context {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
                         //globally allocated closures are immidiately closed, not to be disposed
-                        let b = self.push_inst(Instruction::CloseUpValues(v.clone(), ty));
+                        let b = self.push_inst(Instruction::CloseUpValue(v.clone()));
                         self.push_inst(Instruction::SetGlobal(gv.clone(), b, ty));
                     } else {
                         self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
@@ -442,7 +442,7 @@ impl Context {
                 };
                 let res = if t.to_type().contains_function() {
                     //higher-order function need to close immidiately
-                    self.push_inst(Instruction::CloseUpValues(res, t))
+                    self.push_inst(Instruction::CloseUpValue(res))
                 } else {
                     res
                 };
@@ -610,13 +610,12 @@ impl Context {
                         (Value::Function(i), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
-                            let newres = ctx.push_inst(Instruction::CloseUpValues(cls.clone(), rt));
+                            let newres = ctx.push_inst(Instruction::CloseUpValue(cls.clone()));
                             let _ = ctx.push_inst(Instruction::Return(newres, rt));
                         }
                         (_, _) => {
                             if rt.to_type().contains_function() {
-                                let newres =
-                                    ctx.push_inst(Instruction::CloseUpValues(res.clone(), rt));
+                                let newres = ctx.push_inst(Instruction::CloseUpValue(res.clone()));
                                 let _ = ctx.push_inst(Instruction::Return(newres.clone(), rt));
                             } else {
                                 let _ = ctx.push_inst(Instruction::Return(res.clone(), rt));
