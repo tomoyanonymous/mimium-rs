@@ -838,7 +838,7 @@ impl Machine {
     pub fn execute_task(&mut self, now: Time, prog: &Program) {
         self.scheduler.set_cur_time(now);
 
-        if let Some(task_cls) = self.scheduler.pop_task(now, prog) {
+        while let Some(task_cls) = self.scheduler.pop_task(now, prog) {
             log::debug!("task id {:?}", task_cls);
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, prog, Some(task_cls));
