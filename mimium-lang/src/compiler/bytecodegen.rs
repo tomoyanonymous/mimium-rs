@@ -470,7 +470,7 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
-            mir::Instruction::CloseUpValue(src, ty) => {
+            mir::Instruction::CloseUpValues(src, ty) => {
                 let (src, tsize) = self.find_keep_and_get_element(src, *ty, 0, 0);
 
                 // match ty.to_type() {
