@@ -402,8 +402,17 @@ impl ByteCodeGenerator {
                 array_idx,
                 tuple_offset,
             } => {
-                let (address, tsize) =
-                    self.find_keep_and_get_element(value, *ty, *array_idx, *tuple_offset);
+                let ptr = self.find_keep(value) as usize;
+                let t_size = Self::word_size_for_type(*ty);
+                let ty = ty.to_type();
+                let tvec = ty.get_as_tuple().unwrap();
+                let tsize = Self::word_size_for_type(tvec[*tuple_offset as usize]);
+                let t_offset: u64 = tvec[0..(*tuple_offset as _)]
+                    .iter()
+                    .map(|t| Self::word_size_for_type(*t) as u64)
+                    .sum();
+                let offset = t_size as u64 * array_idx + t_offset;
+                let address = (ptr + offset as usize) as Reg;
                 self.vregister
                     .get_top()
                     .0
@@ -714,27 +723,6 @@ impl ByteCodeGenerator {
             .collect();
 
         self.program.clone()
-    }
-
-    fn find_keep_and_get_element(
-        &mut self,
-        value: &mir::VPtr,
-        ty: TypeNodeId,
-        array_idx: u64,
-        tuple_offset: u64,
-    ) -> (Reg, TypeSize) {
-        let ptr = self.find_keep(value) as usize;
-        let t_size = Self::word_size_for_type(ty);
-        let ty = ty.to_type();
-        let tvec = ty.get_as_tuple().unwrap();
-        let tsize = Self::word_size_for_type(tvec[tuple_offset as usize]);
-        let t_offset: u64 = tvec[0..(tuple_offset as _)]
-            .iter()
-            .map(|t| Self::word_size_for_type(*t) as u64)
-            .sum();
-        let offset = t_size as u64 * array_idx + t_offset;
-        let address = (ptr + offset as usize) as Reg;
-        (address, tsize)
     }
 }
 fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
