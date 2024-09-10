@@ -282,14 +282,20 @@ fn statement_parser(
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Let(ident, body), span))
-        .labelled("let_stmt");
+        .labelled("let");
+    let letrec = just(Token::LetRec)
+        .ignore_then(lvar_parser_typed())
+        .then_ignore(just(Token::Assign))
+        .then(expr.clone())
+        .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
+        .labelled("letrec");
     let assign = placement_parser()
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
         .labelled("assign");
     let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
-    let_.or(assign).or(single)
+    let_.or(letrec).or(assign).or(single)
 }
 fn statements_parser(
     expr: ExprParser<'_>,
