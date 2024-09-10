@@ -322,18 +322,25 @@ impl Context {
                 }
                 _ => self.push_inst(Instruction::Load(v.clone(), t)),
             },
-            LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
-                let res = self.gen_new_register();
-                let current = self.data.get_mut(self.data_i - i).unwrap();
-                let currentf = self.program.functions.get_mut(current.func_i).unwrap();
-                let upi = currentf.get_or_insert_upvalue(&upv) as _;
-                let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
+            LookupRes::UpValue(level, v) => {
+                (0..level)
+                    .rev()
+                    .fold(v.clone(), |upv, i| match upv.as_ref() {
+                        Value::FixPoint(_i) => v.clone(),
+                        _ => {
+                            let res = self.gen_new_register();
+                            let current = self.data.get_mut(self.data_i - i).unwrap();
+                            let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                            let upi = currentf.get_or_insert_upvalue(&upv) as _;
+                            let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
 
-                currentbb
-                    .0
-                    .push((res.clone(), Instruction::GetUpValue(upi, t)));
-                res
-            }),
+                            currentbb
+                                .0
+                                .push((res.clone(), Instruction::GetUpValue(upi, t)));
+                            res
+                        }
+                    })
+            }
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t)),
                 Value::Function(_) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
