@@ -1,3 +1,4 @@
+// this creates two counters on non-global scope with tuple assignment
 fn makecounter(){
     let x = 0.0
     let countup = | |{
