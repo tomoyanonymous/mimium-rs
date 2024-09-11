@@ -440,12 +440,25 @@ impl ByteCodeGenerator {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(label, ty) => {
-                        //todo: use btreemap
-                        let (dst, argsize, nret) =
-                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
-                        let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        bytecodes_dst.push(VmInstruction::CallExtFun(dst, argsize, nret))
+                        if let Some(bytecodes_dst) = bytecodes_dst {
+                            //todo: use btreemap
+                            let (dst, argsize, nret) = self.prepare_extfun(
+                                funcproto,
+                                Some(bytecodes_dst),
+                                dst,
+                                args,
+                                *label,
+                                *r_ty,
+                            );
+                            bytecodes_dst.push(VmInstruction::CallExtFun(dst, argsize, nret))
+                        } else {
+                            //todo: use btreemap
+                            let (dst, argsize, nret) =
+                                self.prepare_extfun(funcproto, None, dst, args, *label, *r_ty);
+                            funcproto
+                                .bytecodes
+                                .push(VmInstruction::CallExtFun(dst, argsize, nret))
+                        }
                     }
                     mir::Value::FixPoint(_) => {
                         unreachable!("fixpoint should be called with callcls.")
@@ -475,11 +488,23 @@ impl ByteCodeGenerator {
                         unreachable!();
                     }
                     mir::Value::ExtFunction(label, ty) => {
-                        let (dst, argsize, nret) =
-                            self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
-                        let bytecodes_dst =
-                            bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                        bytecodes_dst.push(VmInstruction::CallExtCls(dst, argsize, nret))
+                        if let Some(bytecodes_dst) = bytecodes_dst {
+                            let (dst, argsize, nret) = self.prepare_extcls(
+                                funcproto,
+                                Some(bytecodes_dst),
+                                dst,
+                                args,
+                                *label,
+                                *ty,
+                            );
+                            bytecodes_dst.push(VmInstruction::CallExtCls(dst, argsize, nret))
+                        } else {
+                            let (dst, argsize, nret) =
+                                self.prepare_extcls(funcproto, None, dst, args, *label, *ty);
+                            funcproto
+                                .bytecodes
+                                .push(VmInstruction::CallExtCls(dst, argsize, nret))
+                        }
                     }
                     _ => unreachable!(),
                 }
