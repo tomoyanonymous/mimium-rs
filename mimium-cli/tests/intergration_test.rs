@@ -230,13 +230,8 @@ fn closure_counter_tuple() {
         3.0, -3.0,
         4.0, -4.0
     ];
-    for file in [
-        "closure_counter_tuple_global.mmm",
-        "closure_counter_tuple_local.mmm",
-    ] {
-        let res = run_file_test_stereo(file, 5).unwrap();
-        assert_eq!(res, ans);
-    }
+    let res = run_file_test_stereo("closure_counter_tuple.mmm", 5).unwrap();
+    assert_eq!(res, ans);
 }
 #[test]
 fn hof_state() {
