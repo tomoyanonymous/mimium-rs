@@ -176,6 +176,18 @@ impl TypeNodeId {
             None => dummy_span!(),
         })
     }
+    // Flatten a composite type into a list of types so that the offset of the
+    // element can be calculated easily. For example:
+    //
+    // original:       Tuple(float, function, Tuple(float, float))
+    // flattened form: [float, function, float, float]
+    pub fn flatten(&self) -> Vec<Self> {
+        match self.to_type() {
+            Type::Tuple(t) => t.iter().flat_map(|t| t.flatten()).collect::<Vec<_>>(),
+            Type::Struct(t) => t.iter().flat_map(|(_, t)| t.flatten()).collect::<Vec<_>>(),
+            _ => vec![*self],
+        }
+    }
 }
 
 pub trait ToNodeId {

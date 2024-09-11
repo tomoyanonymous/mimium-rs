@@ -1,3 +1,4 @@
+// this creates two counters on global scope with tuple assignment
 fn makecounter(){
     let x = 0.0
     let countup = | |{
@@ -14,7 +15,7 @@ fn makecounter(){
     }
     (countup,0.0,countdown)
 }
-let (c1,_,c2) = makecounter();
+let (c1,_,c2) = makecounter()
 fn dsp(){
     (c1(),c2())
 }

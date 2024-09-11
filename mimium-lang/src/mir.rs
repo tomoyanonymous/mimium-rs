@@ -59,7 +59,7 @@ pub enum Instruction {
     // make closure with upindexes
     Closure(VPtr),
     //closes upvalues of specific closure. Always inserted right before Return instruction.
-    CloseUpValue(VPtr),
+    CloseUpValues(VPtr, TypeNodeId),
     //label to funcproto  and localvar offset?
     GetUpValue(u64, TypeNodeId),
     SetUpValue(u64, VPtr, TypeNodeId),
