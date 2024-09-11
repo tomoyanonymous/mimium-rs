@@ -486,16 +486,13 @@ impl ByteCodeGenerator {
 
                 let mut offset = 0;
                 let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
-                let mut has_any_upvalue = false;
                 for elem_t in flattened {
                     let tsize = Self::word_size_for_type(elem_t);
                     if elem_t.to_type().is_function() {
-                        has_any_upvalue = true;
                         bytecodes_dst.push(VmInstruction::Close(base + offset))
                     }
                     offset += tsize;
                 }
-
                 None
             }
             mir::Instruction::GetUpValue(i, ty) => {
