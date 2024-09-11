@@ -452,6 +452,10 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
+            mir::Instruction::ClosureRec => {
+                let dst = self.get_destination(dst, 1);
+                Some(VmInstruction::ClosureRec(dst))
+            }
             mir::Instruction::CloseUpValues(src, ty) => {
                 // src might contain multiple upvalues (e.g. tuple)
                 let flattened = ty.flatten();
@@ -779,7 +783,8 @@ mod test {
             0,
             Arc::new(mir::Argument("hoge".to_symbol(), numeric!())),
         ));
-        let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
+        let mut func =
+            mir::Function::new(0, "test".to_symbol(), &[arg.clone()], &[numeric!()], None);
         func.return_type.get_or_init(|| numeric!());
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));

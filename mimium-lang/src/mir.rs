@@ -58,6 +58,7 @@ pub enum Instruction {
     SetGlobal(VPtr, VPtr, TypeNodeId),
     // make closure with upindexes
     Closure(VPtr),
+    ClosureRec,
     //closes upvalues of specific closure. Always inserted right before Return instruction.
     CloseUpValues(VPtr, TypeNodeId),
     //label to funcproto  and localvar offset?
@@ -138,6 +139,7 @@ pub struct OpenUpValue(pub usize, pub TypeSize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
+    pub index: usize,
     pub label: Symbol,
     pub args: Vec<Arc<Value>>,
     pub argtypes: Vec<TypeNodeId>,
@@ -156,12 +158,14 @@ pub struct StateSize {
 
 impl Function {
     pub fn new(
+        index: usize,
         name: Symbol,
         args: &[VPtr],
         argtypes: &[TypeNodeId],
         upperfn_i: Option<usize>,
     ) -> Self {
         Self {
+            index,
             label: name,
             args: args.to_vec(),
             argtypes: argtypes.to_vec(),

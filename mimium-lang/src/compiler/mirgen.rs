@@ -252,9 +252,10 @@ impl Context {
         argtypes: &[TypeNodeId],
         parent_i: Option<usize>,
     ) -> usize {
-        let newf = mir::Function::new(name, args, argtypes, parent_i);
+        let index = self.program.functions.len();
+        let newf = mir::Function::new(index, name, args, argtypes, parent_i);
         self.program.functions.push(newf);
-        self.program.functions.len() - 1
+        index
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -438,11 +439,13 @@ impl Context {
                 let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
                     // for the higher order function, make closure regardless it is global function
+                    Value::FixPoint(fn_i) if self.get_current_fn().index == *fn_i => {
+                        self.push_inst(Instruction::ClosureRec)
+                    }
                     Value::Function(idx) | Value::FixPoint(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
                         self.push_inst(Instruction::Closure(f))
                     }
-
                     _ => v.clone(),
                 };
                 if t.to_type().contains_function() {
@@ -542,8 +545,13 @@ impl Context {
                                 self.push_inst(Instruction::CallCls(v.clone(), atvvec.clone(), rt))
                             }
                             Value::FixPoint(fnid) => {
-                                let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                                let cls = self.push_inst(Instruction::Closure(clspos));
+                                let cls = if self.get_current_fn().index == *fnid {
+                                    self.push_inst(Instruction::ClosureRec)
+                                } else {
+                                    let clspos =
+                                        self.push_inst(Instruction::Uinteger(*fnid as u64));
+                                    self.push_inst(Instruction::Closure(clspos))
+                                };
                                 self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
                             }
                             _ => {
@@ -556,8 +564,12 @@ impl Context {
                             self.push_inst(Instruction::CallCls(f.clone(), atvvec.clone(), rt))
                         }
                         Value::FixPoint(fnid) => {
-                            let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                            let cls = self.push_inst(Instruction::Closure(clspos));
+                            let cls = if self.get_current_fn().index == *fnid {
+                                self.push_inst(Instruction::ClosureRec)
+                            } else {
+                                let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
+                                self.push_inst(Instruction::Closure(clspos))
+                            };
                             self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
                         }
 

@@ -476,12 +476,14 @@ impl Machine {
     }
     #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
-        for clsidx in local_closures.iter() {
-            let cls = self.get_closure(*clsidx);
-            if !cls.is_closed {
-                self.closures.remove(clsidx.0);
-            }
-        }
+        // for clsidx in local_closures.iter() {
+        //     let cls = self.get_closure(*clsidx);
+        //     if !cls.is_closed {
+        //         log::debug!("release {:?}", clsidx);
+
+        //         self.closures.remove(clsidx.0);
+        //     }
+        // }
     }
     /// Execute function, return retcode.
     pub fn execute(
@@ -533,6 +535,7 @@ impl Machine {
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
                     let cls_i = Self::get_as::<ClosureIdx>(addr);
+                    log::debug!("callcls {:?}", cls_i);
                     let cls = self.get_closure(cls_i);
                     let pos_of_f = cls.fn_proto_pos;
                     self.states_stack.push(cls_i);
@@ -577,6 +580,8 @@ impl Machine {
                         fn_proto_pos,
                         &mut upv_map,
                     )));
+                    log::debug!("alloc {:?}", vaddr);
+
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
