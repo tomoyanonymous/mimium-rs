@@ -126,8 +126,8 @@ impl std::fmt::Display for Instruction {
                     write!(f, "closure {}", *fun)
                 }
             }
-            Instruction::CloseUpValue(cls) => {
-                write!(f, "close {}", *cls)
+            Instruction::CloseUpValues(cls, ty) => {
+                write!(f, "close {} {}", *cls, ty.to_type())
             }
             Instruction::GetUpValue(idx, ty) => write!(f, "getupval {idx} {}", ty.to_type()),
             Instruction::SetUpValue(dst, src, ty) => {
