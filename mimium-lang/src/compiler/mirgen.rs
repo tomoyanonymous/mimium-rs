@@ -215,11 +215,9 @@ impl Context {
                     let gv = Arc::new(Value::Global(v.clone()));
                     if t.is_function() {
                         //globally allocated closures are immidiately closed, not to be disposed
-                        let b = self.push_inst(Instruction::CloseUpValues(v.clone(), ty));
-                        self.push_inst(Instruction::SetGlobal(gv.clone(), b, ty));
-                    } else {
-                        self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
+                        self.push_inst(Instruction::CloseUpValues(v.clone(), ty));
                     }
+                    self.push_inst(Instruction::SetGlobal(gv.clone(), v.clone(), ty));
                     self.add_bind((*id, gv))
                 } else {
                     self.add_bind((*id, v))
@@ -440,12 +438,10 @@ impl Context {
 
                     _ => v.clone(),
                 };
-                let res = if t.to_type().contains_function() {
+                if t.to_type().contains_function() {
                     //higher-order function need to close immidiately
-                    self.push_inst(Instruction::CloseUpValues(res, t))
-                } else {
-                    res
-                };
+                    self.push_inst(Instruction::CloseUpValues(res.clone(), t));
+                }
                 Ok((res, t))
             })
             .try_collect::<Vec<_>>()
@@ -610,8 +606,8 @@ impl Context {
                         (Value::Function(i), _) => {
                             let idx = ctx.push_inst(Instruction::Uinteger(*i as u64));
                             let cls = ctx.push_inst(Instruction::Closure(idx));
-                            let newres = ctx.push_inst(Instruction::CloseUpValues(cls.clone(), rt));
-                            let _ = ctx.push_inst(Instruction::Return(newres, rt));
+                            let _ = ctx.push_inst(Instruction::CloseUpValues(cls.clone(), rt));
+                            let _ = ctx.push_inst(Instruction::Return(cls, rt));
                         }
                         (_, _) => {
                             if rt.to_type().contains_function() {
