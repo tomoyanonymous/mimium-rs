@@ -16,6 +16,6 @@ fn makecounter(){
     (countup,0.0,countdown)
 }
 fn dsp(){
-    let (c1,_,c2) = makecounter();
+    let (c1,_,c2) = makecounter()
     (c1(),c2())
 }
