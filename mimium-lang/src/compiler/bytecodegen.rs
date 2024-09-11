@@ -468,8 +468,8 @@ impl ByteCodeGenerator {
                     }
                     mir::Value::ExtFunction(label, ty) => {
                         let (dst, argsize, nret) =
-                        self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
-                    Some(VmInstruction::CallExtCls(dst, argsize, nret))
+                            self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
+                        Some(VmInstruction::CallExtCls(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }
@@ -479,10 +479,25 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
-            mir::Instruction::CloseUpValue(src) => {
-                let src = self.vregister.find_keep(src).unwrap();
-                self.vregister.get_top().0.insert(dst, MemoryRegion(src, 1));
-                Some(VmInstruction::Close(src))
+            mir::Instruction::CloseUpValues(src, ty) => {
+                // src might contain multiple upvalues (e.g. tuple)
+                let flattened = ty.flatten();
+                let base_addr = self.vregister.find_keep(src).unwrap();
+
+                let mut offset = 0;
+                let bytecodes_dst = bytecodes_dst.unwrap_or_else(|| funcproto.bytecodes.as_mut());
+                for elem_t in flattened {
+                    let tsize = Self::word_size_for_type(elem_t);
+                    if elem_t.to_type().is_function() {
+                        self.vregister
+                            .get_top()
+                            .0
+                            .insert(dst.clone(), MemoryRegion(base_addr + offset, tsize));
+                        bytecodes_dst.push(VmInstruction::Close(base_addr + offset))
+                    }
+                    offset += tsize;
+                }
+                None
             }
             mir::Instruction::GetUpValue(i, ty) => {
                 let upval = &mirfunc.upindexes[*i as usize];
