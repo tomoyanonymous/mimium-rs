@@ -232,16 +232,12 @@ fn atom_parser<'a>(
 }
 fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
     recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
-        let parenitems =
-            items_parser(expr.clone()).delimited_by(just(Token::ParenBegin), just(Token::ParenEnd));
-        let folder = |f: ExprNodeId, args: Vec<ExprNodeId>| {
+        let parenitems = items_parser(expr.clone())
+            .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
+            .map_with_span(|args, args_span| (args, args_span));
+        let folder = |f: ExprNodeId, (args, args_span): (Vec<ExprNodeId>, Span)| {
             let f_span = f.to_span();
-            // TODO: this doesn't include the span of the closing parenthesis
-            let span_end = match args.as_slice() {
-                [.., end] => end.to_span().end,
-                _ => f_span.end,
-            };
-            let span = f_span.start..span_end;
+            let span = f_span.start..args_span.end;
             Expr::Apply(f, args).into_id(span)
         };
         let apply = atom_parser(expr, expr_group)
