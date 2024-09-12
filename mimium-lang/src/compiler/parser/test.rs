@@ -196,9 +196,9 @@ fn test_applynested() {
             Expr::Var("myfun2".to_symbol()).into_id(6..12),
             vec![Expr::Var("callee".to_symbol()).into_id(13..19)],
         )
-        .into_id(6..19)],
+        .into_id(6..20)],
     )
-    .into_id(0..19);
+    .into_id(0..20);
     test_string!("myfun(myfun2(callee))", ans);
 }
 #[test]
@@ -390,7 +390,7 @@ fn test_stmt_without_return() {
                             Expr::Var("print".to_symbol()).into_id(40..45),
                             vec![Expr::Var("v".to_symbol()).into_id(46..47)],
                         )
-                        .into_id(40..47),
+                        .into_id(40..48),
                         Some(Expr::Var("v".to_symbol()).into_id(53..54)),
                     )
                     .into_id(40..54),
