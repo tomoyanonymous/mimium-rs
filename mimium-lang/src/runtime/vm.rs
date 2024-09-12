@@ -585,6 +585,9 @@ impl Machine {
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
+                Instruction::ClosureRec(dst) => {
+                    self.set_stack(dst as i64, Self::to_value(cls_i.unwrap()));
+                }
                 Instruction::Close(src) => {
                     self.close_upvalues(src);
                 }
