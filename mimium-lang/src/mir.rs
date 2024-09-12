@@ -24,7 +24,6 @@ pub enum Value {
     // idx of the function in the program
     Function(usize),
     ExtFunction(Symbol, TypeNodeId),
-    FixPoint(usize), //function id
     //internal state
     None,
 }

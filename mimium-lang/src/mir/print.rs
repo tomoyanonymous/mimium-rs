@@ -69,7 +69,6 @@ impl std::fmt::Display for Value {
             Value::Register(r) => write!(f, "reg({r})"),
             Value::Function(id) => write!(f, "function {id}"),
             Value::ExtFunction(label, t) => write!(f, "extfun {label} {}", t.to_type()),
-            Value::FixPoint(i) => write!(f, "fixpoint {i}"),
             Value::State(v) => write!(f, "state({})", *v),
             Value::None => write!(f, "none"),
         }

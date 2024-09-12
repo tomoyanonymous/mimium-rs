@@ -413,9 +413,6 @@ impl ByteCodeGenerator {
                             self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
                         Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
-                    mir::Value::FixPoint(_) => {
-                        unreachable!("fixpoint should be called with callcls.")
-                    }
                     _ => unreachable!(),
                 }
             }

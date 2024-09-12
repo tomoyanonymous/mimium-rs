@@ -335,7 +335,7 @@ impl Context {
                 (0..level)
                     .rev()
                     .fold(v.clone(), |upv, i| match upv.as_ref() {
-                        Value::FixPoint(_i) => v.clone(),
+                        Value::Function(_fi) => v.clone(),
                         _ => {
                             let res = self.gen_new_register();
                             let current = self.data.get_mut(self.data_i - i).unwrap();
@@ -352,7 +352,7 @@ impl Context {
             }
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t)),
-                Value::Function(_) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
+                Value::Function(_) | Value::Register(_)=> v.clone(),
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
@@ -439,10 +439,10 @@ impl Context {
                 let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
                     // for the higher order function, make closure regardless it is global function
-                    Value::FixPoint(fn_i) if self.get_current_fn().index == *fn_i => {
+                    Value::Function(fn_i) if self.get_current_fn().index == *fn_i => {
                         self.push_inst(Instruction::ClosureRec)
                     }
-                    Value::Function(idx) | Value::FixPoint(idx) => {
+                    Value::Function(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
                         self.push_inst(Instruction::Closure(f))
                     }
@@ -544,16 +544,16 @@ impl Context {
                             Value::Register(_) => {
                                 self.push_inst(Instruction::CallCls(v.clone(), atvvec.clone(), rt))
                             }
-                            Value::FixPoint(fnid) => {
-                                let cls = if self.get_current_fn().index == *fnid {
-                                    self.push_inst(Instruction::ClosureRec)
-                                } else {
-                                    let clspos =
-                                        self.push_inst(Instruction::Uinteger(*fnid as u64));
-                                    self.push_inst(Instruction::Closure(clspos))
-                                };
-                                self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
-                            }
+                            // Value::FixPoint(fnid) => {
+                            //     let cls = if self.get_current_fn().index == *fnid {
+                            //         self.push_inst(Instruction::ClosureRec)
+                            //     } else {
+                            //         let clspos =
+                            //             self.push_inst(Instruction::Uinteger(*fnid as u64));
+                            //         self.push_inst(Instruction::Closure(clspos))
+                            //     };
+                            //     self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
+                            // }
                             _ => {
                                 panic!("calling non-function global value")
                             }
@@ -563,16 +563,15 @@ impl Context {
                             //do not increment state size for closure
                             self.push_inst(Instruction::CallCls(f.clone(), atvvec.clone(), rt))
                         }
-                        Value::FixPoint(fnid) => {
-                            let cls = if self.get_current_fn().index == *fnid {
-                                self.push_inst(Instruction::ClosureRec)
-                            } else {
-                                let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                                self.push_inst(Instruction::Closure(clspos))
-                            };
-                            self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
-                        }
-
+                        // Value::FixPoint(fnid) => {
+                        //     let cls = if self.get_current_fn().index == *fnid {
+                        //         self.push_inst(Instruction::ClosureRec)
+                        //     } else {
+                        //         let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
+                        //         self.push_inst(Instruction::Closure(clspos))
+                        //     };
+                        //     self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
+                        // }
                         Value::Function(idx) => self.emit_fncall(*idx as u64, atvvec.clone(), rt),
                         Value::ExtFunction(label, _ty) => {
                             if let Some(res) = self.make_intrinsics(*label, &atvvec)? {
@@ -705,7 +704,7 @@ impl Context {
             Expr::LetRec(id, body, then) => {
                 self.fn_label = Some(id.id);
                 let nextfunid = self.program.functions.len();
-                let fix = Arc::new(Value::FixPoint(nextfunid));
+                let fix = Arc::new(Value::Function(nextfunid));
 
                 // let alloc = self.push_inst(Instruction::Alloc(t.clone()));
                 // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
