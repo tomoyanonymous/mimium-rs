@@ -212,18 +212,18 @@ impl InferContext {
         })
     }
 
-    fn unify_types(t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Error> {
+    fn unify_types(t1: TypeNodeId, t2: TypeNodeId, span: Span) -> Result<TypeNodeId, Error> {
         let unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
             if a1.len() != a2.len() {
                 return Err(Error(
                     ErrorKind::TypeMismatch(t1.to_type(), t2.to_type()),
-                    t1.to_span(),
+                    span.clone(),
                 ));
             }
 
             a1.iter()
                 .zip(a2.iter())
-                .map(|(v1, v2)| Self::unify_types(*v1, *v2))
+                .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
                 .try_collect()
         };
         log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
@@ -267,16 +267,20 @@ impl InferContext {
                 Ok(t1r)
             }
             (Type::Array(a1), Type::Array(a2)) => {
-                Ok(Type::Array(Self::unify_types(*a1, *a2)?).into_id())
+                Ok(Type::Array(Self::unify_types(*a1, *a2, span)?).into_id())
             }
-            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(Self::unify_types(*x1, *x2)?).into_id()),
-            (Type::Tuple(a1), Type::Tuple(a2)) => Ok(Type::Tuple(unify_vec(a1, a2)?).into_id()),
+            (Type::Ref(x1), Type::Ref(x2)) => {
+                Ok(Type::Ref(Self::unify_types(*x1, *x2, span)?).into_id())
+            }
+            (Type::Tuple(a1), Type::Tuple(a2)) => {
+                Ok(Type::Tuple(unify_vec(a1, a2)?).into_id_with_span(span))
+            }
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
-                Self::unify_types(*r1, *r2)?,
+                Self::unify_types(*r1, *r2, span.clone())?,
                 match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2)?),
+                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2, span)?),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
@@ -289,12 +293,20 @@ impl InferContext {
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
-            (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), 0..0)), //todo:span
+            (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), span)),
         }
     }
-    fn bind_pattern(&mut self, t: TypeNodeId, ty_pat: &TypedPattern) -> Result<TypeNodeId, Error> {
+    // Note: the third argument `span` is used for the error location in case of
+    // type mismatch. This is needed because `t`'s span refers to the location
+    // where it originally defined (e.g. the explicit return type of the
+    // function) and is not necessarily the same as where the error happens.
+    fn bind_pattern(
+        &mut self,
+        t: TypeNodeId,
+        ty_pat: &TypedPattern,
+        span: Span,
+    ) -> Result<TypeNodeId, Error> {
         let TypedPattern { pat, .. } = ty_pat;
-        let span = ty_pat.to_span();
         let pat_t = match pat {
             Pattern::Single(id) => {
                 self.env.add_bind(&[(*id, t)]);
@@ -304,18 +316,18 @@ impl InferContext {
                 let res = pats
                     .iter()
                     .map(|p| {
-                        let ity = self.gen_intermediate_type_with_span(span.clone());
+                        let ity = self.gen_intermediate_type_with_span(ty_pat.to_span());
                         let p = TypedPattern {
                             pat: p.clone(),
                             ty: ity,
                         };
-                        self.bind_pattern(ity, &p)
+                        self.bind_pattern(ity, &p, span.clone())
                     })
                     .try_collect::<Vec<_>>()?;
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-        Self::unify_types(t, pat_t)
+        Self::unify_types(t, pat_t, span)
     }
 
     pub fn lookup(&self, name: &Symbol, span: &Span) -> Result<TypeNodeId, Error> {
@@ -367,7 +379,7 @@ impl InferContext {
                 let feedv = self.gen_intermediate_type();
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body)?;
-                let res = Self::unify_types(b, feedv)?;
+                let res = Self::unify_types(b, feedv, span)?;
                 if res.to_type().contains_function() {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
                 } else {
@@ -390,7 +402,7 @@ impl InferContext {
                     .collect();
                 let bty = if let Some(r) = rtype {
                     let bty = self.infer_type(*body)?;
-                    Self::unify_types(*r, bty)?
+                    Self::unify_types(*r, bty, body.to_span())?
                 } else {
                     self.infer_type(*body)?
                 };
@@ -410,8 +422,8 @@ impl InferContext {
                     self.gen_intermediate_type()
                 };
 
-                let bodyt_u = Self::unify_types(idt, bodyt)?;
-                let _ = self.bind_pattern(bodyt_u, tpat)?;
+                let bodyt_u = Self::unify_types(idt, bodyt, body.to_span())?;
+                let _ = self.bind_pattern(bodyt_u, tpat, body.to_span())?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -429,7 +441,7 @@ impl InferContext {
                 let body_i = self.gen_intermediate_type();
                 self.env.add_bind(&[(id.id, body_i)]);
                 let bodyt = self.infer_type(*body)?;
-                let _ = Self::unify_types(idt, bodyt)?;
+                let _ = Self::unify_types(idt, bodyt, body.to_span())?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -439,7 +451,7 @@ impl InferContext {
             Expr::Assign(name, expr) => {
                 let assignee_t = self.lookup(name, &span)?;
                 let e_t = self.infer_type(*expr)?;
-                Self::unify_types(assignee_t, e_t)?;
+                Self::unify_types(assignee_t, e_t, expr.to_span())?;
                 Ok(unit!())
             }
             Expr::Then(e, then) => {
@@ -452,7 +464,7 @@ impl InferContext {
                 let callee_t = self.infer_vec(callee.as_slice())?;
                 let res_t = self.gen_intermediate_type();
                 let fntype = Type::Function(callee_t, res_t, None).into_id();
-                let restype = Self::unify_types(fnl, fntype)?;
+                let restype = Self::unify_types(fnl, fntype, span.clone())?;
                 if let Type::Function(_, r, _) = restype.to_type() {
                     Ok(r)
                 } else {
@@ -464,12 +476,18 @@ impl InferContext {
             }
             Expr::If(cond, then, opt_else) => {
                 let condt = self.infer_type(*cond)?;
-                let _bt = Self::unify_types(Type::Primitive(PType::Numeric).into_id(), condt); //todo:boolean type
+                let cond_span = cond.to_span();
+                let _bt = Self::unify_types(
+                    Type::Primitive(PType::Numeric).into_id_with_span(cond_span.clone()),
+                    condt,
+                    cond_span,
+                ); //todo:boolean type
                 let thent = self.infer_type(*then)?;
                 let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                     self.infer_type(e)
                 })?;
-                Self::unify_types(thent, elset)
+                let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
+                Self::unify_types(thent, elset, else_span)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                 self.infer_type(e)
