@@ -29,8 +29,17 @@ pub struct Error(pub ErrorKind, pub Span);
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            ErrorKind::TypeMismatch(e, a) => write!(f, "Type Mismatch, between {e} and {a}"),
-            ErrorKind::PatternMismatch(e, p) => write!(f, "Pattern {p} cannot have {e} type."),
+            ErrorKind::TypeMismatch(e, a) => write!(
+                f,
+                "Type Mismatch, between {} and {}",
+                e.to_string_for_error(),
+                a.to_string_for_error()
+            ),
+            ErrorKind::PatternMismatch(e, p) => write!(
+                f,
+                "Pattern {p} cannot have {} type.",
+                e.to_string_for_error()
+            ),
 
             ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
             ErrorKind::IndexOutOfRange(len, idx) => write!(
@@ -45,7 +54,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::NonPrimitiveInFeed => {
                 write!(f, "Function that uses self cannot be return function type.")
             }
-            ErrorKind::NonFunction(t) => write!(f, "{t} is not a function type."),
+            ErrorKind::NonFunction(t) => {
+                write!(f, "{} is not a function type.", t.to_string_for_error())
+            }
         }
     }
 }

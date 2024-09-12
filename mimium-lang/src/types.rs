@@ -110,6 +110,50 @@ impl Type {
     pub fn into_id_with_span(self, span: Span) -> TypeNodeId {
         with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
     }
+
+    pub fn to_string_for_error(&self) -> String {
+        match self {
+            Type::Array(a) => {
+                format!("[{}, ...]", a.to_type().to_string_for_error())
+            }
+            Type::Tuple(v) => {
+                let vf = format_vec!(
+                    v.iter()
+                        .map(|x| x.to_type().to_string_for_error())
+                        .collect::<Vec<_>>(),
+                    ","
+                );
+                format!("({vf})")
+            }
+            Type::Struct(v) => {
+                let vf = format_vec!(
+                    v.iter()
+                        .map(|(s, x)| format!(
+                            "{}: {}",
+                            s.as_str(),
+                            x.to_type().to_string_for_error()
+                        ))
+                        .collect::<Vec<_>>(),
+                    ","
+                );
+                format!("({vf})")
+            }
+            Type::Function(p, r, _s) => {
+                let args = format_vec!(
+                    p.iter()
+                        .map(|x| x.to_type().to_string_for_error())
+                        .collect::<Vec<_>>(),
+                    ","
+                );
+                format!("({args})->{}", r.to_type().to_string_for_error())
+            }
+            Type::Ref(x) => format!("&{}", x.to_type().to_string_for_error()),
+            Type::Code(c) => "<...code...>".to_string(),
+            Type::Intermediate(id) => "?".to_string(),
+            // if no special treatment is needed, forward to the Display implementation
+            x => x.to_string(),
+        }
+    }
 }
 
 impl TypeNodeId {
