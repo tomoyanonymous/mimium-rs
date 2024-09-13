@@ -9,6 +9,13 @@ fn scheduler_global_recursion() {
 }
 
 #[test]
+fn scheduler_multiple_at_sametime() {
+    let res = run_file_with_scheduler("scheduler_multiple_at_sametime.mmm", 5).unwrap();
+    let ans = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 #[should_panic]
 fn scheduler_invalid() {
     // recursion with @now would cause infinite recursion, so this should be errored.
