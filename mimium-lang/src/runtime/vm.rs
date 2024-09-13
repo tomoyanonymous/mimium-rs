@@ -476,6 +476,8 @@ impl Machine {
     }
     #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
+        //currently disabled until correct garbage collection is implemented!
+
         // for clsidx in local_closures.iter() {
         //     let cls = self.get_closure(*clsidx);
         //     if !cls.is_closed {
@@ -584,9 +586,6 @@ impl Machine {
 
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
-                }
-                Instruction::ClosureRec(dst) => {
-                    self.set_stack(dst as i64, Self::to_value(cls_i.unwrap()));
                 }
                 Instruction::Close(src) => {
                     self.close_upvalues(src);

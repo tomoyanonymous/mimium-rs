@@ -449,10 +449,6 @@ impl ByteCodeGenerator {
                 let dst = self.get_destination(dst, 1);
                 Some(VmInstruction::Closure(dst, idx))
             }
-            mir::Instruction::ClosureRec => {
-                let dst = self.get_destination(dst, 1);
-                Some(VmInstruction::ClosureRec(dst))
-            }
             mir::Instruction::CloseUpValues(src, ty) => {
                 // src might contain multiple upvalues (e.g. tuple)
                 let flattened = ty.flatten();

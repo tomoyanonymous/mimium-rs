@@ -26,8 +26,6 @@ pub enum Instruction {
     CallExtCls(Reg, u8, TypeSize),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
-    // Recursive closure(mainly used for temporal recursion), destination
-    ClosureRec(Reg),
     // register of the closure to be closed. other local closures will be released with this instruction.
     Close(Reg),
     //destination,source, size
@@ -121,9 +119,6 @@ impl std::fmt::Display for Instruction {
 
             Instruction::Closure(dst, src) => {
                 write!(f, "{:<10} {} {}", "closure", dst, src)
-            }
-            Instruction::ClosureRec(dst) => {
-                write!(f, "{:<10} {}", "closurerec", dst)
             }
             Instruction::Close(src) => {
                 write!(f, "{:<10} {}", "close", src)
