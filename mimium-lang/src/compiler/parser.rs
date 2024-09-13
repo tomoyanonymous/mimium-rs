@@ -282,14 +282,20 @@ fn statement_parser(
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Let(ident, body), span))
-        .labelled("let_stmt");
+        .labelled("let");
+    let letrec = just(Token::LetRec)
+        .ignore_then(lvar_parser_typed())
+        .then_ignore(just(Token::Assign))
+        .then(expr.clone())
+        .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
+        .labelled("letrec");
     let assign = placement_parser()
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
         .labelled("assign");
     let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
-    let_.or(assign).or(single)
+    let_.or(letrec).or(assign).or(single)
 }
 fn statements_parser(
     expr: ExprParser<'_>,
@@ -337,6 +343,28 @@ fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
     select! {Token::Comment(Comment::SingleLine(_t))=>(),
     Token::Comment(Comment::MultiLine(_t))=>()}
 }
+fn gen_unknown_function_type(
+    ids: &[TypedId],
+    r_type: Option<TypeNodeId>,
+    span: Span,
+) -> TypeNodeId {
+    let atypes = ids
+        .iter()
+        .map(|tid| {
+            if !tid.is_unknown() {
+                tid.ty
+            } else {
+                Type::Unknown.into_id_with_span(span.clone())
+            }
+        })
+        .collect::<Vec<_>>();
+    Type::Function(
+        atypes,
+        r_type.unwrap_or_else(|| Type::Unknown.into_id_with_span(span.clone())),
+        None,
+    )
+    .into_id_with_span(span.clone())
+}
 fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let exprgroup = exprgroup_parser();
     let lvar = lvar_parser_typed();
@@ -361,24 +389,9 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
             _ => e,
         }))
         .map_with_span(|(((fname, ids), r_type), block), s| {
-            let atypes = ids
-                .iter()
-                .map(|tid| {
-                    if !tid.is_unknown() {
-                        tid.ty
-                    } else {
-                        Type::Unknown.into_id()
-                    }
-                })
-                .collect::<Vec<_>>();
             let fname = TypedId {
                 id: fname.id,
-                ty: Type::Function(
-                    atypes,
-                    r_type.unwrap_or_else(|| Type::Unknown.into_id()),
-                    None,
-                )
-                .into_id(),
+                ty: gen_unknown_function_type(&ids, r_type, s.clone()),
             };
             (
                 Statement::LetRec(fname, Expr::Lambda(ids, r_type, block).into_id(s.clone())),
