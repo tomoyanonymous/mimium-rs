@@ -537,7 +537,6 @@ impl Machine {
                 Instruction::CallCls(func, nargs, nret_req) => {
                     let addr = self.get_stack(func as i64);
                     let cls_i = Self::get_as::<ClosureIdx>(addr);
-                    log::debug!("callcls {:?}", cls_i);
                     let cls = self.get_closure(cls_i);
                     let pos_of_f = cls.fn_proto_pos;
                     self.states_stack.push(cls_i);
@@ -582,7 +581,6 @@ impl Machine {
                         fn_proto_pos,
                         &mut upv_map,
                     )));
-                    log::debug!("alloc {:?}", vaddr);
 
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
@@ -846,7 +844,6 @@ impl Machine {
         self.scheduler.set_cur_time(now);
 
         if let Some(task_cls) = self.scheduler.pop_task(now, prog) {
-            log::debug!("task id {:?}", task_cls);
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, prog, Some(task_cls));
             // self.closures.remove(task_cls.0);
