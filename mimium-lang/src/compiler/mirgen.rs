@@ -252,9 +252,10 @@ impl Context {
         argtypes: &[TypeNodeId],
         parent_i: Option<usize>,
     ) -> usize {
-        let newf = mir::Function::new(name, args, argtypes, parent_i);
+        let index = self.program.functions.len();
+        let newf = mir::Function::new(index, name, args, argtypes, parent_i);
         self.program.functions.push(newf);
-        self.program.functions.len() - 1
+        index
     }
     fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
         &mut self,
@@ -330,21 +331,27 @@ impl Context {
                 }
                 _ => self.push_inst(Instruction::Load(v.clone(), t)),
             },
-            LookupRes::UpValue(level, v) => (0..level).rev().fold(v, |upv, i| {
-                let res = self.gen_new_register();
-                let current = self.data.get_mut(self.data_i - i).unwrap();
-                let currentf = self.program.functions.get_mut(current.func_i).unwrap();
-                let upi = currentf.get_or_insert_upvalue(&upv) as _;
-                let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
-
-                currentbb
-                    .0
-                    .push((res.clone(), Instruction::GetUpValue(upi, t)));
-                res
-            }),
+            LookupRes::UpValue(level, v) => {
+                (0..level)
+                    .rev()
+                    .fold(v.clone(), |upv, i| match upv.as_ref() {
+                        Value::Function(_fi) => v.clone(),
+                        _ => {
+                            let res = self.gen_new_register();
+                            let current = self.data.get_mut(self.data_i - i).unwrap();
+                            let currentf = self.program.functions.get_mut(current.func_i).unwrap();
+                            let upi = currentf.get_or_insert_upvalue(&upv) as _;
+                            let currentbb = currentf.body.get_mut(current.current_bb).unwrap();
+                            currentbb
+                                .0
+                                .push((res.clone(), Instruction::GetUpValue(upi, t)));
+                            res
+                        }
+                    })
+            }
             LookupRes::Global(v) => match v.as_ref() {
                 Value::Global(_gv) => self.push_inst(Instruction::GetGlobal(v.clone(), t)),
-                Value::Function(_) | Value::Register(_) | Value::FixPoint(_) => v.clone(),
+                Value::Function(_) | Value::Register(_) => v.clone(),
                 _ => unreachable!("non global_value"),
             },
             LookupRes::None => {
@@ -430,12 +437,10 @@ impl Context {
             .map(|a_meta| -> Result<_, CompileError> {
                 let (v, t) = self.eval_expr(*a_meta)?;
                 let res = match v.as_ref() {
-                    // for the higher order function, make closure regardless it is global function
-                    Value::Function(idx) | Value::FixPoint(idx) => {
+                    Value::Function(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
                         self.push_inst(Instruction::Closure(f))
                     }
-
                     _ => v.clone(),
                 };
                 if t.to_type().contains_function() {
@@ -534,11 +539,6 @@ impl Context {
                             Value::Register(_) => {
                                 self.push_inst(Instruction::CallCls(v.clone(), atvvec.clone(), rt))
                             }
-                            Value::FixPoint(fnid) => {
-                                let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                                let cls = self.push_inst(Instruction::Closure(clspos));
-                                self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
-                            }
                             _ => {
                                 panic!("calling non-function global value")
                             }
@@ -548,12 +548,6 @@ impl Context {
                             //do not increment state size for closure
                             self.push_inst(Instruction::CallCls(f.clone(), atvvec.clone(), rt))
                         }
-                        Value::FixPoint(fnid) => {
-                            let clspos = self.push_inst(Instruction::Uinteger(*fnid as u64));
-                            let cls = self.push_inst(Instruction::Closure(clspos));
-                            self.push_inst(Instruction::CallCls(cls, atvvec.clone(), rt))
-                        }
-
                         Value::Function(idx) => self.emit_fncall(*idx as u64, atvvec.clone(), rt),
                         Value::ExtFunction(label, _ty) => {
                             if let Some(res) = self.make_intrinsics(*label, &atvvec)? {
@@ -684,23 +678,22 @@ impl Context {
                 }
             }
             Expr::LetRec(id, body, then) => {
+                let is_global = self.get_ctxdata().func_i == 0;
                 self.fn_label = Some(id.id);
                 let nextfunid = self.program.functions.len();
-                let fix = Arc::new(Value::FixPoint(nextfunid));
-
-                // let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                // let _ = self.push_inst(Instruction::Store(alloc.clone(), fix));
-                let bind = (id.id, fix);
+                let t = self.typeenv.lookup_res(e);
+                let v = if is_global {
+                    Arc::new(Value::Function(nextfunid))
+                } else {
+                    let alloc = self.push_inst(Instruction::Alloc(t.clone()));
+                    alloc
+                };
+                let bind = (id.id, v.clone());
                 self.add_bind(bind);
                 let (b, _bt) = self.eval_expr(*body)?;
-                //set bind from fixpoint to computed lambda
-                let (_, v) = self
-                    .valenv
-                    .0
-                    .iter_mut()
-                    .find_map(|lenv| lenv.iter_mut().find(|(name, _)| *name == id.id))
-                    .unwrap();
-                *v = b;
+                if !is_global {
+                    let _ = self.push_inst(Instruction::Store(v.clone(), b.clone(), t));
+                }
                 if let Some(then_e) = then {
                     self.eval_expr(*then_e)
                 } else {

@@ -476,12 +476,16 @@ impl Machine {
     }
     #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
-        for clsidx in local_closures.iter() {
-            let cls = self.get_closure(*clsidx);
-            if !cls.is_closed {
-                self.closures.remove(clsidx.0);
-            }
-        }
+        //currently disabled until correct garbage collection is implemented!
+
+        // for clsidx in local_closures.iter() {
+        //     let cls = self.get_closure(*clsidx);
+        //     if !cls.is_closed {
+        //         log::debug!("release {:?}", clsidx);
+
+        //         self.closures.remove(clsidx.0);
+        //     }
+        // }
     }
     /// Execute function, return retcode.
     pub fn execute(
@@ -577,6 +581,7 @@ impl Machine {
                         fn_proto_pos,
                         &mut upv_map,
                     )));
+
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
@@ -839,7 +844,6 @@ impl Machine {
         self.scheduler.set_cur_time(now);
 
         if let Some(task_cls) = self.scheduler.pop_task(now, prog) {
-            log::debug!("task id {:?}", task_cls);
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, prog, Some(task_cls));
             // self.closures.remove(task_cls.0);

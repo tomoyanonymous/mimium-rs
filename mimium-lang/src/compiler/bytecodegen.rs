@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::interner::{Symbol, TypeNodeId};
@@ -9,34 +9,10 @@ use crate::types::{PType, Type, TypeSize};
 use crate::utils::error::ReportableError;
 use vm::bytecode::Instruction as VmInstruction;
 
-#[derive(Debug, Clone, PartialEq)]
-enum Region {
-    Value(Arc<mir::Value>),
-    SubRegion(),
-}
-impl std::fmt::Display for Region {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Region::Value(v) => write!(f, "{}", v),
-            Region::SubRegion() => {
-                write!(f, "sub")
-            }
-        }
-    }
-}
 #[derive(Debug, Default)]
 struct MemoryRegion(Reg, TypeSize);
 #[derive(Debug, Default)]
 struct VRegister(HashMap<Arc<mir::Value>, MemoryRegion>);
-
-fn tostring_helper(vec: &[Option<Region>]) -> String {
-    vec[0..10].iter().fold("".to_string(), |s, a| {
-        format!(
-            "{s} {}",
-            a.clone().map_or("()".to_string(), |a| format!("{a}"))
-        )
-    })
-}
 
 impl VRegister {
     pub fn push_stack(&mut self, v: &Arc<mir::Value>, size: u64) -> Reg {
@@ -76,9 +52,6 @@ impl VRegister {
             }
             _ => None,
         }
-    }
-    pub fn find_range(&mut self, v: &Arc<mir::Value>, _size: usize) -> Option<Reg> {
-        self.find(v)
     }
     //find for load and store instruction
     pub fn find_keep(&self, v: &Arc<mir::Value>) -> Option<Reg> {
@@ -439,9 +412,6 @@ impl ByteCodeGenerator {
                         let (dst, argsize, nret) =
                             self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
                         Some(VmInstruction::CallExtFun(dst, argsize, nret))
-                    }
-                    mir::Value::FixPoint(_) => {
-                        unreachable!("fixpoint should be called with callcls.")
                     }
                     _ => unreachable!(),
                 }
@@ -806,7 +776,8 @@ mod test {
             0,
             Arc::new(mir::Argument("hoge".to_symbol(), numeric!())),
         ));
-        let mut func = mir::Function::new("test".to_symbol(), &[arg.clone()], &[numeric!()], None);
+        let mut func =
+            mir::Function::new(0, "test".to_symbol(), &[arg.clone()], &[numeric!()], None);
         func.return_type.get_or_init(|| numeric!());
         let mut block = mir::Block::default();
         let resint = Arc::new(mir::Value::Register(1));

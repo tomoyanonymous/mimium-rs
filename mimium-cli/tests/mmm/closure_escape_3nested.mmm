@@ -1,0 +1,16 @@
+// open closure "inner" should be closed and escaped at the end of 'outer' context.
+fn outer(){
+  let x = 0.0
+  let inner = | | { 
+    x = x+1.0
+    x
+  } 
+  let mid = | | {inner}
+  mid
+}
+let mid = outer();
+let inner = mid();
+fn dsp(){
+ let r = inner()
+ r
+}

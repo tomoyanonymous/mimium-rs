@@ -4,9 +4,9 @@ fn makecounter(){
     let x = 0.0
     letrec gen = | |{
         x = x+1.0
-       gen@(now+1.0)
+       | |{gen()}@(now+1.0)
     }
-    gen@1.0
+    | |{gen() }@1.0
     let getter = | | {x}
     getter
 }
