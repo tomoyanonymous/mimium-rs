@@ -59,7 +59,7 @@ impl Scheduler for SyncScheduler {
         match self.tasks.peek() {
             Some(Reverse(Task { when, cls })) if *when <= now => {
                 let res = Some(*cls);
-                self.tasks.pop();
+                let _ = self.tasks.pop();
                 res
             }
             _ => None,

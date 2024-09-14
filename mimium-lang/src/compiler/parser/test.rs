@@ -219,11 +219,14 @@ fn test_fndef() {
     let ans = Expr::LetRec(
         TypedId {
             ty: Type::Function(
-                vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
-                Type::Unknown.into_id(),
+                vec![
+                    Type::Unknown.into_id_with_span(0..28),
+                    Type::Unknown.into_id_with_span(0..28),
+                ],
+                Type::Unknown.into_id_with_span(0..28),
                 None,
             )
-            .into_id(),
+            .into_id_with_span(0..28),
 
             id: "hoge".to_symbol(),
         },
@@ -249,26 +252,27 @@ fn test_fndef() {
 }
 #[test]
 fn global_fnmultiple() {
-    let fnty = function!(
-        vec![Type::Unknown.into_id(), Type::Unknown.into_id()],
-        Type::Unknown.into_id()
-    );
     let ans = Expr::LetRec(
         TypedId {
             id: "hoge".to_symbol(),
-            ty: fnty,
+            ty: Type::Function(
+                vec![
+                    Type::Unknown.into_id_with_span(0..28),
+                    Type::Unknown.into_id_with_span(0..28),
+                ],
+                Type::Unknown.into_id_with_span(0..28),
+                None,
+            )
+            .into_id_with_span(0..28),
         },
         Expr::Lambda(
-            vec![
-                TypedId {
-                    id: "input".to_symbol(),
-                    ty: Type::Unknown.into_id_with_span(8..13),
-                },
-                TypedId {
-                    id: "gue".to_symbol(),
-                    ty: Type::Unknown.into_id_with_span(14..17),
-                },
-            ],
+            vec![TypedId {
+                id: "input".to_symbol(),
+                ty: Type::Unknown.into_id_with_span(8..13),
+            },TypedId {
+                id: "gue".to_symbol(),
+                ty: Type::Unknown.into_id_with_span(14..17),
+            }],
             None,
             Expr::Var("input".to_symbol()).into_id(21..26),
         )
@@ -277,7 +281,15 @@ fn global_fnmultiple() {
             Expr::LetRec(
                 TypedId {
                     id: "hoge".to_symbol(),
-                    ty: fnty,
+                    ty: Type::Function(
+                        vec![
+                            Type::Unknown.into_id_with_span(29..57),
+                            Type::Unknown.into_id_with_span(29..57),
+                        ],
+                        Type::Unknown.into_id_with_span(29..57),
+                        None,
+                    )
+                    .into_id_with_span(29..57),
                 },
                 Expr::Lambda(
                     vec![
@@ -362,8 +374,8 @@ fn test_stmt_without_return() {
     let ans = Expr::LetRec(
         TypedId {
             id: "test".to_symbol(),
-            ty: Type::Function(vec![Type::Unknown.into_id()], Type::Unknown.into_id(), None)
-                .into_id(),
+            ty: Type::Function(vec![Type::Unknown.into_id_with_span(0..56)], Type::Unknown.into_id_with_span(0..56), None)
+                .into_id_with_span(0..56),
         },
         Expr::Lambda(
             vec![TypedId {

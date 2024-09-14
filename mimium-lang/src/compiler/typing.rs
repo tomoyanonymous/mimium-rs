@@ -16,7 +16,8 @@ use std::rc::Rc;
 pub enum ErrorKind {
     TypeMismatch(Type, Type),
     PatternMismatch(Type, Pattern),
-    NonFunction(Type),
+    NonFunctionForLetRec(Type),
+    NonFunctionForApply(Type),
     CircularType,
     IndexOutOfRange(u16, u16),
     IndexForNonTuple,
@@ -54,9 +55,16 @@ impl fmt::Display for ErrorKind {
             ErrorKind::NonPrimitiveInFeed => {
                 write!(f, "Function that uses self cannot be return function type.")
             }
-            ErrorKind::NonFunction(t) => {
-                write!(f, "{} is not a function type.", t.to_string_for_error())
-            }
+            ErrorKind::NonFunctionForApply(t) => write!(
+                f,
+                "{} is not applicable because it is not a function type.",
+                t.to_string_for_error()
+            ),
+            ErrorKind::NonFunctionForLetRec(t) => write!(
+                f,
+                "\"letrec\" requires the expression to be function type but it was {} type.",
+                t.to_string_for_error()
+            ),
         }
     }
 }
@@ -442,11 +450,15 @@ impl InferContext {
                 }
             }
             Expr::LetRec(id, body, then) => {
-                let idt = match (id.is_unknown(), id.ty.to_type()) {
+                let t = id.ty.to_type();
+                let idt = match (id.is_unknown(), &t) {
                     (false, Type::Function(atypes, rty, s)) => {
-                        self.convert_unknown_function(&atypes, rty, s)
+                        self.convert_unknown_function(atypes, *rty, *s)
                     }
-                    _ => panic!("type for letrec is limited to function type in mimium."),
+                    (false, _) => {
+                        return Err(Error(ErrorKind::NonFunctionForLetRec(t.clone()), span))
+                    }
+                    (true, _) => self.gen_intermediate_type(),
                 };
 
                 let body_i = self.gen_intermediate_type();
@@ -480,7 +492,7 @@ impl InferContext {
                     Ok(r)
                 } else {
                     Err(Error(
-                        ErrorKind::NonFunction(restype.to_type().clone()),
+                        ErrorKind::NonFunctionForApply(restype.to_type().clone()),
                         span.clone(),
                     ))
                 }

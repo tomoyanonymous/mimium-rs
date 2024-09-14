@@ -221,6 +221,12 @@ fn closure_counter2() {
     assert_eq!(res, ans);
 }
 #[test]
+fn closure_escape_3nested() {
+    let res = run_file_test_mono("closure_escape_3nested.mmm", 5).unwrap();
+    let ans = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+    assert_eq!(res, ans);
+}
+#[test]
 fn closure_counter_tuple() {
     let res = run_file_test_stereo("closure_counter_tuple.mmm", 5).unwrap();
     #[rustfmt::skip]
@@ -233,6 +239,7 @@ fn closure_counter_tuple() {
     ];
     assert_eq!(res, ans);
 }
+
 #[test]
 fn hof_state() {
     let res = run_file_test_mono("hof_state.mmm", 10).unwrap();
