@@ -28,8 +28,6 @@ pub type ExtClsType = Arc<dyn Fn(&mut Machine) -> ReturnCode>;
 struct StateStorage {
     pos: usize,
     rawdata: Vec<u64>,
-    delay_sizes: Vec<u64>,
-    delay_size_pos: usize,
 }
 impl StateStorage {
     fn resize(&mut self, size: usize) {
