@@ -30,8 +30,11 @@ struct StateStorage {
     rawdata: Vec<u64>,
 }
 impl StateStorage {
-    fn resize(&mut self, size: usize) {
-        self.rawdata.resize(size, 0)
+    pub fn new(size: usize) -> Self {
+        Self {
+            pos: 0,
+            rawdata: vec![0; size],
+        }
     }
     fn get_state(&self, size: u64) -> &[RawVal] {
         unsafe {
@@ -46,8 +49,7 @@ impl StateStorage {
         }
     }
     fn get_as_ringbuffer(&mut self, size_in_samples: u64) -> Ringbuffer<'_> {
-        let data_head = unsafe { self.rawdata.as_mut_ptr().add(self.pos) };
-        Ringbuffer::new(data_head, size_in_samples)
+        Ringbuffer::from(self.get_state_mut(size_in_samples as _))
     }
     fn shift_pos(&mut self, offset: i16) {
         self.pos = (self.pos as i64 + offset as i64) as usize;
@@ -121,8 +123,7 @@ impl Closure {
             .iter()
             .map(|OpenUpValue(i, size)| upv_map.get_or_insert(*i, *size))
             .collect::<Vec<_>>();
-        let mut state_storage = StateStorage::default();
-        state_storage.resize(fnproto.state_size as usize);
+        let state_storage = StateStorage::new(fnproto.state_size as usize);
         Self {
             fn_proto_pos: fn_i,
             upvalues,
@@ -812,7 +813,7 @@ impl Machine {
     pub fn execute_idx(&mut self, prog: &Program, idx: usize) -> ReturnCode {
         let (_name, func) = &prog.global_fn_table[idx];
         if !func.bytecodes.is_empty() {
-            self.global_states.resize(func.state_size as usize);
+            self.global_states = StateStorage::new(func.state_size as usize);
             // 0 is always base pointer to the main function
             if self.stack.len() > 0 {
                 self.stack[0] = 0;
@@ -832,8 +833,7 @@ impl Machine {
     }
     pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
         //internal function table 0 is always mimium_main
-        self.global_states
-            .resize(prog.global_fn_table[0].1.state_size as usize);
+        self.global_states = StateStorage::new(prog.global_fn_table[0].1.state_size as usize);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
         self.execute(0, prog, None)

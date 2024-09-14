@@ -45,3 +45,9 @@ impl<'a> Ringbuffer<'a> {
         res
     }
 }
+
+impl<'a> From<&mut [RawVal]> for Ringbuffer<'a> {
+    fn from(value: &mut [RawVal]) -> Self {
+        Self::new(value.as_mut_ptr(), value.len() as u64)
+    }
+}
