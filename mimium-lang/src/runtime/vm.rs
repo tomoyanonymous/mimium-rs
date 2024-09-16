@@ -137,7 +137,7 @@ impl Closure {
             fn_proto_pos: fn_i,
             upvalues,
             is_closed: false,
-            refcount: 0,
+            refcount: 1,
             base_ptr,
             state_storage,
         }
