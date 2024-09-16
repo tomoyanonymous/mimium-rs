@@ -78,6 +78,14 @@ enum UpValue {
     Open(OpenUpValue),
     Closed(Vec<RawVal>, bool),
 }
+impl UpValue {
+    pub fn is_closure(&self) -> bool {
+        match self {
+            UpValue::Open(OpenUpValue { is_closure, .. }) => *is_closure,
+            UpValue::Closed(_, is_closure) => *is_closure,
+        }
+    }
+}
 type SharedUpValue = Rc<RefCell<UpValue>>;
 impl From<OpenUpValue> for UpValue {
     fn from(value: OpenUpValue) -> Self {
@@ -136,11 +144,30 @@ impl Closure {
         }
     }
 }
+
 type ClosureStorage = SlotMap<DefaultKey, Closure>;
 fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
     let cls = storage.get_mut(id.0).unwrap();
     cls.refcount -= 1;
     if cls.refcount == 0 {
+        let c_cls = storage
+            .get_mut(id.0)
+            .unwrap()
+            .upvalues
+            .iter()
+            .map(|v| {
+                let v = v.borrow();
+                if let UpValue::Closed(v, _) = &v as &UpValue {
+                    let cls_i = Machine::get_as::<ClosureIdx>(v[0]);
+                    Some(cls_i)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        c_cls.iter().filter_map(|i| *i).for_each(|clsi| {
+            drop_closure(storage, clsi);
+        });
         storage.remove(id.0);
     }
 }
