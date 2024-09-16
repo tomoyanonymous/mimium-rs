@@ -87,7 +87,18 @@ fn closuretest() {
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![OpenUpValue(1, 1), OpenUpValue(2, 1)],
+        upindexes: vec![
+            OpenUpValue {
+                pos: 1,
+                size: 1,
+                is_closure: false,
+            },
+            OpenUpValue {
+                pos: 2,
+                size: 1,
+                is_closure: false,
+            },
+        ],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         state_size: 0,
@@ -253,19 +264,19 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
 
 // closure gc is disabled until correct implementation comes.
 
-// #[test]
-// fn closure_gc_open() {
-//     let prog = prep_closure_gc_program(false);
-//     let mut machine: Machine = Machine::new_without_scheduler();
-//     machine.execute_main(&prog);
-//     //open closure should be released.
-//     assert_eq!(machine.closures.len(), 0);
-// }
-// #[test]
-// fn closure_gc_closed() {
-//     let prog = prep_closure_gc_program(true);
-//     let mut machine: Machine = Machine::new_without_scheduler();
-//     machine.execute_main(&prog);
-//     //closed closure should be kept.
-//     assert_eq!(machine.closures.len(), 1);
-// }
+#[test]
+fn closure_gc_open() {
+    let prog = prep_closure_gc_program(false);
+    let mut machine: Machine = Machine::new_without_scheduler();
+    machine.execute_main(&prog);
+    //open closure should be released.
+    assert_eq!(machine.closures.len(), 0);
+}
+#[test]
+fn closure_gc_closed() {
+    let prog = prep_closure_gc_program(true);
+    let mut machine: Machine = Machine::new_without_scheduler();
+    machine.execute_main(&prog);
+    //closed closure should be kept.
+    assert_eq!(machine.closures.len(), 1);
+}

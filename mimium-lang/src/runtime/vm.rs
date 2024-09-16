@@ -76,7 +76,7 @@ impl StateStorageStack {
 #[derive(Debug, Clone, PartialEq)]
 enum UpValue {
     Open(OpenUpValue),
-    Closed(Vec<RawVal>),
+    Closed(Vec<RawVal>, bool),
 }
 type SharedUpValue = Rc<RefCell<UpValue>>;
 impl From<OpenUpValue> for UpValue {
@@ -89,13 +89,14 @@ impl From<OpenUpValue> for UpValue {
 struct LocalUpValueMap(Vec<(Reg, SharedUpValue)>);
 
 impl LocalUpValueMap {
-    pub fn get_or_insert(&mut self, i: usize, size: TypeSize) -> SharedUpValue {
+    pub fn get_or_insert(&mut self, ov: OpenUpValue) -> SharedUpValue {
+        let OpenUpValue { pos, .. } = ov;
         self.0
             .iter()
-            .find_map(|(i2, v)| (i == *i2 as _).then_some(v.clone()))
+            .find_map(|(i2, v)| (pos == *i2 as _).then_some(v.clone()))
             .unwrap_or_else(|| {
-                let v = Rc::new(RefCell::new(UpValue::Open(OpenUpValue(i, size))));
-                self.0.push((i as Reg, v.clone()));
+                let v = Rc::new(RefCell::new(UpValue::Open(ov)));
+                self.0.push((pos as Reg, v.clone()));
                 v
             })
     }
@@ -107,6 +108,7 @@ pub(crate) struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
     pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
     pub is_closed: bool,
+    pub refcount: u64,
     pub(self) upvalues: Vec<SharedUpValue>,
     state_storage: StateStorage,
 }
@@ -121,16 +123,25 @@ impl Closure {
         let upvalues = fnproto
             .upindexes
             .iter()
-            .map(|OpenUpValue(i, size)| upv_map.get_or_insert(*i, *size))
+            .map(|ov| upv_map.get_or_insert(*ov))
             .collect::<Vec<_>>();
         let state_storage = StateStorage::new(fnproto.state_size as usize);
         Self {
             fn_proto_pos: fn_i,
             upvalues,
             is_closed: false,
+            refcount: 0,
             base_ptr,
             state_storage,
         }
+    }
+}
+type ClosureStorage = SlotMap<DefaultKey, Closure>;
+fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
+    let cls = storage.get_mut(id.0).unwrap();
+    cls.refcount -= 1;
+    if cls.refcount == 0 {
+        storage.remove(id.0);
     }
 }
 
@@ -149,7 +160,7 @@ impl Default for RawValType {
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
-    closures: SlotMap<DefaultKey, Closure>,
+    closures: ClosureStorage,
     pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
@@ -374,14 +385,14 @@ impl Machine {
         &self.stack[(len - n)..]
     }
     fn get_upvalue_offset(upper_base: usize, offset: OpenUpValue) -> usize {
-        upper_base + offset.0
+        upper_base + offset.pos
     }
     pub fn get_open_upvalue(
         &self,
         upper_base: usize,
         ov: OpenUpValue,
     ) -> (Range<usize>, &[RawVal]) {
-        let OpenUpValue(_offset, size) = ov;
+        let OpenUpValue { size, .. } = ov;
         // log::trace!("upper base:{}, upvalue:{}", upper_base, offset);
         let abs_pos = Self::get_upvalue_offset(upper_base, ov);
         let end = abs_pos + size as usize;
@@ -463,11 +474,30 @@ impl Machine {
     fn close_upvalues(&mut self, src: Reg) {
         let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
 
-        self.get_closure(clsidx).upvalues.iter().for_each(|upv| {
-            let upv = &mut *upv.borrow_mut();
-            if let UpValue::Open(i) = upv {
-                let (_range, ov) = self.get_open_upvalue(self.base_pointer as usize, *i);
-                *upv = UpValue::Closed(ov.to_vec());
+        let clsidxs = self
+            .get_closure(clsidx)
+            .upvalues
+            .iter()
+            .map(|upv| {
+                let upv = &mut *upv.borrow_mut();
+                match upv {
+                    UpValue::Open(ov) => {
+                        let (_range, ov_raw) =
+                            self.get_open_upvalue(self.base_pointer as usize, *ov);
+                        let is_closure = ov.is_closure;
+                        *upv = UpValue::Closed(ov_raw.to_vec(), is_closure);
+                        is_closure.then_some(Self::get_as::<ClosureIdx>(ov_raw[0]))
+                    }
+                    UpValue::Closed(v, is_closure) => {
+                        is_closure.then_some(Self::get_as::<ClosureIdx>(v[0]))
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+        clsidxs.iter().for_each(|i| {
+            if let Some(ci) = i {
+                let cls = self.get_closure_mut(*ci);
+                cls.refcount += 1;
             }
         });
         let cls = self.get_closure_mut(clsidx);
@@ -475,16 +505,13 @@ impl Machine {
     }
     #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
-        //currently disabled until correct garbage collection is implemented!
-
-        // for clsidx in local_closures.iter() {
-        //     let cls = self.get_closure(*clsidx);
-        //     if !cls.is_closed {
-        //         log::debug!("release {:?}", clsidx);
-
-        //         self.closures.remove(clsidx.0);
-        //     }
-        // }
+        for clsidx in local_closures.iter() {
+            let cls = self.get_closure(*clsidx);
+            if !cls.is_closed {
+                // log::debug!("release {:?}", clsidx);
+                drop_closure(&mut self.closures, *clsidx)
+            }
+        }
     }
     /// Execute function, return retcode.
     pub fn execute(
@@ -597,7 +624,7 @@ impl Machine {
                     self.release_open_closures(&local_closures);
                     return nret.into();
                 }
-                Instruction::GetUpValue(dst, index, size) => {
+                Instruction::GetUpValue(dst, index, _size) => {
                     {
                         let up_i = cls_i.unwrap();
                         let cls = self.get_closure(up_i);
@@ -614,7 +641,7 @@ impl Machine {
                                 let rawv: &[RawVal] = unsafe { std::mem::transmute(rawv) };
                                 rawv
                             }
-                            UpValue::Closed(rawval) => {
+                            UpValue::Closed(rawval, _) => {
                                 //force borrow because closure cell and stack never collisions
                                 let rawv: &[RawVal] =
                                     unsafe { std::mem::transmute(rawval.as_slice()) };
@@ -633,7 +660,11 @@ impl Machine {
                     let (_range, v) = self.get_stack_range(src as i64, size);
                     let rv = &mut *upvalues[index as usize].borrow_mut();
                     match rv {
-                        UpValue::Open(OpenUpValue(ref i, ref mut size)) => {
+                        UpValue::Open(OpenUpValue {
+                            pos: ref i,
+                            ref mut size,
+                            ..
+                        }) => {
                             let (range, _v) = self.get_stack_range(src as i64, *size);
                             let dest = upper_base + *i;
                             unsafe {
@@ -647,7 +678,7 @@ impl Machine {
                                 dst.copy_within(range, dest);
                             }
                         }
-                        UpValue::Closed(ref mut uv) => {
+                        UpValue::Closed(ref mut uv, _) => {
                             uv.as_mut_slice().copy_from_slice(v);
                         }
                     };
