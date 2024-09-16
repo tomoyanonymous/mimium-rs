@@ -435,7 +435,7 @@ impl Machine {
         );
         unsafe { self.closures.get_unchecked(idx.0) }
     }
-    fn get_closure_mut(&mut self, idx: ClosureIdx) -> &mut Closure {
+    pub(crate) fn get_closure_mut(&mut self, idx: ClosureIdx) -> &mut Closure {
         debug_assert!(
             self.closures.contains_key(idx.0),
             "Invalid Closure Id referred"
@@ -902,7 +902,7 @@ impl Machine {
         while let Some(task_cls) = self.scheduler.pop_task(now, prog) {
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, prog, Some(task_cls));
-            // self.closures.remove(task_cls.0);
+            drop_closure(&mut self.closures, task_cls);
         }
     }
 }
