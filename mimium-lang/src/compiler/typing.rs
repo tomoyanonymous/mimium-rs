@@ -81,6 +81,27 @@ impl ReportableError for Error {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct UnificationError(pub Type, pub Type);
+
+impl std::error::Error for UnificationError {}
+type UnificationResult<T> = Result<T, UnificationError>;
+impl UnificationError {
+    pub fn into_typing_error(self, span: Span) -> Error {
+        Error(ErrorKind::TypeMismatch(self.0, self.1), span)
+    }
+}
+impl fmt::Display for UnificationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Type Mismatch, between {} and {}",
+            self.0.to_string_for_error(),
+            self.1.to_string_for_error()
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
     interm_idx: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
@@ -231,18 +252,15 @@ impl InferContext {
         })
     }
 
-    fn unify_types(t1: TypeNodeId, t2: TypeNodeId, span: Span) -> Result<TypeNodeId, Error> {
-        let unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
+    fn unify_types(t1: TypeNodeId, t2: TypeNodeId) -> UnificationResult<TypeNodeId> {
+        let unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> UnificationResult<Vec<_>> {
             if a1.len() != a2.len() {
-                return Err(Error(
-                    ErrorKind::TypeMismatch(t1.to_type(), t2.to_type()),
-                    span.clone(),
-                ));
+                return Err(UnificationError(t1.to_type(), t2.to_type()));
             }
 
             a1.iter()
                 .zip(a2.iter())
-                .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
+                .map(|(v1, v2)| Self::unify_types(*v1, *v2))
                 .try_collect()
         };
         log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
@@ -286,20 +304,18 @@ impl InferContext {
                 Ok(t1r)
             }
             (Type::Array(a1), Type::Array(a2)) => {
-                Ok(Type::Array(Self::unify_types(*a1, *a2, span)?).into_id())
+                Ok(Type::Array(Self::unify_types(*a1, *a2)?).into_id())
             }
-            (Type::Ref(x1), Type::Ref(x2)) => {
-                Ok(Type::Ref(Self::unify_types(*x1, *x2, span)?).into_id())
-            }
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(Self::unify_types(*x1, *x2)?).into_id()),
             (Type::Tuple(a1), Type::Tuple(a2)) => {
-                Ok(Type::Tuple(unify_vec(a1, a2)?).into_id_with_span(span))
+                Ok(Type::Tuple(unify_vec(a1, a2)?).into_id_with_span(t1.to_span()))
             }
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
                 unify_vec(p1, p2)?,
-                Self::unify_types(*r1, *r2, span.clone())?,
+                Self::unify_types(*r1, *r2)?,
                 match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2, span)?),
+                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2)?),
                     (None, None) => None,
                     (_, _) => todo!("error handling"),
                 },
@@ -312,7 +328,7 @@ impl InferContext {
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
-            (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), span)),
+            (p1, p2) => Err(UnificationError(p1.clone(), p2.clone())),
         }
     }
     // Note: the third argument `span` is used for the error location in case of
@@ -346,7 +362,7 @@ impl InferContext {
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-        Self::unify_types(t, pat_t, span)
+        Self::unify_types(t, pat_t).map_err(|e| e.into_typing_error(span.clone()))
     }
 
     pub fn lookup(&self, name: &Symbol, span: &Span) -> Result<TypeNodeId, Error> {
@@ -398,7 +414,8 @@ impl InferContext {
                 let feedv = self.gen_intermediate_type();
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body)?;
-                let res = Self::unify_types(b, feedv, span)?;
+                let res =
+                    Self::unify_types(b, feedv).map_err(|e| e.into_typing_error(span.clone()))?;
                 if res.to_type().contains_function() {
                     Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
                 } else {
@@ -421,7 +438,7 @@ impl InferContext {
                     .collect();
                 let bty = if let Some(r) = rtype {
                     let bty = self.infer_type(*body)?;
-                    Self::unify_types(*r, bty, body.to_span())?
+                    Self::unify_types(*r, bty).map_err(|e| e.into_typing_error(body.to_span()))?
                 } else {
                     self.infer_type(*body)?
                 };
@@ -441,7 +458,8 @@ impl InferContext {
                     self.gen_intermediate_type()
                 };
 
-                let bodyt_u = Self::unify_types(idt, bodyt, body.to_span())?;
+                let bodyt_u = Self::unify_types(idt, bodyt)
+                    .map_err(|e| e.into_typing_error(body.to_span()))?;
                 let _ = self.bind_pattern(bodyt_u, tpat, body.to_span())?;
 
                 match then {
@@ -464,7 +482,8 @@ impl InferContext {
                 let body_i = self.gen_intermediate_type();
                 self.env.add_bind(&[(id.id, body_i)]);
                 let bodyt = self.infer_type(*body)?;
-                let _ = Self::unify_types(idt, bodyt, body.to_span())?;
+                let _ = Self::unify_types(idt, bodyt)
+                    .map_err(|e| e.into_typing_error(body.to_span()))?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -474,7 +493,8 @@ impl InferContext {
             Expr::Assign(name, expr) => {
                 let assignee_t = self.lookup(name, &span)?;
                 let e_t = self.infer_type(*expr)?;
-                Self::unify_types(assignee_t, e_t, expr.to_span())?;
+                Self::unify_types(assignee_t, e_t)
+                    .map_err(|e| e.into_typing_error(expr.to_span()))?;
                 Ok(unit!())
             }
             Expr::Then(e, then) => {
@@ -487,7 +507,8 @@ impl InferContext {
                 let callee_t = self.infer_vec(callee.as_slice())?;
                 let res_t = self.gen_intermediate_type();
                 let fntype = Type::Function(callee_t, res_t, None).into_id();
-                let restype = Self::unify_types(fnl, fntype, span.clone())?;
+                let restype = Self::unify_types(fnl, fntype)
+                    .map_err(|e| e.into_typing_error(span.clone()))?;
                 if let Type::Function(_, r, _) = restype.to_type() {
                     Ok(r)
                 } else {
@@ -503,14 +524,14 @@ impl InferContext {
                 let _bt = Self::unify_types(
                     Type::Primitive(PType::Numeric).into_id_with_span(cond_span.clone()),
                     condt,
-                    cond_span,
-                ); //todo:boolean type
+                )
+                .map_err(|e| e.into_typing_error(cond_span)); //todo:boolean type
                 let thent = self.infer_type(*then)?;
                 let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                     self.infer_type(e)
                 })?;
                 let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
-                Self::unify_types(thent, elset, else_span)
+                Self::unify_types(thent, elset).map_err(|e| e.into_typing_error(else_span))
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                 self.infer_type(e)
