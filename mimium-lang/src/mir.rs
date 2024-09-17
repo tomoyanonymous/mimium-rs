@@ -133,7 +133,11 @@ pub enum UpIndex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct OpenUpValue(pub usize, pub TypeSize);
+pub struct OpenUpValue {
+    pub pos: usize,
+    pub size: TypeSize,
+    pub is_closure: bool,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {

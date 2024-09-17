@@ -469,7 +469,11 @@ impl ByteCodeGenerator {
                 let upval = &mirfunc.upindexes[*i as usize];
                 let v = self.find_upvalue(upval);
                 let size: u8 = Self::word_size_for_type(*ty);
-                let ouv = mir::OpenUpValue(v as usize, size);
+                let ouv = mir::OpenUpValue {
+                    pos: v as usize,
+                    size,
+                    is_closure: ty.to_type().is_function(),
+                };
                 if let Some(ui) = funcproto.upindexes.get_mut(*i as usize) {
                     *ui = ouv;
                 } else {
@@ -486,7 +490,11 @@ impl ByteCodeGenerator {
                 let upval = &mirfunc.upindexes[*dst as usize];
                 let v = self.find_upvalue(upval);
                 let size: u8 = Self::word_size_for_type(*ty);
-                let ouv = mir::OpenUpValue(v as usize, size);
+                let ouv = mir::OpenUpValue {
+                    pos: v as usize,
+                    size,
+                    is_closure: ty.to_type().is_function(),
+                };
                 if let Some(ui) = funcproto.upindexes.get_mut(*dst as usize) {
                     *ui = ouv;
                 } else {
