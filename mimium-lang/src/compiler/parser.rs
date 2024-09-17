@@ -185,7 +185,6 @@ where
     //defining binary operators in order of precedence.
     let ops = [
         optoken(Op::Exponent),
-        optoken(Op::Pipe),
         choice((
             optoken(Op::Product),
             optoken(Op::Divide),
@@ -203,6 +202,7 @@ where
             optoken(Op::GreaterEqual),
         ))
         .boxed(),
+        optoken(Op::Pipe),
         optoken(Op::At),
     ];
     ops.into_iter().fold(unary.boxed(), binop_folder)
