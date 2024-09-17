@@ -9,8 +9,6 @@ pub(crate) mod pattern;
 
 pub mod types;
 pub mod utils;
-
-pub mod audio;
 pub mod compiler;
 pub mod runtime;
 

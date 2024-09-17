@@ -15,6 +15,11 @@ fn try_find_recurse(e_s: ExprNodeId, name: &Symbol) -> bool {
             //todo: start new search so we return false here
             false
         }
+        Expr::Assign(_v, e) => try_find_recurse(*e, name),
+        Expr::Then(body, then_opt) => {
+            try_find_recurse(*body, name)
+                || then_opt.map_or(false, |then| try_find_recurse(then, name))
+        }
         Expr::Lambda(_ids, _opt_type, body) => {
             // convert_self(body)
             try_find_recurse(*body, name)
@@ -59,6 +64,10 @@ pub fn convert_recurse(e_s: ExprNodeId) -> ExprNodeId {
             convert_recurse(*body),
             then.map(convert_recurse),
         ),
+        Expr::Assign(v, e) => Expr::Assign(*v, convert_recurse(*e)),
+        Expr::Then(body, then_opt) => {
+            Expr::Then(convert_recurse(*body), then_opt.map(convert_recurse))
+        }
         Expr::Tuple(es) => Expr::Tuple(convert_vec(es)),
         Expr::Proj(t, idx) => Expr::Proj(convert_recurse(*t), *idx),
         Expr::Block(body) => Expr::Block(body.map(convert_recurse)),
@@ -93,13 +102,14 @@ mod test {
     fn recurse_remove() {
         let sample = letrec!(
             "testfn",
+            None,
             lambda!(
                 ["count"],
                 ifexpr!(
                     var!("test"),
                     app!(var!("testfn"), vec![number!("10.0")]),
                     //this letrec should be converted to plain let
-                    letrec!("lettest", number!("12.0"), Some(number!("2.0")))
+                    letrec!("lettest", None, number!("12.0"), Some(number!("2.0")))
                 )
             ),
             None
@@ -107,6 +117,7 @@ mod test {
         // top letrec should not be converted
         let ans = letrec!(
             "testfn",
+            None,
             lambda!(
                 ["count"],
                 ifexpr!(

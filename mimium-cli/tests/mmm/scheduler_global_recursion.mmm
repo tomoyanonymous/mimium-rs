@@ -1,0 +1,10 @@
+let x = 0.0
+
+fn updater(){
+    x = x + 1.0
+    updater@(now+1.0)
+}
+updater@1.0
+fn dsp(){
+    x
+}

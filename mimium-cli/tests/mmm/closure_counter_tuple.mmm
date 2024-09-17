@@ -1,0 +1,21 @@
+// this creates two counters on global scope with tuple assignment
+fn makecounter(){
+    let x = 0.0
+    let countup = | |{
+        let res = x
+        x = x+1.0
+        res
+    }
+
+    let y = 0.0
+    let countdown = | |{
+        let res = y
+        y = y-1.0
+        res
+    }
+    (countup,0.0,countdown)
+}
+let (c1,_,c2) = makecounter()
+fn dsp(){
+    (c1(),c2())
+}

@@ -5,6 +5,7 @@ use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
 use mimium_lang::interner::{Symbol, ToSymbol};
+use mimium_lang::runtime::scheduler;
 use mimium_lang::runtime::vm::{self, ExtClsType, Machine, ReturnCode};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
@@ -35,7 +36,6 @@ impl Default for NativeDriver {
 //Runtime data, which will be created and immidiately send to audio thread.
 struct NativeAudioData {
     pub vmdata: RuntimeData,
-    dsp_i: usize,
     dsp_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
@@ -45,21 +45,15 @@ unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
     pub fn new(program: vm::Program, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
-        let dsp_i = program
-            .get_fun_index(&"dsp".to_symbol())
-            .expect("no dsp function found");
-        let (_, dsp_func) = &program.global_fn_table[dsp_i];
-        let dsp_ochannels = dsp_func.nret;
         //todo: split as trait interface method
-        let getnow_fn: (Symbol, ExtClsType) = (
-            "_mimium_getnow".to_symbol(),
-            crate::runtime_fn::gen_getnowfn(count.clone()),
-        );
-        let vmdata = RuntimeData::new(program, &[], &[getnow_fn]);
+        let schedule_fn = scheduler::gen_schedule_at();
+        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
+        let vmdata = RuntimeData::new(program, &[schedule_fn], &[getnow_fn]);
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
+        let (_, dsp_func) = &vmdata.program.global_fn_table[vmdata.dsp_i];
+        let dsp_ochannels = dsp_func.nret;
         Self {
             vmdata,
-            dsp_i,
             dsp_ochannels,
             buffer,
             localbuffer,
@@ -74,11 +68,12 @@ impl NativeAudioData {
             .chunks_mut(h_ochannels)
             .zip(local.chunks(self.dsp_ochannels))
         {
-            let _rc = self.vmdata.vm.execute_idx(&self.vmdata.program, self.dsp_i);
+            let _rc = self
+                .vmdata
+                .run_dsp(Time(self.count.load(Ordering::Relaxed)));
             let res =
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
-            self.count
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.count.fetch_add(1, Ordering::Relaxed);
             match (h_ochannels, self.dsp_ochannels) {
                 (i1, i2) if i1 == i2 => {
                     for i in 0..i1 {

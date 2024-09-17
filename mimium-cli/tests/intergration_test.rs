@@ -1,14 +1,8 @@
-extern crate mimium_lang;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+mod common;
+use std::path::Path;
 
-use mimium_lang::{
-    compiler,
-    runtime::run_source_test,
-    utils::{error::report, fileloader},
-};
+use common::*;
+use mimium_lang::utils::error::report;
 
 fn run_simple_test(expr: &str, expect: f64, times: u64) {
     let src = format!(
@@ -31,7 +25,6 @@ fn dsp(){{
         }
     }
 }
-
 #[test]
 fn simple_arithmetic() {
     // unary
@@ -52,35 +45,6 @@ fn simple_arithmetic() {
     // complex expression to test the evaluation order
     run_simple_test("hoge*10.0+hoge/10.0+1.0", 21.2, 3);
     run_simple_test("1.0+hoge^2.0*1.5", 7.0, 3);
-}
-
-fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
-    let (file, src) = load_src(path);
-    let res = run_source_test(&src, times, stereo);
-    match res {
-        Ok(res) => Ok(res),
-        Err(errs) => {
-            report(&src, file, &errs);
-            Err(())
-        }
-    }
-}
-
-fn load_src(path: &str) -> (PathBuf, String) {
-    let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
-        .iter()
-        .collect();
-    println!("{}", file.to_str().unwrap());
-    let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
-    (file, src)
-}
-
-fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_test(path, times, false)
-}
-
-fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_test(path, times, true)
 }
 
 #[test]
@@ -172,7 +136,7 @@ fn letmulti() {
 #[test]
 fn let_tuple() {
     let res = run_file_test_mono("let_tuple.mmm", 1).unwrap();
-    let ans = vec![11.0];
+    let ans = vec![18.0];
     assert_eq!(res, ans);
 }
 #[test]
@@ -256,6 +220,25 @@ fn closure_counter2() {
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
     assert_eq!(res, ans);
 }
+#[test]
+fn closure_escape_3nested() {
+    let res = run_file_test_mono("closure_escape_3nested.mmm", 5).unwrap();
+    let ans = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn closure_counter_tuple() {
+    let res = run_file_test_stereo("closure_counter_tuple.mmm", 5).unwrap();
+    #[rustfmt::skip]
+    let ans = vec![
+        0.0,  0.0,
+        1.0, -1.0,
+        2.0, -2.0,
+        3.0, -3.0,
+        4.0, -4.0
+    ];
+    assert_eq!(res, ans);
+}
 
 #[test]
 fn hof_state() {
@@ -308,37 +291,6 @@ fn fb_mem2() {
         8.0, 6.0,
     ];
     assert_eq!(res, ans);
-}
-
-fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
-    let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans.into_iter());
-    let (file, src) = load_src(path);
-    let bytecode = match compiler::emit_bytecode(&src) {
-        Ok(res) => res,
-        Err(errs) => {
-            report(&src, file, &errs);
-            panic!("failed to emit bytecode");
-        }
-    };
-
-    for (sym, proto) in bytecode.global_fn_table {
-        let fn_name = sym.as_str();
-
-        if fn_name == "_mimium_global" {
-            continue;
-        }
-
-        let actual = proto.state_size;
-        match state_sizes.get(fn_name) {
-            Some(&expected) => {
-                assert_eq!(
-                    actual, expected,
-                    "state size of function `{fn_name}` is wrong"
-                );
-            }
-            None => panic!("no such function: {fn_name}"),
-        };
-    }
 }
 
 #[test]

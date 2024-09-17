@@ -1,0 +1,11 @@
+// this code falls into an infinite task execution loop.
+let x = 0.0
+
+fn updater(){
+    x = x + 1.0
+    _mimium_schedule_at(now,updater)
+}
+let _ = _mimium_schedule_at(1.0,updater)
+fn dsp(){
+    x
+}

@@ -1,4 +1,5 @@
 use crate::interner::TypeNodeId;
+use crate::runtime::scheduler;
 use crate::types::{PType, Type};
 use crate::{function, integer, numeric, unit};
 
@@ -24,9 +25,14 @@ pub fn probelnf(machine: &mut Machine) -> ReturnCode {
 }
 
 // TODO: use predefined symbols instead of strings
-pub fn get_builtin_fns() -> [BulitinInfo; 2] {
+pub fn get_builtin_fns() -> [BulitinInfo; 3] {
     [
         ("probe", probef, function!(vec![numeric!()], numeric!())),
         ("probeln", probelnf, function!(vec![numeric!()], numeric!())),
+        (
+            "_mimium_schedule_at",
+            scheduler::mimium_schedule_at,
+            function!(vec![numeric!(), function!(vec![], unit!())], unit!()),
+        ),
     ]
 }

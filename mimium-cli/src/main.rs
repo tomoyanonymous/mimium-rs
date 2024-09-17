@@ -6,6 +6,7 @@ use colog;
 use log;
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
+use mimium_lang::interner::ExprNodeId;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
@@ -23,6 +24,14 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub emit_bytecode: bool,
 }
+fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+    let ast1 = emit_ast(&src.clone())?;
+
+    selfconvert::convert_self_top(ast1).map_err(|e| {
+        let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
+        eb
+    })
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) | cfg!(test) {
@@ -38,15 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (content, fullpath) = fileloader::load(file.clone())?;
             if args.emit_ast {
                 println!("Filename: {}", fullpath.display());
-                let ast = emit_ast(&content.clone()).unwrap();
-                let expr2 = selfconvert::convert_self_top(ast)
-                    .map_err(|e| {
-                        let eb: Box<dyn ReportableError> = Box::new(e);
-                        eb
-                    })
-                    .unwrap();
-                match emit_ast(&content.clone()) {
-                    Ok(ast) => println!("{}", expr2.pretty_print()),
+                let ast = emit_ast_local(&content);
+                match ast {
+                    Ok(ast) => println!("{}", ast.pretty_print()),
                     Err(e) => {
                         report(&content, fullpath, &e);
                     }

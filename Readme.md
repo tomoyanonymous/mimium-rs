@@ -30,40 +30,49 @@ fn dsp(){
 - Removing "self" -> Type Inference & SSA Conversion -> MIR(Imperative)
 - VM ByteCode Generation
 
-## Roadmap
+## Roadmap tp version 2
 
 - [x] Basic Data Types
   - [x] AST
   - [x] MIR
   - [x] VM Instructions
-- [ ] Aggregate Types
-  - [ ] Tuple (Vector) types
-- [ ] Compilers
-  - [ ] Stateful Functions
+- [x] Aggregate Types
+  - [x] Tuple (Vector) types
+- [x] Compilers
+  - [x] Stateful Functions
     - [x] Feedback with `self`
-    - [ ] Delay
+    - [x] Delay and mem
   - [x] Parser
-  - [ ] MIR Generation
+  - [x] MIR Generation
     - [x] Type Inference
-      - [ ] Generics 
     - [x] Code Generation
   - [x] VM Code Generation 
-  - [ ] Multi-Stage Computation
 - [ ] Runtime
   - [x] Audio Driver Backend
     - [x] CPAL implmentation
   - [ ] Logical Scheduler
+    - [x] auto de-allocation of unused closure
+    - [x] destructive assignment of closure upvalues
+    - [ ] schedule (`@`) operator
   - [ ] Runtime value
-    - [ ] `now`
+    - [x] `now`
     - [ ] `samplerate`
-  - [ ] VM
+  - [x] VM
     - [x] Closure upvalue implementation
-    - [ ] Optmizations
-      - [ ] Use `SmallVec`
-    - [ ] wasm implmentation
-- [ ] Module System, Package Manager
+    - [x] StateStorage implementation
+  - [ ] simple file include
+  - [ ] simple audio file reader function
+    - [ ] array(slice) type & automatic interporation
 
-other todos:  migrating examples
+### Further Plans
+
+- [ ] Multi-stage computation (Hygienic Macro)
+- [ ] Generics
+- [ ] Native & WASM backend with Cranelift
+- [ ] Module System, Package Manager
+- [ ] effect system for managing statefull function and IO
+
+other todos: Migrating examples
 
 ## [License](LICENSE.md)
 

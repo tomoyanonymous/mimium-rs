@@ -29,6 +29,8 @@ pub enum Op {
     And, // &&
     Or,  // ||
 
+    At, // @
+
     Pipe, // |>
     Unknown(String),
 }
@@ -59,6 +61,7 @@ pub enum Token {
     SemiColon,
 
     Let,
+    LetRec,
     Assign,
 
     Reference, //?
@@ -105,6 +108,7 @@ impl Op {
             Op::Exponent => intrinsics::EXP,
             Op::And => intrinsics::AND,
             Op::Or => intrinsics::OR,
+            Op::At => "_mimium_schedule_at",
             Op::Pipe => "pipe",
             Op::Unknown(x) => x.as_str(),
         }
@@ -129,6 +133,7 @@ impl fmt::Display for Op {
             Op::Exponent => write!(f, "^"),
             Op::And => write!(f, "&&"),
             Op::Or => write!(f, "||"),
+            Op::At => write!(f, "@"),
             Op::Pipe => write!(f, "|>"),
             Op::Unknown(x) => write!(f, "{}", x),
         }
@@ -156,6 +161,7 @@ impl fmt::Display for Token {
             Token::Colon => write!(f, ":"),
             Token::SemiColon => write!(f, ";"),
             Token::Let => write!(f, "let"),
+            Token::LetRec => write!(f, "letrec"),
             Token::Assign => write!(f, "="),
             Token::Reference => write!(f, "&"),
             Token::ParenBegin => write!(f, "("),

@@ -1,8 +1,0 @@
-fn gen_tup(){
-    (5.0,2.0,3.0)
-}
-
-fn dsp(){
-    let (a,b,c) = gen_tup()
-    a+b*c
-}

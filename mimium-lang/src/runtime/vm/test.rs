@@ -87,7 +87,18 @@ fn closuretest() {
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![OpenUpValue(1, 1), OpenUpValue(2, 1)],
+        upindexes: vec![
+            OpenUpValue {
+                pos: 1,
+                size: 1,
+                is_closure: false,
+            },
+            OpenUpValue {
+                pos: 2,
+                size: 1,
+                is_closure: false,
+            },
+        ],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         state_size: 0,
@@ -147,7 +158,7 @@ fn closuretest() {
         ("makecounter".to_symbol(), makecounter_f),
         ("inner".to_symbol(), inner_f),
     ];
-    let mut machine: Machine = Machine::new();
+    let mut machine: Machine = Machine::new_without_scheduler();
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
@@ -194,7 +205,7 @@ fn rust_closure_test() {
         m.set_stack(-1, Machine::to_value(i));
         1
     });
-    let mut machine = Machine::new();
+    let mut machine = Machine::new_without_scheduler();
     machine.install_extern_fn("lib_printi".to_symbol(), lib_printi);
     machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());
     let prog = Program {
@@ -250,10 +261,13 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
     };
     prog
 }
+
+// closure gc is disabled until correct implementation comes.
+
 #[test]
 fn closure_gc_open() {
     let prog = prep_closure_gc_program(false);
-    let mut machine: Machine = Machine::new();
+    let mut machine: Machine = Machine::new_without_scheduler();
     machine.execute_main(&prog);
     //open closure should be released.
     assert_eq!(machine.closures.len(), 0);
@@ -261,7 +275,7 @@ fn closure_gc_open() {
 #[test]
 fn closure_gc_closed() {
     let prog = prep_closure_gc_program(true);
-    let mut machine: Machine = Machine::new();
+    let mut machine: Machine = Machine::new_without_scheduler();
     machine.execute_main(&prog);
     //closed closure should be kept.
     assert_eq!(machine.closures.len(), 1);

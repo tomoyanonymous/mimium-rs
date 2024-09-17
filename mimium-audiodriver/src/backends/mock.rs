@@ -5,12 +5,13 @@ use std::sync::{
 
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    runtime::scheduler,
     runtime::vm::{ExtClsType, Machine},
 };
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 pub struct MockDriver {
-    vmdata: RuntimeData,
+    pub vmdata: RuntimeData,
     count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,
@@ -30,11 +31,10 @@ impl MockDriver {
         let ochannels = dsp_func.nret as u64;
         let count = Arc::new(AtomicU64::new(0));
         //todo: split as trait interface method
-        let getnow_fn: (Symbol, ExtClsType) = (
-            "_mimium_getnow".to_symbol(),
-            crate::runtime_fn::gen_getnowfn(count.clone()),
-        );
-        let vmdata = RuntimeData::new(program, &[], &[getnow_fn]);
+        let schedule_fn = scheduler::gen_schedule_at();
+        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
+
+        let vmdata = RuntimeData::new(program, &[schedule_fn], &[getnow_fn]);
         let localbuffer: Vec<f64> = vec![];
         let samplerate = sample_rate.unwrap_or(SampleRate(48000));
         Self {
@@ -50,13 +50,14 @@ impl MockDriver {
         let _ = self.vmdata.run_main();
         self.localbuffer.clear();
         for _ in 0..times {
-            let _ = self.vmdata.run_dsp();
+            let now = self.count.load(Ordering::Relaxed);
+
+            let _ = self.vmdata.run_dsp(Time(now));
             let res = Machine::get_as_array::<<MockDriver as Driver>::Sample>(
                 self.vmdata.vm.get_top_n(self.ochannels as _),
             );
             self.localbuffer.extend_from_slice(res);
             //update current time.
-            let now = self.count.load(Ordering::Relaxed);
             self.count.store(now + 1, Ordering::Relaxed);
         }
         &self.localbuffer

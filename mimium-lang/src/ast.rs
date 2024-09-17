@@ -72,28 +72,30 @@ impl MiniPrint for Literal {
     }
 }
 
-fn concat_vec<T: MiniPrint>(vec: &Vec<T>) -> String {
-    let callee_str = vec
-        .iter()
-        .fold("".to_string(), |a, b| format!("{a} {}", b.simple_print()));
-    if vec.len() > 1 {
-        callee_str.split_at(1).1.to_string()
-    } else {
-        callee_str
-    }
+fn concat_vec<T: MiniPrint>(vec: &[T]) -> String {
+    vec.iter()
+        .map(|t| t.simple_print())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl MiniPrint for ExprNodeId {
     fn simple_print(&self) -> String {
-        self.to_expr().simple_print()
+        let span = self.to_span();
+        format!(
+            "{}:{}..{}",
+            self.to_expr().simple_print(),
+            span.start,
+            span.end
+        )
     }
 }
 
 impl MiniPrint for Option<ExprNodeId> {
     fn simple_print(&self) -> String {
         match self {
-            Some(e) => e.to_expr().simple_print(),
-            None => "".to_string(),
+            Some(e) => e.simple_print(),
+            None => "()".to_string(),
         }
     }
 }
@@ -104,7 +106,7 @@ impl MiniPrint for Expr {
             Expr::Literal(l) => l.simple_print(),
             Expr::Var(v) => format!("{v}"),
             Expr::Block(e) => e.map_or("".to_string(), |eid| {
-                format!("(block {})", eid.to_expr().simple_print())
+                format!("(block {})", eid.simple_print())
             }),
             Expr::Tuple(e) => {
                 let e1 = e.iter().map(|e| e.to_expr().clone()).collect::<Vec<Expr>>();
@@ -112,20 +114,10 @@ impl MiniPrint for Expr {
             }
             Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
-                let es = e2
-                    .iter()
-                    .map(|e| e.to_expr().clone())
-                    .collect::<Vec<Expr>>();
-
-                format!("(app {} ({}))", e1.simple_print(), concat_vec(&es))
+                format!("(app {} ({}))", e1.simple_print(), concat_vec(e2))
             }
             Expr::Lambda(params, _, body) => {
-                let paramstr = params.iter().map(|e| e.clone()).collect::<Vec<_>>();
-                format!(
-                    "(lambda ({}) {})",
-                    concat_vec(&paramstr),
-                    body.simple_print()
-                )
+                format!("(lambda ({}) {})", concat_vec(params), body.simple_print())
             }
             Expr::Feed(id, body) => format!("(feed {} {})", id, body.simple_print()),
             Expr::Let(id, body, then) => format!(
@@ -152,7 +144,7 @@ impl MiniPrint for Expr {
             ),
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
-            Expr::Error => todo!(),
+            Expr::Error => "(error)".to_string(),
         }
     }
 }

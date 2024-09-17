@@ -35,7 +35,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map(Token::Str);
 
     // A parser for operators
-    let op = one_of("+-*/!=&|%><^")
+    let op = one_of("+-*/!=&|%><^@")
         .repeated()
         .at_least(1)
         .collect::<String>()
@@ -55,6 +55,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "=" => Token::Assign,
             "%" => Token::Op(Op::Modulo),
             "^" => Token::Op(Op::Exponent),
+            "@" => Token::Op(Op::At),
             "&&" => Token::Op(Op::And),
             "||" => Token::Op(Op::Or),
             "|>" => Token::Op(Op::Pipe),
@@ -71,11 +72,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     let ident = text::ident().map(|ident: String| match ident.as_str() {
         "fn" => Token::Function,
         "macro" => Token::Macro,
-        "->" => Token::Arrow,
         "self" => Token::SelfLit,
         "now" => Token::Now,
-        "@" => Token::At,
         "let" => Token::Let,
+        "letrec" => Token::LetRec,
         "if" => Token::If,
         "else" => Token::Else,
         // "true" => Token::Bool(true),
@@ -84,7 +84,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "float" => Token::FloatType,
         "int" => Token::IntegerType,
         "string" => Token::StringType,
-        "structt" => Token::StructType,
+        "struct" => Token::StructType,
         _ => Token::Ident(ident.to_symbol()),
     });
     let macro_expand = text::ident()
@@ -108,7 +108,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map(|_s| Token::LineBreak);
     // A single token can be one of the above
     let token = comment_parser()
-        .map(|c| Token::Comment(c))
+        .map(Token::Comment)
         .or(float)
         .or(int)
         .or(str_)
