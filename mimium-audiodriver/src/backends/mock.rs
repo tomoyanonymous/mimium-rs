@@ -11,7 +11,7 @@ use mimium_lang::{
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 pub struct MockDriver {
-    vmdata: RuntimeData,
+    pub vmdata: RuntimeData,
     count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,

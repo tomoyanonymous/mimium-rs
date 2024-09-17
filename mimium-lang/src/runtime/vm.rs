@@ -110,7 +110,7 @@ impl LocalUpValueMap {
 
 #[derive(Debug, Default, PartialEq)]
 //closure object dynamically allocated
-pub(crate) struct Closure {
+pub struct Closure {
     pub fn_proto_pos: usize, //position of function prototype in global_ftable
     pub base_ptr: u64,       //base pointer to current closure, to calculate open upvalue
     pub is_closed: bool,
@@ -144,7 +144,7 @@ impl Closure {
     }
 }
 
-type ClosureStorage = SlotMap<DefaultKey, Closure>;
+pub type ClosureStorage = SlotMap<DefaultKey, Closure>;
 fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
     let cls = storage.get_mut(id.0).unwrap();
     cls.refcount -= 1;
@@ -186,7 +186,7 @@ impl Default for RawValType {
 pub struct Machine {
     stack: Vec<RawVal>,
     base_pointer: u64,
-    closures: ClosureStorage,
+    pub closures: ClosureStorage,
     pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
     fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
