@@ -1,6 +1,6 @@
 [package]
 name = "mimium-cli"
-version = "0.0.1"
+version = "2.0.0-alpha-1"
 license = "MPL 2.0"
 edition = "2021"
 repository = "https://github.com/tomoyanonymous/mimium-rs/"

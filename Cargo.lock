@@ -527,7 +527,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "mimium-audiodriver"
-version = "0.0.1"
+version = "2.0.0-alpha-1"
 dependencies = [
  "cpal",
  "log",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-cli"
-version = "0.0.1"
+version = "2.0.0-alpha-1"
 dependencies = [
  "clap",
  "colog",
@@ -549,7 +549,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-lang"
-version = "0.0.1"
+version = "2.0.0-alpha-1"
 dependencies = [
  "ariadne",
  "chumsky",
