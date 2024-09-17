@@ -1,0 +1,8 @@
+fn plus(x, y) {
+    x + y
+}
+fn dsp(){
+    1.0 |>
+        plus(3.0) |> 
+        sqrt()
+}
