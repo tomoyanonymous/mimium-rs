@@ -3,6 +3,7 @@ name = "mimium-cli"
 version = "0.0.1"
 license = "MPL 2.0"
 edition = "2021"
+repository = "https://github.com/tomoyanonymous/mimium-rs/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
