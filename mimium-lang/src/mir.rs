@@ -24,7 +24,6 @@ pub enum Value {
     // idx of the function in the program
     Function(usize),
     ExtFunction(Symbol, TypeNodeId),
-    FixPoint(usize), //function id
     //internal state
     None,
 }
@@ -59,7 +58,7 @@ pub enum Instruction {
     // make closure with upindexes
     Closure(VPtr),
     //closes upvalues of specific closure. Always inserted right before Return instruction.
-    CloseUpValue(VPtr),
+    CloseUpValues(VPtr, TypeNodeId),
     //label to funcproto  and localvar offset?
     GetUpValue(u64, TypeNodeId),
     SetUpValue(u64, VPtr, TypeNodeId),
@@ -134,10 +133,15 @@ pub enum UpIndex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct OpenUpValue(pub usize, pub TypeSize);
+pub struct OpenUpValue {
+    pub pos: usize,
+    pub size: TypeSize,
+    pub is_closure: bool,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
+    pub index: usize,
     pub label: Symbol,
     pub args: Vec<Arc<Value>>,
     pub argtypes: Vec<TypeNodeId>,
@@ -156,12 +160,14 @@ pub struct StateSize {
 
 impl Function {
     pub fn new(
+        index: usize,
         name: Symbol,
         args: &[VPtr],
         argtypes: &[TypeNodeId],
         upperfn_i: Option<usize>,
     ) -> Self {
         Self {
+            index,
             label: name,
             args: args.to_vec(),
             argtypes: argtypes.to_vec(),

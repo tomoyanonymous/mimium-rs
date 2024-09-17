@@ -59,7 +59,7 @@ impl Scheduler for SyncScheduler {
         match self.tasks.peek() {
             Some(Reverse(Task { when, cls })) if *when <= now => {
                 let res = Some(*cls);
-                self.tasks.pop();
+                let _ = self.tasks.pop();
                 res
             }
             _ => None,
@@ -95,8 +95,8 @@ impl Scheduler for DummyScheduler {
 
 pub(crate) fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
     let time = Time(vm::Machine::get_as::<f64>(machine.get_stack(0)) as u64);
-    let cls = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
-    machine.scheduler.schedule_at(time, cls);
+    let clsid = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
+    machine.scheduler.schedule_at(time, clsid);
     0
 }
 pub fn gen_schedule_at() -> (Symbol, ExtFunType) {

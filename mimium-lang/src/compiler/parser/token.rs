@@ -61,6 +61,7 @@ pub enum Token {
     SemiColon,
 
     Let,
+    LetRec,
     Assign,
 
     Reference, //?
@@ -160,6 +161,7 @@ impl fmt::Display for Token {
             Token::Colon => write!(f, ":"),
             Token::SemiColon => write!(f, ";"),
             Token::Let => write!(f, "let"),
+            Token::LetRec => write!(f, "letrec"),
             Token::Assign => write!(f, "="),
             Token::Reference => write!(f, "&"),
             Token::ParenBegin => write!(f, "("),

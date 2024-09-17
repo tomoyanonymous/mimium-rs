@@ -126,23 +126,23 @@ pub enum NodeId {
     TypeArena(TypeKey),
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct ExprNodeId(pub ExprKey);
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct TypeNodeId(pub TypeKey);
 
 // traits required for Key trait
 
 impl PartialEq for ExprNodeId {
     fn eq(&self, other: &Self) -> bool {
-        self.to_expr() == other.to_expr() && self.to_span() == self.to_span()
+        self.to_expr() == other.to_expr() && self.to_span() == other.to_span()
     }
 }
 
 impl PartialEq for TypeNodeId {
     fn eq(&self, other: &Self) -> bool {
-        self.to_type() == other.to_type()
+        self.to_type() == other.to_type() && self.to_span() == other.to_span()
     }
 }
 impl Eq for TypeNodeId {}
@@ -176,6 +176,18 @@ impl TypeNodeId {
             None => dummy_span!(),
         })
     }
+    // Flatten a composite type into a list of types so that the offset of the
+    // element can be calculated easily. For example:
+    //
+    // original:       Tuple(float, function, Tuple(float, float))
+    // flattened form: [float, function, float, float]
+    pub fn flatten(&self) -> Vec<Self> {
+        match self.to_type() {
+            Type::Tuple(t) => t.iter().flat_map(|t| t.flatten()).collect::<Vec<_>>(),
+            Type::Struct(t) => t.iter().flat_map(|(_, t)| t.flatten()).collect::<Vec<_>>(),
+            _ => vec![*self],
+        }
+    }
 }
 
 pub trait ToNodeId {
@@ -191,5 +203,31 @@ impl ToNodeId for ExprNodeId {
 impl ToNodeId for TypeNodeId {
     fn to_node_id(&self) -> NodeId {
         NodeId::TypeArena(self.0)
+    }
+}
+impl std::fmt::Display for ExprNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+        write!(f, "{:?},{}..{}", self.to_expr(), span.start, span.end)
+    }
+}
+impl std::fmt::Debug for ExprNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+        write!(f, "{:#?},{}..{}", self.to_expr(), span.start, span.end)
+    }
+}
+impl std::fmt::Display for TypeNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+
+        write!(f, "{:?},{}..{}", self.to_type(), span.start, span.end)
+    }
+}
+impl std::fmt::Debug for TypeNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let span = self.to_span();
+
+        write!(f, "{:#?},{}..{}", self.to_type(), span.start, span.end)
     }
 }

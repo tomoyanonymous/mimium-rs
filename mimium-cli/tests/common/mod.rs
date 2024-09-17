@@ -93,7 +93,7 @@ pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<
     }
 }
 
-fn load_src(path: &str) -> (PathBuf, String) {
+pub(crate) fn load_src(path: &str) -> (PathBuf, String) {
     let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
         .iter()
         .collect();

@@ -87,7 +87,18 @@ fn closuretest() {
     let inner_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![OpenUpValue(1, 1), OpenUpValue(2, 1)],
+        upindexes: vec![
+            OpenUpValue {
+                pos: 1,
+                size: 1,
+                is_closure: false,
+            },
+            OpenUpValue {
+                pos: 2,
+                size: 1,
+                is_closure: false,
+            },
+        ],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
         state_size: 0,
@@ -250,6 +261,9 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
     };
     prog
 }
+
+// closure gc is disabled until correct implementation comes.
+
 #[test]
 fn closure_gc_open() {
     let prog = prep_closure_gc_program(false);

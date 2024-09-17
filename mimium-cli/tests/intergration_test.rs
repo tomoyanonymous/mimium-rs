@@ -155,7 +155,7 @@ fn letmulti() {
 #[test]
 fn let_tuple() {
     let res = run_file_test_mono("let_tuple.mmm", 1).unwrap();
-    let ans = vec![11.0];
+    let ans = vec![18.0];
     assert_eq!(res, ans);
 }
 #[test]
@@ -237,6 +237,25 @@ fn closure_counter() {
 fn closure_counter2() {
     let res = run_file_test_mono("closure_counter2.mmm", 5).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn closure_escape_3nested() {
+    let res = run_file_test_mono("closure_escape_3nested.mmm", 5).unwrap();
+    let ans = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn closure_counter_tuple() {
+    let res = run_file_test_stereo("closure_counter_tuple.mmm", 5).unwrap();
+    #[rustfmt::skip]
+    let ans = vec![
+        0.0,  0.0,
+        1.0, -1.0,
+        2.0, -2.0,
+        3.0, -3.0,
+        4.0, -4.0
+    ];
     assert_eq!(res, ans);
 }
 
