@@ -4,6 +4,8 @@ fn do_div(x, y) {
 }
 fn dsp(){
     let p = _ + 3.0
-    let d = do_div(16.0, _)
-    sqrt(d(p(1.0)))
+    1.0 |>
+        p |>
+        do_div(16.0, _) |>
+        sqrt
 }

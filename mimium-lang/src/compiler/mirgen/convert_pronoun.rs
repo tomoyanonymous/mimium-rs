@@ -233,8 +233,25 @@ fn convert_placeholder(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
     }
 }
 
+fn convert_pipe(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
+    let span = e_id.to_span().clone();
+    match e_id.to_expr() {
+        Expr::PipeApply(callee, fun) => {
+            let fun = convert_pipe(fun)?;
+            let content = Expr::Apply(fun.unwrap(), vec![callee]).into_id(span.clone());
+            if fun.is_ok() {
+                Ok(ConvertResult::Ok(content))
+            } else {
+                Ok(ConvertResult::Err(content))
+            }
+        }
+        _ => convert_recursively(e_id, convert_pipe),
+    }
+}
+
 pub fn convert_pronoun(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
     let expr = convert_placeholder(expr)?;
+    let expr = convert_pipe(get_content(expr))?;
     let res = convert_self(get_content(expr), FeedId::Global)?;
     Ok(get_content(res))
 }
