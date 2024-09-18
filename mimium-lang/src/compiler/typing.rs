@@ -84,10 +84,11 @@ impl ReportableError for Error {
 pub struct InferContext {
     interm_idx: u64,
     typescheme_idx: u64,
+    instantiated_idx: u64,
     level: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
     generalize_map: BTreeMap<u64, u64>,
-    instantiate_map: BTreeMap<u64, Rc<RefCell<TypeVar>>>,
+    instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
@@ -96,6 +97,7 @@ impl std::default::Default for InferContext {
         let mut res = Self {
             interm_idx: 0,
             typescheme_idx: 0,
+            instantiated_idx: 0,
             level: 0,
             subst_map: Default::default(),
             generalize_map: Default::default(),
@@ -183,6 +185,11 @@ impl InferContext {
     fn gen_typescheme(&mut self) -> TypeNodeId {
         let res = Type::TypeScheme(self.typescheme_idx).into_id();
         self.typescheme_idx += 1;
+        res
+    }
+    fn gen_instantiated(&mut self) -> TypeNodeId {
+        let res = Type::Instantiated(self.instantiated_idx).into_id();
+        self.instantiated_idx += 1;
         res
     }
     fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
@@ -278,7 +285,7 @@ impl InferContext {
                 .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
                 .try_collect()
         };
-        log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
+        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
@@ -323,6 +330,8 @@ impl InferContext {
                 tv2.parent = Some(t1r);
                 Ok(t1r)
             }
+            (t1, Type::Instantiated(_)) => Ok(t1.clone().into_id_with_span(span)),
+            (Type::Instantiated(_), t2) => Ok(t2.clone().into_id_with_span(span)),
             (Type::Array(a1), Type::Array(a2)) => {
                 Ok(Type::Array(Self::unify_types(*a1, *a2, span)?).into_id())
             }
@@ -367,12 +376,20 @@ impl InferContext {
         }
     }
     fn instantiate(&mut self, t: TypeNodeId) -> TypeNodeId {
+        let mut g_i_map = BTreeMap::<u64, TypeNodeId>::default();
+        self.instantiate_in(t, &mut g_i_map)
+    }
+    fn instantiate_in(
+        &mut self,
+        t: TypeNodeId,
+        g_i_map: &mut BTreeMap<u64, TypeNodeId>,
+    ) -> TypeNodeId {
         match t.to_type() {
-            Type::TypeScheme(id) => self.instantiate_map.get(&id).cloned().map_or_else(
-                || self.gen_intermediate_type(),
-                |tv| Type::Intermediate(tv.clone()).into_id(),
-            ),
-            _ => t.apply_fn(|t| self.instantiate(t)),
+            Type::TypeScheme(id) => g_i_map
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| self.gen_instantiated()),
+            _ => t.apply_fn(|t| self.instantiate_in(t, g_i_map)),
         }
     }
 
@@ -517,14 +534,10 @@ impl InferContext {
                     }
                     (true, _) => self.gen_intermediate_type(),
                 };
-
-                let body_i = self.gen_intermediate_type();
-                self.env.add_bind(&[(id.id, body_i)]);
+                self.env.add_bind(&[(id.id, idt)]);
+                //polymorphic inference is not allowed in recursive function.
                 let bodyt = self.infer_type_levelup(*body)?;
-                let gt = self.generalize(bodyt);
-
-                let _ = Self::unify_types(idt, gt, body.to_span())?;
-
+                let _ = Self::unify_types(idt, bodyt, body.to_span())?;
                 match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
@@ -573,6 +586,7 @@ impl InferContext {
                     self.infer_type(e)
                 })?;
                 let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
+                log::debug!("then: {}, else: {}", thent.to_type(), elset.to_type());
                 Self::unify_types(thent, elset, else_span)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
