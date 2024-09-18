@@ -1,8 +1,12 @@
-fn plus(x, y) {
+fn do_plus(x, y) {
     x + y
+}
+fn do_div(x, y) {
+    x / y
 }
 fn dsp(){
     1.0 |>
-        plus(_, 3.0) |> 
+        do_plus(_, 3.0) |> 
+        do_div(16.0, _) |>
         sqrt(_)
 }
