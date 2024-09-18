@@ -8,7 +8,6 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
     NoParentSelf(Span),
-    NoPlaceHolder(Span),
 }
 
 type ConvertResult = Result<ExprNodeId, ExprNodeId>;
@@ -22,7 +21,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NoParentSelf(_s) => write!(f, "self cannot be used in global context."),
-            Self::NoPlaceHolder(_s) => write!(f, "The RHS of |> doesn't contain _."),
         }
     }
 }
@@ -31,7 +29,6 @@ impl ReportableError for Error {
     fn get_span(&self) -> std::ops::Range<usize> {
         match self {
             Self::NoParentSelf(s) => s.clone(),
-            Self::NoPlaceHolder(s) => s.clone(),
         }
     }
 }
