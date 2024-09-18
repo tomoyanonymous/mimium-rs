@@ -86,6 +86,7 @@ pub struct InferContext {
     typescheme_idx: u64,
     level: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
+    scheme_map: BTreeMap<u64, Rc<RefCell<TypeVar>>>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
@@ -96,6 +97,7 @@ impl std::default::Default for InferContext {
             typescheme_idx: 0,
             level: 0,
             subst_map: Default::default(),
+            scheme_map: Default::default(),
             result_map: Default::default(),
             env: Environment::<TypeNodeId>::new(),
         };
@@ -270,6 +272,11 @@ impl InferContext {
                     return Ok(t1r);
                 }
                 let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
+                if tv1.level != tv2.level {
+                    let l = tv1.level.min(tv2.level);
+                    tv1.level = l;
+                    tv2.level = l;
+                }
                 match (tv1.parent, tv2.parent) {
                     (None, None) => {
                         if tv1.var > tv2.var {
@@ -344,22 +351,15 @@ impl InferContext {
         }
     }
     fn instantiate(&mut self, t: TypeNodeId) -> TypeNodeId {
-        let mut tsmap = BTreeMap::<u64, TypeNodeId>::new();
-        self.instantiate_in(&mut tsmap, t)
-    }
-    fn instantiate_in(
-        &mut self,
-        tsmap: &mut BTreeMap<u64, TypeNodeId>,
-        t: TypeNodeId,
-    ) -> TypeNodeId {
         match t.to_type() {
-            Type::TypeScheme(id) => tsmap
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(|| self.gen_intermediate_type()),
-            _ => t.apply_fn(|t| self.instantiate_in(tsmap, t)),
+            Type::TypeScheme(id) => self.scheme_map.get(&id).cloned().map_or_else(
+                || self.gen_intermediate_type(),
+                |tv| Type::Intermediate(tv.clone()).into_id(),
+            ),
+            _ => t.apply_fn(|t| self.instantiate(t)),
         }
     }
+
     // Note: the third argument `span` is used for the error location in case of
     // type mismatch. This is needed because `t`'s span refers to the location
     // where it originally defined (e.g. the explicit return type of the
@@ -419,6 +419,12 @@ impl InferContext {
     fn infer_vec(&mut self, e: &[ExprNodeId]) -> Result<Vec<TypeNodeId>, Error> {
         e.iter().map(|e| self.infer_type(*e)).try_collect()
     }
+    fn infer_type_levelup(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
+        self.level += 1;
+        let res = self.infer_type(e);
+        self.level -= 1;
+        res
+    }
     fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
         let span = e.to_span().clone();
         let res = match &e.to_expr() {
@@ -475,9 +481,8 @@ impl InferContext {
                 Ok(Type::Function(ptypes, bty, None).into_id())
             }
             Expr::Let(tpat, body, then) => {
-                self.level += 1;
-                let bodyt = self.infer_type(*body)?;
-                self.level -= 1;
+                let bodyt = self.infer_type_levelup(*body)?;
+
                 let _ = self.bind_pattern(bodyt, tpat, body.to_span())?;
 
                 match then {
@@ -499,7 +504,7 @@ impl InferContext {
 
                 let body_i = self.gen_intermediate_type();
                 self.env.add_bind(&[(id.id, body_i)]);
-                let bodyt = self.infer_type(*body)?;
+                let bodyt = self.infer_type_levelup(*body)?;
                 let _ = Self::unify_types(idt, bodyt, body.to_span())?;
 
                 match then {
@@ -520,7 +525,7 @@ impl InferContext {
             Expr::Var(name) => {
                 let res = self.lookup(name, &span)?;
                 Ok(self.instantiate(res))
-            },
+            }
             Expr::Apply(fun, callee) => {
                 let fnl = self.infer_type(*fun)?;
                 let callee_t = self.infer_vec(callee.as_slice())?;
