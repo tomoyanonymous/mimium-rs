@@ -55,7 +55,7 @@ fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
 fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     select! {
         Token::Int(x) => Literal::Int(x),
-        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
+        Token::Float(x) => Literal::Float(x.parse().unwrap()),
         Token::Str(s) => Literal::String(s),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
@@ -64,7 +64,9 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
     .labelled("literal")
 }
 fn var_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    ident_parser().map_with_span(|e, s| Expr::Var(e).into_id(s))
+    let var = ident_parser().map_with_span(|e, s| Expr::Var(e).into_id(s));
+    let placeholder = just(Token::PlaceHolder).map_with_span(|_, s| Expr::PlaceHolder.into_id(s));
+    var.or(placeholder)
 }
 fn with_type_annotation<P, O>(
     parser: P,
@@ -100,7 +102,10 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(Pattern::Tuple)
-            .or(select! { Token::Ident(s) => Pattern::Single(s) })
+            .or(select! {
+               Token::Ident(s) => Pattern::Single(s),
+               Token::PlaceHolder => Pattern::Single("_".to_symbol()), // TODO: this might be distinguished as Pattern::Ignore to skip instructions
+            })
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
@@ -126,9 +131,14 @@ where
             let expr = match op {
                 Op::Pipe => {
                     if let Expr::Apply(f, mut args) = y.to_expr() {
-                        args.insert(0, x);
+                        for e in args.iter_mut() {
+                            if matches!(e.to_expr(), Expr::PlaceHolder) {
+                                *e = x;
+                            }
+                        }
                         Expr::Apply(f, args)
                     } else {
+                        println!("{:?}", y.to_expr());
                         // return Err(Simple::custom(y.to_span(), "Not a function call"));
                         todo!("How can I propagate an error from here?")
                     }

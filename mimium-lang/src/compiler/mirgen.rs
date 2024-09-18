@@ -480,6 +480,7 @@ impl Context {
                 Ok((v, t))
             }
             Expr::Var(name) => Ok((self.eval_rvar(*name, ty, &span)?, ty)),
+            Expr::PlaceHolder => Ok((self.eval_rvar("_".to_symbol(), ty, &span)?, ty)),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)

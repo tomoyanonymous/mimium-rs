@@ -74,9 +74,10 @@ pub enum Token {
     BlockEnd,
     LambdaArgBeginEnd,
 
-    Function, //"fn"
-    Macro,    //"macro"
-    Arrow,    // ->
+    Function,    //"fn"
+    Macro,       //"macro"
+    Arrow,       // ->
+    PlaceHolder, // _
 
     If,
     Else,
@@ -175,6 +176,7 @@ impl fmt::Display for Token {
             Token::Function => write!(f, "fn"),
             Token::Macro => write!(f, "macro"),
             Token::Arrow => write!(f, "->"),
+            Token::PlaceHolder => write!(f, "_"),
 
             Token::If => write!(f, "if"),
             Token::Else => write!(f, "else"),

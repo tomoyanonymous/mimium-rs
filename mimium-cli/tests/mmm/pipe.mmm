@@ -3,6 +3,6 @@ fn plus(x, y) {
 }
 fn dsp(){
     1.0 |>
-        plus(3.0) |> 
-        sqrt()
+        plus(_, 3.0) |> 
+        sqrt(_)
 }

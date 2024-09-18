@@ -36,6 +36,7 @@ impl Expr {
 pub enum Expr {
     Literal(Literal),
     Var(Symbol),
+    PlaceHolder,
     Block(Option<ExprNodeId>),
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
@@ -105,6 +106,7 @@ impl MiniPrint for Expr {
         match self {
             Expr::Literal(l) => l.simple_print(),
             Expr::Var(v) => format!("{v}"),
+            Expr::PlaceHolder => "_".to_string(),
             Expr::Block(e) => e.map_or("".to_string(), |eid| {
                 format!("(block {})", eid.simple_print())
             }),
