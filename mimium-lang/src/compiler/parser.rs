@@ -101,7 +101,12 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(Pattern::Tuple)
-            .or(select! { Token::Ident(s) => Pattern::Single(s) })
+            .or(select! {
+                Token::Ident(s) => Pattern::Single(s),
+                // Note: _ represents an unused variable, but it is treated as
+                // an ordinary symbol here.
+                Token::PlaceHolder => Pattern::Single("_".to_symbol()),
+            })
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
