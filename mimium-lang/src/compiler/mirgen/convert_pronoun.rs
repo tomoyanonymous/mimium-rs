@@ -54,7 +54,7 @@ fn get_feedvar_name(fid: i64) -> Symbol {
     format!("feed_id{}", fid).to_symbol()
 }
 
-// This applys conversion() recursively. This is intended to be used in the `_`
+// This applies conversion() recursively. This is intended to be used in the `_`
 // branch of pattern matching so that particular types of epressions can be
 // caught and treated differently.
 fn convert_recursively<T>(e_id: ExprNodeId, conversion: T) -> Result<ConvertResult, Error>
