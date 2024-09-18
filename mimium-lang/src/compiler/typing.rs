@@ -542,7 +542,7 @@ impl InferContext {
             }
             Expr::Var(name) => {
                 let res = self.lookup(name, &span)?;
-                log::debug!("{} {} /level{}", name.as_str(), res, self.level);
+                // log::debug!("{} {} /level{}", name.as_str(), res, self.level);
                 Ok(self.instantiate(res))
             }
             Expr::Apply(fun, callee) => {
