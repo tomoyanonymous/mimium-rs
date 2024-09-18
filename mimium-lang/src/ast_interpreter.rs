@@ -260,12 +260,6 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
                 ErrorKind::VariableNotFound(v.to_string()),
                 span.clone(),
             )),
-        // TODO: if _ is not replaced with actual variable, treat it as an ordinary
-        // variable _. Can this handle any better?
-        ast::Expr::PlaceHolder => {
-            let e_meta_ident = ast::Expr::Var("_".to_symbol()).into_id(span);
-            eval_ast(e_meta_ident, ctx)
-        }
         ast::Expr::Block(b) => b
             .as_ref()
             .map_or(Ok(Value::Primitive(PValue::Unit)), |body| {

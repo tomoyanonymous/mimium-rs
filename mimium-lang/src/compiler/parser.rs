@@ -55,7 +55,7 @@ fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
 fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     select! {
         Token::Int(x) => Literal::Int(x),
-        Token::Float(x) => Literal::Float(x.parse().unwrap()),
+        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
         Token::Str(s) => Literal::String(s),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
@@ -64,9 +64,7 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
     .labelled("literal")
 }
 fn var_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let var = ident_parser().map_with_span(|e, s| Expr::Var(e).into_id(s));
-    let placeholder = just(Token::PlaceHolder).map_with_span(|_, s| Expr::PlaceHolder.into_id(s));
-    var.or(placeholder)
+    ident_parser().map_with_span(|e, s| Expr::Var(e).into_id(s))
 }
 fn with_type_annotation<P, O>(
     parser: P,
@@ -102,13 +100,7 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(Pattern::Tuple)
-            .or(select! {
-               Token::Ident(s) => Pattern::Single(s),
-               // TODO: this can be treated specially (e.g. Pattern::Ignore) to
-               // represent an unused variable so that we can skip some
-               // unnecessary processes
-               Token::PlaceHolder => Pattern::Single("_".to_symbol()),
-            })
+            .or(select! { Token::Ident(s) => Pattern::Single(s) })
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
@@ -125,39 +117,15 @@ where
     OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
 {
     prec.clone()
-        .then(
-            op.then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
-                .then(prec)
-                .repeated(),
-        )
+        .then(op.then(prec).repeated())
         .foldl(move |x, ((op, opspan), y)| {
-            let expr = match op {
-                Op::Pipe => {
-                    if let Expr::Apply(f, mut args) = y.to_expr() {
-                        for e in args.iter_mut() {
-                            if matches!(e.to_expr(), Expr::PlaceHolder) {
-                                *e = x;
-                            }
-                        }
-                        Expr::Apply(f, args)
-                    } else {
-                        println!("{:?}", y.to_expr());
-                        // return Err(Simple::custom(y.to_span(), "Not a function call"));
-                        todo!("How can I propagate an error from here?")
-                    }
-                }
-
+            let arg = match op {
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
-                Op::At => Expr::Apply(
-                    Expr::Var(op.get_associated_fn_name()).into_id(opspan),
-                    vec![y, x],
-                ),
-                _ => Expr::Apply(
-                    Expr::Var(op.get_associated_fn_name()).into_id(opspan),
-                    vec![x, y],
-                ),
+                Op::At => vec![y, x],
+                _ => vec![x, y],
             };
-            expr.into_id(x.to_span().start..y.to_span().end)
+            Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
+                .into_id(x.to_span().start..y.to_span().end)
         })
         .boxed()
 }
