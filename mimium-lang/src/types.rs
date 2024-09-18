@@ -20,10 +20,15 @@ pub enum PType {
 pub struct TypeVar {
     pub parent: Option<TypeNodeId>,
     pub var: u64,
+    pub level: u64,
 }
 impl TypeVar {
-    pub fn new(var: u64) -> Self {
-        Self { parent: None, var }
+    pub fn new(var: u64, level: u64) -> Self {
+        Self {
+            parent: None,
+            var,
+            level,
+        }
     }
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -39,7 +44,7 @@ pub enum Type {
     //(experimental) code-type for multi-stage computation that will be evaluated on the next stage
     Code(TypeNodeId),
     Intermediate(Rc<RefCell<TypeVar>>),
-    TypeScheme(i64, i64),
+    TypeScheme(u64),
     Unknown,
 }
 
@@ -66,24 +71,25 @@ impl Type {
             _ => None,
         }
     }
-    pub fn apply_fn<F>(&self, closure: F) -> Self
+    pub fn apply_fn<F>(&self, mut closure: F) -> Self
     where
-        F: Fn(Self) -> Self,
+        F: FnMut(Self) -> Self,
     {
-        let apply_scalar = |a: TypeNodeId| -> TypeNodeId { closure(a.to_type().clone()).into_id() };
-        let apply_vec = |v: &Vec<TypeNodeId>| -> Vec<TypeNodeId> {
-            v.iter()
-                .map(|a| closure(a.to_type().clone()).into_id())
-                .collect()
+        let apply_scalar =
+            |a: TypeNodeId, c: &mut F| -> TypeNodeId { c(a.to_type().clone()).into_id() };
+        let apply_vec = |v: &Vec<TypeNodeId>, c: &mut F| -> Vec<TypeNodeId> {
+            v.iter().map(|a| c(a.to_type().clone()).into_id()).collect()
         };
         match self {
-            Type::Array(a) => Type::Array(apply_scalar(*a)),
-            Type::Tuple(v) => Type::Tuple(apply_vec(v)),
+            Type::Array(a) => Type::Array(apply_scalar(*a, &mut closure)),
+            Type::Tuple(v) => Type::Tuple(apply_vec(v, &mut closure)),
             Type::Struct(_s) => todo!(),
             Type::Function(p, r, s) => {
-                Type::Function(apply_vec(p), apply_scalar(*r), s.map(apply_scalar))
+                let at = apply_vec(p, &mut closure);
+                let rt = apply_scalar(*r, &mut closure);
+                Type::Function(at, rt, s.map(|t| apply_scalar(t, &mut closure)))
             }
-            Type::Ref(x) => Type::Ref(apply_scalar(*x)),
+            Type::Ref(x) => Type::Ref(apply_scalar(*x, &mut closure)),
             Type::Code(_c) => todo!(),
             Type::Intermediate(id) => Type::Intermediate(id.clone()),
             _ => self.clone(),
@@ -167,12 +173,12 @@ impl TypeNodeId {
         }
     }
     //     // TODO: clean up the roundtrip between Type and TypeNodeId
-    pub fn apply_fn<F>(&self, closure: F) -> Self
+    pub fn apply_fn<F>(&self, mut closure: F) -> Self
     where
-        F: Fn(Self) -> Self,
+        F: FnMut(Self) -> Self,
     {
         self.to_type()
-            .apply_fn(|x| closure(x.into_id()).to_type().clone())
+            .apply_fn(|x| closure(x.into_id()).to_type())
             .into_id()
     }
 }
@@ -191,8 +197,9 @@ impl fmt::Display for TypeVar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}({})",
+            "?{}[{}]({})",
             self.var,
+            self.level,
             self.parent
                 .map_or_else(|| "".to_string(), |t| t.to_type().to_string())
         )
@@ -224,10 +231,10 @@ impl fmt::Display for Type {
 
             Type::Code(c) => write!(f, "<{}>", c.to_type()),
             Type::Intermediate(id) => {
-                write!(f, "i({})", id.borrow())
+                write!(f, "{}", id.borrow())
             }
-            Type::TypeScheme(id, level) => {
-                write!(f, "g({id})[{level}]")
+            Type::TypeScheme(id) => {
+                write!(f, "g({id})")
             }
             Type::Unknown => write!(f, "unknown"),
         }

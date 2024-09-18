@@ -127,7 +127,7 @@ impl ByteCodeGenerator {
             Type::Function(_, _, _) => 1,
             Type::Ref(_) => 1,
             Type::Code(_) => todo!(),
-            Type::TypeScheme(_, _) => todo!(),
+            Type::TypeScheme{..} => unreachable!(),
             Type::Intermediate(_) => 1, // TODO
             Type::Unknown => todo!(),
         }
