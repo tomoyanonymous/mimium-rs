@@ -3,8 +3,8 @@ use super::typing::{self, infer_root, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{function, numeric, unit};
+pub mod convert_pronoun;
 pub(crate) mod recursecheck;
-pub mod selfconvert;
 use crate::mir::{self, Argument, Instruction, Mir, StateSize, VPtr, VReg, Value};
 
 use std::sync::Arc;
@@ -307,13 +307,13 @@ impl Context {
             Literal::Float(f) => self.push_inst(Instruction::Float(
                 f.parse::<f64>().expect("illegal float format"),
             )),
-            Literal::SelfLit => unreachable!(),
             Literal::Now => {
                 let ftype = numeric!();
                 let fntype = function!(vec![], ftype);
                 let getnow = Arc::new(Value::ExtFunction("_mimium_getnow".to_symbol(), fntype));
                 self.push_inst(Instruction::CallCls(getnow, vec![], ftype))
             }
+            Literal::SelfLit | Literal::PlaceHolder => unreachable!(),
         };
         Ok(v)
     }
@@ -563,6 +563,7 @@ impl Context {
                     Ok((res, rt))
                 }
             }
+            Expr::PipeApply(_, _) => unreachable!(),
             Expr::Lambda(ids, _rett, body) => {
                 let (atypes, rt) = match ty.to_type() {
                     Type::Function(atypes, rt, _) => (atypes.clone(), rt),
@@ -777,7 +778,7 @@ impl ReportableError for CompileError {
 
 pub fn compile(root_expr_id: ExprNodeId) -> Result<Mir, Box<dyn ReportableError>> {
     let ast2 = recursecheck::convert_recurse(root_expr_id);
-    let expr2 = selfconvert::convert_self_top(ast2).map_err(|e| {
+    let expr2 = convert_pronoun::convert_pronoun(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;

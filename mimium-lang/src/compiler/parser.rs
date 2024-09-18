@@ -59,6 +59,7 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
         Token::Str(s) => Literal::String(s),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
+        Token::PlaceHolder => Literal::PlaceHolder,
     }
     .map_with_span(|e, s| Expr::Literal(e).into_id(s))
     .labelled("literal")
@@ -117,15 +118,22 @@ where
     OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
 {
     prec.clone()
-        .then(op.then(prec).repeated())
+        .then(
+            op.then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+                .then(prec)
+                .repeated(),
+        )
         .foldl(move |x, ((op, opspan), y)| {
+            let apply_span = x.to_span().start..y.to_span().end;
             let arg = match op {
+                // In |>'s case, placeholders (_) are replaced later
+                Op::Pipe => return Expr::PipeApply(x, y).into_id(apply_span),
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
                 Op::At => vec![y, x],
                 _ => vec![x, y],
             };
             Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
-                .into_id(x.to_span().start..y.to_span().end)
+                .into_id(apply_span)
         })
         .boxed()
 }

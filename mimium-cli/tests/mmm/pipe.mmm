@@ -8,5 +8,5 @@ fn dsp(){
     1.0 |>
         do_plus(_, 3.0) |> 
         do_div(16.0, _) |>
-        sqrt(_)
+        sqrt
 }

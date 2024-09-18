@@ -10,7 +10,7 @@ use mimium_lang::interner::ExprNodeId;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
-use mimium_lang::{compiler::emit_mir, compiler::mirgen::selfconvert, repl};
+use mimium_lang::{compiler::emit_mir, compiler::mirgen::convert_pronoun, repl};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -27,7 +27,7 @@ pub struct Args {
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let ast1 = emit_ast(&src.clone())?;
 
-    selfconvert::convert_self_top(ast1).map_err(|e| {
+    convert_pronoun::convert_pronoun(ast1).map_err(|e| {
         let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
         eb
     })

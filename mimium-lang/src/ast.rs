@@ -14,6 +14,7 @@ pub enum Literal {
     Float(String),
     SelfLit,
     Now,
+    PlaceHolder,
 }
 
 impl Expr {
@@ -34,12 +35,13 @@ impl Expr {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Literal(Literal),
+    Literal(Literal), // literal, or special symbols (self, now, _)
     Var(Symbol),
     Block(Option<ExprNodeId>),
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
     Apply(ExprNodeId, Vec<ExprNodeId>),
+    PipeApply(ExprNodeId, ExprNodeId), // LHS and RHS
     Lambda(Vec<TypedId>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
     Assign(Symbol, ExprNodeId),
     Then(ExprNodeId, Option<ExprNodeId>),
@@ -62,6 +64,7 @@ impl fmt::Display for Literal {
             Literal::String(s) => write!(f, "\"{}\"", s),
             Literal::Now => write!(f, "now"),
             Literal::SelfLit => write!(f, "self"),
+            Literal::PlaceHolder => write!(f, "_"),
         }
     }
 }
@@ -115,6 +118,9 @@ impl MiniPrint for Expr {
             Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
                 format!("(app {} ({}))", e1.simple_print(), concat_vec(e2))
+            }
+            Expr::PipeApply(lhs, rhs) => {
+                format!("(pipe {} {})", lhs.simple_print(), rhs.simple_print())
             }
             Expr::Lambda(params, _, body) => {
                 format!("(lambda ({}) {})", concat_vec(params), body.simple_print())

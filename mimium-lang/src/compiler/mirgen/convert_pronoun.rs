@@ -6,6 +6,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
     NoParentSelf(Span),
+    NoPlaceHolder(Span),
 }
 
 type ConvertResult = Result<ExprNodeId, ExprNodeId>;
@@ -19,6 +20,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NoParentSelf(_s) => write!(f, "self cannot be used in global context."),
+            Self::NoPlaceHolder(_s) => write!(f, "The RHS of |> doesn't contain _."),
         }
     }
 }
@@ -27,6 +29,7 @@ impl ReportableError for Error {
     fn get_span(&self) -> std::ops::Range<usize> {
         match self {
             Self::NoParentSelf(s) => s.clone(),
+            Self::NoPlaceHolder(s) => s.clone(),
         }
     }
 }
@@ -153,8 +156,40 @@ fn convert_self(e_id: ExprNodeId, feedctx: FeedId) -> Result<ConvertResult, Erro
     }
 }
 
-pub fn convert_self_top(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
-    let res = convert_self(expr, FeedId::Global)?;
+fn convert_pipe(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
+    match e_id.to_expr() {
+        // if _ is used outside of pipe, treat it as a usual variable.
+        Expr::Literal(Literal::PlaceHolder) => Ok(ConvertResult::Ok(
+            Expr::Var("_".to_symbol()).into_id(e_id.to_span()),
+        )),
+        Expr::PipeApply(arg_to_insert, call_or_fn) => {
+            let expr = match call_or_fn.to_expr() {
+                Expr::Apply(f, args) => {
+                    let mut new_args = args.clone();
+                    let mut any_placeholder = false;
+                    for a in new_args.iter_mut() {
+                        if matches!(a.to_expr(), Expr::Literal(Literal::PlaceHolder)) {
+                            *a = arg_to_insert;
+                            any_placeholder = true;
+                        }
+                    }
+                    if !any_placeholder {
+                        return Err(Error::NoPlaceHolder(call_or_fn.to_span()));
+                    }
+                    Expr::Apply(f, new_args)
+                }
+                _ => Expr::Apply(call_or_fn, vec![arg_to_insert]),
+            };
+            Ok(ConvertResult::Ok(expr.into_id(e_id.to_span())))
+        }
+        // TODO
+        _ => Ok(ConvertResult::Ok(e_id)),
+    }
+}
+
+pub fn convert_pronoun(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
+    let expr = convert_pipe(expr)?;
+    let res = convert_self(get_content(expr), FeedId::Global)?;
     Ok(get_content(res))
 }
 
@@ -186,7 +221,7 @@ mod test {
             None,
         )
         .into_id(0..1);
-        let res = convert_self_top(src).unwrap();
+        let res = convert_pronoun(src).unwrap();
 
         let ans = Expr::Let(
             TypedPattern {
