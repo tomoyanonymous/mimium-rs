@@ -104,7 +104,10 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .map(Pattern::Tuple)
             .or(select! {
                Token::Ident(s) => Pattern::Single(s),
-               Token::PlaceHolder => Pattern::Single("_".to_symbol()), // TODO: this might be distinguished as Pattern::Ignore to skip instructions
+               // TODO: this can be treated specially (e.g. Pattern::Ignore) to
+               // represent an unused variable so that we can skip some
+               // unnecessary processes
+               Token::PlaceHolder => Pattern::Single("_".to_symbol()),
             })
             .labelled("Pattern")
     });
