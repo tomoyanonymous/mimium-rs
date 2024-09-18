@@ -234,9 +234,10 @@ fn convert_pipe(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
     let span = e_id.to_span().clone();
     match e_id.to_expr() {
         Expr::PipeApply(callee, fun) => {
+            let callee = convert_pipe(callee)?;
             let fun = convert_pipe(fun)?;
-            let content = Expr::Apply(fun.unwrap(), vec![callee]).into_id(span.clone());
-            if fun.is_ok() {
+            let content = Expr::Apply(fun.unwrap(), vec![callee.unwrap()]).into_id(span.clone());
+            if callee.is_ok() && fun.is_ok() {
                 Ok(ConvertResult::Ok(content))
             } else {
                 Ok(ConvertResult::Err(content))
