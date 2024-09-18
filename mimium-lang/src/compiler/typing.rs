@@ -5,7 +5,7 @@ use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
-use crate::{function, numeric, unit};
+use crate::{function, integer, numeric, unit};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -86,7 +86,8 @@ pub struct InferContext {
     typescheme_idx: u64,
     level: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
-    scheme_map: BTreeMap<u64, Rc<RefCell<TypeVar>>>,
+    generalize_map: BTreeMap<u64, u64>,
+    instantiate_map: BTreeMap<u64, Rc<RefCell<TypeVar>>>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
@@ -97,7 +98,8 @@ impl std::default::Default for InferContext {
             typescheme_idx: 0,
             level: 0,
             subst_map: Default::default(),
-            scheme_map: Default::default(),
+            generalize_map: Default::default(),
+            instantiate_map: Default::default(),
             result_map: Default::default(),
             env: Environment::<TypeNodeId>::new(),
         };
@@ -134,6 +136,7 @@ impl InferContext {
             intrinsics::ABS,
             intrinsics::SQRT,
         ];
+
         let mut binds = binop_names
             .iter()
             .map(|n| (n.to_symbol(), binop_ty))
@@ -142,10 +145,17 @@ impl InferContext {
             .iter()
             .map(|n| (n.to_symbol(), uniop_ty))
             .collect_into(&mut binds);
-        binds.push((
-            intrinsics::DELAY.to_symbol(),
-            function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
-        ));
+        binds.extend_from_slice(&[
+            (
+                intrinsics::DELAY.to_symbol(),
+                function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
+            ),
+            (
+                intrinsics::TOFLOAT.to_symbol(),
+                function!(vec![integer!()], numeric!()),
+            ),
+        ]);
+
         env.add_bind(&binds);
     }
     fn register_builtin(env: &mut Environment<TypeNodeId>) {
@@ -163,6 +173,12 @@ impl InferContext {
         .into_id();
         self.interm_idx += 1;
         res
+    }
+    fn get_typescheme(&mut self, tvid: u64) -> TypeNodeId {
+        self.generalize_map.get(&tvid).cloned().map_or_else(
+            || self.gen_typescheme(),
+            |id| Type::TypeScheme(id).into_id(),
+        )
     }
     fn gen_typescheme(&mut self) -> TypeNodeId {
         let res = Type::TypeScheme(self.typescheme_idx).into_id();
@@ -340,19 +356,19 @@ impl InferContext {
     fn generalize(&mut self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Intermediate(tvar) => {
-                let &TypeVar { level, .. } = &tvar.borrow() as _;
+                let &TypeVar { level, var, .. } = &tvar.borrow() as _;
                 if level > self.level {
-                    self.gen_typescheme()
+                    self.get_typescheme(var)
                 } else {
                     t
                 }
             }
-            _ => t,
+            _ => t.apply_fn(|t| self.generalize(t)),
         }
     }
     fn instantiate(&mut self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
-            Type::TypeScheme(id) => self.scheme_map.get(&id).cloned().map_or_else(
+            Type::TypeScheme(id) => self.instantiate_map.get(&id).cloned().map_or_else(
                 || self.gen_intermediate_type(),
                 |tv| Type::Intermediate(tv.clone()).into_id(),
             ),
@@ -505,7 +521,9 @@ impl InferContext {
                 let body_i = self.gen_intermediate_type();
                 self.env.add_bind(&[(id.id, body_i)]);
                 let bodyt = self.infer_type_levelup(*body)?;
-                let _ = Self::unify_types(idt, bodyt, body.to_span())?;
+                let gt = self.generalize(bodyt);
+
+                let _ = Self::unify_types(idt, gt, body.to_span())?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -524,6 +542,7 @@ impl InferContext {
             }
             Expr::Var(name) => {
                 let res = self.lookup(name, &span)?;
+                log::debug!("{} {} /level{}", name.as_str(), res, self.level);
                 Ok(self.instantiate(res))
             }
             Expr::Apply(fun, callee) => {
