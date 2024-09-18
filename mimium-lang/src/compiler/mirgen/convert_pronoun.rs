@@ -201,25 +201,25 @@ fn convert_placeholder(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
                 .any(|e| matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder))) =>
         {
             let fun = convert_placeholder(fun)?;
-            // Currently, this assumes _ creates a single-argument lambda no
-            // matter how many times `_` is used repeatedly.
-            let lambda_arg_id = "__lambda_arg".to_symbol();
+            let mut lambda_args: Vec<TypedId> = Vec::with_capacity(args.len());
             let new_args = args
                 .iter()
-                .map(|e| {
+                .enumerate()
+                .map(|(i, e)| {
                     if matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder)) {
-                        Expr::Var(lambda_arg_id).into_id(e.to_span())
+                        let id = format!("__lambda_arg_{i}").to_symbol();
+                        lambda_args.push(TypedId {
+                            id,
+                            ty: Type::Unknown.into_id_with_span(span.clone()),
+                        });
+                        Expr::Var(id).into_id(e.to_span())
                     } else {
                         *e
                     }
                 })
                 .collect::<Vec<_>>();
-            let lambda_arg = vec![TypedId {
-                id: lambda_arg_id,
-                ty: Type::Unknown.into_id_with_span(span.clone()),
-            }];
             let body = Expr::Apply(fun.unwrap(), new_args).into_id(span.clone());
-            let content = Expr::Lambda(lambda_arg, None, body).into_id(span.clone());
+            let content = Expr::Lambda(lambda_args, None, body).into_id(span.clone());
             if fun.is_ok() {
                 Ok(ConvertResult::Ok(content))
             } else {
