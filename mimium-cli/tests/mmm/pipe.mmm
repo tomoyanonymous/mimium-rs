@@ -1,12 +1,9 @@
 // TODO: this isn't pipe yet!!!
-fn do_plus(x, y) {
-    x + y
-}
 fn do_div(x, y) {
     x / y
 }
 fn dsp(){
-    let p = do_plus(_, 3.0)
+    let p = _ + 3.0
     let d = do_div(16.0, _)
     sqrt(d(p(1.0)))
 }
