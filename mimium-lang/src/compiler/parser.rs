@@ -131,7 +131,6 @@ where
         .foldl(move |x, ((op, opspan), y)| {
             let apply_span = x.to_span().start..y.to_span().end;
             let arg = match op {
-                // In |>'s case, placeholders (_) are replaced later
                 Op::Pipe => return Expr::PipeApply(x, y).into_id(apply_span),
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
                 Op::At => vec![y, x],

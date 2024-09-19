@@ -70,8 +70,8 @@ fn placeholder() {
 
 #[test]
 fn pipe() {
-    let res = run_file_test_mono("pipe.mmm", 1).unwrap();
-    let ans = vec![123.0];
+    let res = run_file_test_stereo("pipe.mmm", 1).unwrap();
+    let ans = vec![123.0, 123.0];
     assert_eq!(res, ans);
 }
 
