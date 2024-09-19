@@ -176,6 +176,13 @@ where
             })
             .boxed()
     };
+    // allow pipe opertor to absorb linebreaks so that it can be also used at
+    // the head of the line.
+    let pipe = just(Token::LineBreak)
+        .repeated()
+        .then(just(Token::Op(Op::Pipe)))
+        .map_with_span(|_, s| (Op::Pipe, s))
+        .boxed();
     //defining binary operators in order of precedence.
     let ops = [
         optoken(Op::Exponent),
@@ -196,7 +203,7 @@ where
             optoken(Op::GreaterEqual),
         ))
         .boxed(),
-        optoken(Op::Pipe),
+        pipe,
         optoken(Op::At),
     ];
     ops.into_iter().fold(unary.boxed(), binop_folder)
