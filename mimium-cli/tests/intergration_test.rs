@@ -62,6 +62,20 @@ fn recursion() {
 }
 
 #[test]
+fn placeholder() {
+    let res = run_file_test_mono("placeholder.mmm", 1).unwrap();
+    let ans = vec![123.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn pipe() {
+    let res = run_file_test_stereo("pipe.mmm", 1).unwrap();
+    let ans = vec![123.0, 123.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn counter() {
     let res = run_file_test_mono("counter.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];

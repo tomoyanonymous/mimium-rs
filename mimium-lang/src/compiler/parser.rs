@@ -59,6 +59,7 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
         Token::Str(s) => Literal::String(s),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
+        Token::PlaceHolder => Literal::PlaceHolder,
     }
     .map_with_span(|e, s| Expr::Literal(e).into_id(s))
     .labelled("literal")
@@ -100,7 +101,12 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(Pattern::Tuple)
-            .or(select! { Token::Ident(s) => Pattern::Single(s) })
+            .or(select! {
+                Token::Ident(s) => Pattern::Single(s),
+                // Note: _ represents an unused variable, but it is treated as
+                // an ordinary symbol here.
+                Token::PlaceHolder => Pattern::Single("_".to_symbol()),
+            })
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
@@ -117,15 +123,21 @@ where
     OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
 {
     prec.clone()
-        .then(op.then(prec).repeated())
+        .then(
+            op.then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+                .then(prec)
+                .repeated(),
+        )
         .foldl(move |x, ((op, opspan), y)| {
+            let apply_span = x.to_span().start..y.to_span().end;
             let arg = match op {
+                Op::Pipe => return Expr::PipeApply(x, y).into_id(apply_span),
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
                 Op::At => vec![y, x],
                 _ => vec![x, y],
             };
             Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
-                .into_id(x.to_span().start..y.to_span().end)
+                .into_id(apply_span)
         })
         .boxed()
 }
@@ -163,6 +175,13 @@ where
             })
             .boxed()
     };
+    // allow pipe opertor to absorb linebreaks so that it can be also used at
+    // the head of the line.
+    let pipe = just(Token::LineBreak)
+        .repeated()
+        .then(just(Token::Op(Op::Pipe)))
+        .map_with_span(|_, s| (Op::Pipe, s))
+        .boxed();
     //defining binary operators in order of precedence.
     let ops = [
         optoken(Op::Exponent),
@@ -183,7 +202,7 @@ where
             optoken(Op::GreaterEqual),
         ))
         .boxed(),
-        optoken(Op::Pipe),
+        pipe,
         optoken(Op::At),
     ];
     ops.into_iter().fold(unary.boxed(), binop_folder)

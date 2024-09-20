@@ -367,6 +367,7 @@ impl InferContext {
             Literal::String(_s) => PType::String,
             Literal::Now => PType::Numeric,
             Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
+            Literal::PlaceHolder => panic!("\"_\" should not be shown at type inference stage"),
         };
         Ok(Type::Primitive(pt).into_id())
     }
