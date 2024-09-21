@@ -11,7 +11,7 @@ edition = "2021"
 [dependencies]
 
 chumsky = "0.9"
-ariadne = "0.1.5"
+ariadne = "0.4"
 log = "0.4.22"
 string-interner = "0.17.0"
 slotmap = "1.0.7"
