@@ -1,4 +1,5 @@
 use std::io::stdin;
+use std::path::Path;
 
 // pub mod wcalculus;
 use clap::Parser;
@@ -14,9 +15,17 @@ use mimium_lang::{compiler::emit_mir, compiler::mirgen::convert_pronoun, repl};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
+    #[command(flatten)]
+    pub mode: Mode,
+
     /// File name
     #[clap(value_parser)]
     pub file: Option<String>,
+}
+
+#[derive(clap::Args, Debug)]
+#[group(required = false, multiple = false)]
+pub struct Mode {
     #[arg(long, default_value_t = false)]
     pub emit_ast: bool,
     #[arg(long, default_value_t = false)]
@@ -24,6 +33,7 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub emit_bytecode: bool,
 }
+
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let ast1 = emit_ast(&src.clone())?;
 
@@ -41,55 +51,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         colog::default_builder().init();
     }
+
     let args = Args::parse();
-    match args.file {
+    match &args.file {
         Some(file) => {
             let (content, fullpath) = fileloader::load(file.clone())?;
-            if args.emit_ast {
-                println!("Filename: {}", fullpath.display());
-                let ast = emit_ast_local(&content);
-                match ast {
-                    Ok(ast) => println!("{}", ast.pretty_print()),
-                    Err(e) => {
-                        report(&content, fullpath, &e);
-                    }
-                }
-            } else if args.emit_mir {
-                println!("Filename: {}", fullpath.display());
-                match emit_mir(&content.clone()) {
-                    Ok(mir) => println!("{mir}"),
-                    Err(e) => {
-                        report(&content, fullpath, &e);
-                    }
-                }
-            } else if args.emit_bytecode {
-                println!("Filename: {}", fullpath.display());
-                match emit_bytecode(&content.clone()) {
-                    Ok(prog) => println!("{prog}"),
-                    Err(e) => {
-                        report(&content, fullpath, &e);
-                    }
-                }
-            } else {
-                println!("Filename: {}", fullpath.display());
-                match emit_bytecode(&content.clone()) {
-                    Ok(prog) => {
-                        let mut driver = load_default_runtime();
-                        driver.init(prog, None, 4096);
-                        let mut dummy = String::new();
-                        driver.play();
-                        //wait until input something
-                        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
-                    }
-                    Err(e) => {
-                        report(&content, fullpath, &e);
-                    }
+            match run_file(&args, &content, &fullpath) {
+                Ok(_) => {}
+                Err(e) => {
+                    report(&content, fullpath, &e);
+                    return Err(format!("Failed to process {file}").into());
                 }
             }
         }
         None => {
             repl::run_repl();
         }
-    };
+    }
+    Ok(())
+}
+
+fn run_file(
+    args: &Args,
+    content: &str,
+    fullpath: &Path,
+) -> Result<(), Vec<Box<dyn ReportableError>>> {
+    log::debug!("Filename: {}", fullpath.display());
+    if args.mode.emit_ast {
+        let ast = emit_ast_local(&content)?;
+        println!("{}", ast.pretty_print());
+    } else if args.mode.emit_mir {
+        let mir = emit_mir(&content.clone())?;
+        println!("{mir}");
+    } else {
+        let prog = emit_bytecode(&content.clone())?;
+
+        if args.mode.emit_bytecode {
+            println!("{prog}");
+            return Ok(());
+        }
+
+        let mut driver = load_default_runtime();
+        driver.init(prog, None, 4096);
+        let mut dummy = String::new();
+        driver.play();
+        //wait until input something
+        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+    }
     Ok(())
 }
