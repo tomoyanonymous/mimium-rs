@@ -5,6 +5,7 @@ use std::path::Path;
 use clap::Parser;
 use colog;
 use log;
+use mimium_audiodriver::backends::mock::MockDriver;
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
 use mimium_lang::interner::ExprNodeId;
@@ -26,12 +27,21 @@ pub struct Args {
 #[derive(clap::Args, Debug)]
 #[group(required = false, multiple = false)]
 pub struct Mode {
+    /// Print AST and exit
     #[arg(long, default_value_t = false)]
     pub emit_ast: bool,
+
+    /// Print MIR and exit
     #[arg(long, default_value_t = false)]
     pub emit_mir: bool,
+
+    /// Print bytecode and exit
     #[arg(long, default_value_t = false)]
     pub emit_bytecode: bool,
+
+    /// Write out the signal values to stdout in CSV format
+    #[arg(long, default_value_t = 0)]
+    pub emit_number: usize,
 }
 
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
@@ -95,12 +105,35 @@ fn run_file(
             return Ok(());
         }
 
-        let mut driver = load_default_runtime();
-        driver.init(prog, None, 4096);
-        let mut dummy = String::new();
-        driver.play();
-        //wait until input something
-        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        if args.mode.emit_number > 0 {
+            let mut driver = MockDriver::new(prog, None);
+            let chunk_size = driver.get_ochannels();
+
+            let header = (0..chunk_size)
+                .map(|i| format!("ch{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            println!("{header}");
+
+            for sample in driver
+                .play_times(args.mode.emit_number as _)
+                .chunks(chunk_size)
+            {
+                let line = sample
+                    .iter()
+                    .map(|x| format!("{x:?}")) // :? is to display "0" as "0.0"
+                    .collect::<Vec<_>>()
+                    .join(",");
+                println!("{line}");
+            }
+        } else {
+            let mut driver = load_default_runtime();
+            driver.init(prog, None, 4096);
+            let mut dummy = String::new();
+            driver.play();
+            //wait until input something
+            let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        }
     }
     Ok(())
 }

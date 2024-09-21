@@ -62,6 +62,10 @@ impl MockDriver {
         }
         &self.localbuffer
     }
+
+    pub fn get_ochannels(&self) -> usize {
+        self.ochannels as _
+    }
 }
 
 impl Driver for MockDriver {
