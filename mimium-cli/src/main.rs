@@ -3,8 +3,6 @@ use std::path::Path;
 
 // pub mod wcalculus;
 use clap::Parser;
-use colog;
-use log;
 use mimium_audiodriver::backends::mock::MockDriver;
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
@@ -45,7 +43,7 @@ pub struct Mode {
 }
 
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast1 = emit_ast(&src)?;
+    let ast1 = emit_ast(src)?;
 
     convert_pronoun::convert_pronoun(ast1).map_err(|e| {
         let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
@@ -92,13 +90,13 @@ fn run_file(
 ) -> Result<(), Vec<Box<dyn ReportableError>>> {
     log::debug!("Filename: {}", fullpath.display());
     if args.mode.emit_ast {
-        let ast = emit_ast_local(&content)?;
+        let ast = emit_ast_local(content)?;
         println!("{}", ast.pretty_print());
     } else if args.mode.emit_mir {
-        let mir = emit_mir(&content)?;
+        let mir = emit_mir(content)?;
         println!("{mir}");
     } else {
-        let prog = emit_bytecode(&content)?;
+        let prog = emit_bytecode(content)?;
 
         if args.mode.emit_bytecode {
             println!("{prog}");

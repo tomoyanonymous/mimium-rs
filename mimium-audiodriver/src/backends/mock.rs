@@ -3,11 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use mimium_lang::{
-    interner::{Symbol, ToSymbol},
-    runtime::scheduler,
-    runtime::vm::{ExtClsType, Machine},
-};
+use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm::Machine};
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 pub struct MockDriver {
