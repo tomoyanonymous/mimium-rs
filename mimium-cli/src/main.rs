@@ -45,7 +45,7 @@ pub struct Mode {
 }
 
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast1 = emit_ast(&src.clone())?;
+    let ast1 = emit_ast(&src)?;
 
     convert_pronoun::convert_pronoun(ast1).map_err(|e| {
         let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
@@ -95,10 +95,10 @@ fn run_file(
         let ast = emit_ast_local(&content)?;
         println!("{}", ast.pretty_print());
     } else if args.mode.emit_mir {
-        let mir = emit_mir(&content.clone())?;
+        let mir = emit_mir(&content)?;
         println!("{mir}");
     } else {
-        let prog = emit_bytecode(&content.clone())?;
+        let prog = emit_bytecode(&content)?;
 
         if args.mode.emit_bytecode {
             println!("{prog}");
