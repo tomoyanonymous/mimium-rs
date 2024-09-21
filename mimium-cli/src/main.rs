@@ -59,6 +59,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match run_file(&args, &content, &fullpath) {
                 Ok(_) => {}
                 Err(e) => {
+                    // Note: I was hoping to implement std::error::Error for a
+                    // struct around ReportableError and directly return it,
+                    // however, std::error::Error cannot be so color-rich as
+                    // ariadne because it just uses std::fmt::Display.
                     report(&content, fullpath, &e);
                     return Err(format!("Failed to process {file}").into());
                 }
