@@ -7,7 +7,7 @@ use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm::Machine};
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 
-/// Execute the program n times and write the result values to `localbuffer`.`
+/// Execute the program n times and write the result values to `localbuffer`.
 pub struct LocalBufferDriver {
     pub vmdata: Option<RuntimeData>,
     count: Arc<AtomicU64>,

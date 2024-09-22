@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
 use clap::Parser;
-use mimium_audiodriver::backends::local_buffer::LocalBufferDriver;
-use mimium_audiodriver::driver::{load_default_runtime, Driver};
+use mimium_audiodriver::backends::csv::csv_driver;
+use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
 use mimium_lang::interner::ExprNodeId;
 use mimium_lang::utils::error::ReportableError;
@@ -103,43 +103,20 @@ fn run_file(
             return Ok(());
         }
 
-        if let Some(output) = &args.output {
-            let format = match output.extension() {
-                Some(ext) => match ext.to_string_lossy().as_ref() {
-                    "csv" => "csv",
-                    _ => panic!("Unsupported extension: {output:?}"),
-                },
-                None => panic!("No extension found"),
-            };
-
-            // TODO: use local_buffer_driver()
-            let mut driver = LocalBufferDriver::new(10);
-            driver.init(prog, None);
-            let chunk_size = driver.get_ochannels();
-
-            let header = (0..chunk_size)
-                .map(|i| format!("ch{i}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            println!("{header}");
-
-            driver.play();
-            for sample in driver.get_generated_samples().chunks(chunk_size) {
-                let line = sample
-                    .iter()
-                    .map(|x| format!("{x:?}")) // :? is to display "0" as "0.0"
-                    .collect::<Vec<_>>()
-                    .join(",");
-                println!("{line}");
-            }
+        let mut driver = if let Some(output) = &args.output {
+            // TODO: check the file extension, specify times
+            csv_driver(10, output)
         } else {
-            let mut driver = load_default_runtime();
-            driver.init(prog, None);
-            let mut dummy = String::new();
-            driver.play();
-            //wait until input something
-            let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
-        }
+            load_default_runtime()
+        };
+        driver.init(prog, None);
+        driver.play();
+
+        //wait until input something
+        let mut dummy = String::new();
+        println!("Press Enter to exit");
+        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
     }
+
     Ok(())
 }
