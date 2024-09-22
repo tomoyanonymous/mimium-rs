@@ -26,12 +26,12 @@ pub struct Args {
     pub output: Option<PathBuf>,
 
     /// Output format
-    #[arg(long, short, value_enum)]
+    #[arg(long, value_enum)]
     pub output_format: Option<OutputFileFormat>,
 
     /// How many times to execute the code. This is only effective when --output
     /// is specified.
-    #[arg(long, short, default_value_t = 10)]
+    #[arg(long, default_value_t = 10)]
     pub times: usize,
 }
 
