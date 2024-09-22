@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
 use clap::{Parser, ValueEnum};
-use mimium_audiodriver::backends::csv::csv_driver;
+use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
 use mimium_lang::interner::ExprNodeId;
@@ -117,25 +117,24 @@ fn run_file(
             return Ok(());
         }
 
-        let mut driver = if let Some(output) = &args.output {
-            match args.output_format {
-                // When --output-format is explicitly specified, use it.
-                Some(OutputFileFormat::Csv) => csv_driver(args.times, output),
-                // Otherwise, guess from the file extension.
-                _ => match output.extension() {
-                    Some(x) if &x.to_os_string() == "csv" => csv_driver(args.times, output),
-                    _ => panic!("cannot determine the output file format"),
-                },
-            }
-        } else {
-            load_default_runtime()
+        let mut driver = match (&args.output_format, &args.output) {
+            // if none of the output options is specified, make sounds.
+            (None, None) => load_default_runtime(),
+            // When --output-format is explicitly specified, use it.
+            (Some(OutputFileFormat::Csv), Some(output)) => csv_driver(args.times, output),
+            (Some(OutputFileFormat::Csv), None) => csv_driver_stdout(args.times),
+            // Otherwise, guess from the file extension.
+            (None, Some(output)) => match output.extension() {
+                Some(x) if &x.to_os_string() == "csv" => csv_driver(args.times, output),
+                _ => panic!("cannot determine the output file format"),
+            },
         };
         driver.init(prog, None);
         driver.play();
 
         //wait until input something
         let mut dummy = String::new();
-        println!("Press Enter to exit");
+        eprintln!("Press Enter to exit");
         let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
     }
 

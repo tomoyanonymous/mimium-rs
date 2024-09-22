@@ -10,17 +10,15 @@ use super::local_buffer::LocalBufferDriver;
 
 pub struct CsvDriver {
     driver: LocalBufferDriver,
-    csv_file: BufWriter<File>,
+    csv_file: Box<dyn Write>,
 }
 
 impl CsvDriver {
-    pub fn new<P: AsRef<Path>>(times: usize, path: P) -> std::io::Result<Self> {
-        let csv_file_inner = File::create(path.as_ref())?;
-        let csv_file = BufWriter::new(csv_file_inner);
-        Ok(Self {
+    pub fn new(times: usize, csv_file: Box<dyn Write>) -> Self {
+        Self {
             driver: LocalBufferDriver::new(times),
             csv_file,
-        })
+        }
     }
 }
 
@@ -99,5 +97,12 @@ impl Driver for CsvDriver {
 }
 
 pub fn csv_driver<P: AsRef<Path>>(times: usize, path: P) -> Box<dyn Driver<Sample = f64>> {
-    Box::new(CsvDriver::new(times, path.as_ref()).unwrap())
+    let csv_file_inner = File::create(path.as_ref()).unwrap();
+    let csv_file = Box::new(BufWriter::new(csv_file_inner));
+    Box::new(CsvDriver::new(times, csv_file))
+}
+
+pub fn csv_driver_stdout(times: usize) -> Box<dyn Driver<Sample = f64>> {
+    let csv_file = Box::new(BufWriter::new(std::io::stdout()));
+    Box::new(CsvDriver::new(times, csv_file))
 }
