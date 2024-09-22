@@ -56,14 +56,12 @@ impl ReportableError for Error {
     }
 }
 
+// Note: `Driver` trait doesn't have `new()` so that the struct can have its own
+// `new()` with any parameters specific to the type. With this in mind, `init()`
+// can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
-    fn init(
-        &mut self,
-        program: vm::Program,
-        sample_rate: Option<SampleRate>,
-        buffer_size: usize,
-    ) -> bool;
+    fn init(&mut self, program: vm::Program, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
@@ -105,5 +103,5 @@ impl RuntimeData {
 }
 
 pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
-    Box::new(crate::backends::cpal::NativeDriver::default())
+    crate::backends::cpal::native_driver(4096)
 }

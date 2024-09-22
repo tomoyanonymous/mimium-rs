@@ -1,4 +1,7 @@
-use mimium_audiodriver::{backends::mock::MockDriver, driver::SampleRate};
+use mimium_audiodriver::{
+    backends::mock::MockDriver,
+    driver::{Driver, SampleRate},
+};
 use mimium_lang::{
     function,
     interner::ToSymbol as _,
@@ -46,7 +49,8 @@ fn getnow_test() {
     };
 
     let times = 10;
-    let mut driver = MockDriver::new(prog, Some(SampleRate(48000)));
+    let mut driver = MockDriver::new();
+    driver.init(prog, Some(SampleRate(48000)));
 
     let res = driver.play_times(times);
     let answer = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];

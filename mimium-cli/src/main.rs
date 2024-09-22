@@ -1,10 +1,10 @@
 use std::io::stdin;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
 use clap::Parser;
 use mimium_audiodriver::backends::mock::MockDriver;
-use mimium_audiodriver::driver::load_default_runtime;
+use mimium_audiodriver::driver::{load_default_runtime, Driver};
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
 use mimium_lang::interner::ExprNodeId;
 use mimium_lang::utils::error::ReportableError;
@@ -20,6 +20,10 @@ pub struct Args {
     /// File name
     #[clap(value_parser)]
     pub file: Option<String>,
+
+    /// Write out the signal values to a file (e.g. out.csv).
+    #[arg(long, short)]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -36,10 +40,6 @@ pub struct Mode {
     /// Print bytecode and exit
     #[arg(long, default_value_t = false)]
     pub emit_bytecode: bool,
-
-    /// Write out the signal values to stdout in CSV format
-    #[arg(long, default_value_t = 0)]
-    pub emit_number: usize,
 }
 
 fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
@@ -103,8 +103,18 @@ fn run_file(
             return Ok(());
         }
 
-        if args.mode.emit_number > 0 {
-            let mut driver = MockDriver::new(prog, None);
+        if let Some(output) = &args.output {
+            let format = match output.extension() {
+                Some(ext) => match ext.to_string_lossy().as_ref() {
+                    "csv" => "csv",
+                    _ => panic!("Unsupported extension: {output:?}"),
+                },
+                None => panic!("No extension found"),
+            };
+
+            // TODO: use mock_driver()
+            let mut driver = MockDriver::new();
+            driver.init(prog, None);
             let chunk_size = driver.get_ochannels();
 
             let header = (0..chunk_size)
@@ -113,10 +123,7 @@ fn run_file(
                 .join(",");
             println!("{header}");
 
-            for sample in driver
-                .play_times(args.mode.emit_number as _)
-                .chunks(chunk_size)
-            {
+            for sample in driver.play_times(10).chunks(chunk_size) {
                 let line = sample
                     .iter()
                     .map(|x| format!("{x:?}")) // :? is to display "0" as "0.0"
@@ -126,7 +133,7 @@ fn run_file(
             }
         } else {
             let mut driver = load_default_runtime();
-            driver.init(prog, None, 4096);
+            driver.init(prog, None);
             let mut dummy = String::new();
             driver.play();
             //wait until input something

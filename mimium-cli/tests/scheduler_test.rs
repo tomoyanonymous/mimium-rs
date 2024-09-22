@@ -1,6 +1,6 @@
 mod common;
 use common::*;
-use mimium_audiodriver::backends::mock::MockDriver;
+use mimium_audiodriver::{backends::mock::MockDriver, driver::Driver};
 use mimium_lang::compiler;
 
 #[test]
@@ -43,16 +43,19 @@ fn scheduler_gc_test() {
     let (_, src) = load_src("scheduler_counter_indirect.mmm");
     let bytecode = compiler::emit_bytecode(&src).unwrap();
 
-    let mut driver = MockDriver::new(bytecode.clone(), None);
+    let mut driver = MockDriver::new();
+    driver.init(bytecode.clone(), None);
     let _ = driver.play_times(2 as _);
-    let first = driver.vmdata.vm.closures.len();
+    let first = driver.vmdata.unwrap().vm.closures.len();
 
-    let mut driver = MockDriver::new(bytecode.clone(), None);
+    let mut driver = MockDriver::new();
+    driver.init(bytecode.clone(), None);
     let _ = driver.play_times(3 as _);
-    let second = driver.vmdata.vm.closures.len();
+    let second = driver.vmdata.unwrap().vm.closures.len();
 
-    let mut driver = MockDriver::new(bytecode, None);
+    let mut driver = MockDriver::new();
+    driver.init(bytecode.clone(), None);
     let _ = driver.play_times(4 as _);
-    let third = driver.vmdata.vm.closures.len();
+    let third = driver.vmdata.unwrap().vm.closures.len();
     assert!(first == second && second == third)
 }

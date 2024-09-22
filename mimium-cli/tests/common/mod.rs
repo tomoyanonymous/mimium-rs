@@ -1,7 +1,7 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
-use mimium_audiodriver::backends::mock::MockDriver;
+use mimium_audiodriver::{backends::mock::MockDriver, driver::Driver};
 use mimium_lang::{
     compiler,
     interner::ToSymbol,
@@ -57,7 +57,8 @@ fn run_source_with_scheduler(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
 
-    let mut driver = MockDriver::new(bytecode, None);
+    let mut driver = MockDriver::new();
+    driver.init(bytecode, None);
     Ok(driver.play_times(times as _).to_vec())
 }
 
