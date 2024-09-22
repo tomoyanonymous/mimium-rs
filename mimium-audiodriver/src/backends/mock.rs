@@ -11,7 +11,7 @@ pub struct MockDriver {
     count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,
-    n: usize,
+    times: usize, // MockDriver executes the code only n times.
     _ichannels: u64,
     ochannels: u64,
 }
@@ -25,7 +25,7 @@ impl Default for MockDriver {
             count,
             samplerate: SampleRate(48000),
             localbuffer: vec![],
-            n: 0,
+            times: 0,
             _ichannels: 0,
             ochannels: 0,
         }
@@ -33,7 +33,7 @@ impl Default for MockDriver {
 }
 
 impl MockDriver {
-    pub fn new(n: usize) -> Self {
+    pub fn new(times: usize) -> Self {
         let count = Arc::new(AtomicU64::new(0));
 
         Self {
@@ -41,7 +41,7 @@ impl MockDriver {
             count,
             samplerate: SampleRate(48000),
             localbuffer: vec![],
-            n,
+            times,
             _ichannels: 0,
             ochannels: 0,
         }
@@ -69,7 +69,7 @@ impl Driver for MockDriver {
             .expect("no dsp function found");
         let (_, dsp_func) = &program.global_fn_table[dsp_i];
         self.ochannels = dsp_func.nret as u64;
-        self.localbuffer = Vec::with_capacity(dsp_func.nret * self.n);
+        self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
         self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
 
         //todo: split as trait interface method
@@ -82,26 +82,15 @@ impl Driver for MockDriver {
     }
 
     fn play(&mut self) -> bool {
-        let _ = self
-            .vmdata
-            .as_mut()
-            .expect("Not initialized yet?")
-            .run_main();
+        let vmdata = self.vmdata.as_mut().expect("Not initialized yet?");
+        let _ = vmdata.run_main();
         self.localbuffer.clear();
-        for _ in 0..self.n {
+        for _ in 0..self.times {
             let now = self.count.load(Ordering::Relaxed);
 
-            let _ = self
-                .vmdata
-                .as_mut()
-                .expect("Not initialized yet?")
-                .run_dsp(Time(now));
+            let _ = vmdata.run_dsp(Time(now));
             let res = Machine::get_as_array::<<MockDriver as Driver>::Sample>(
-                self.vmdata
-                    .as_mut()
-                    .expect("Not initialized yet?")
-                    .vm
-                    .get_top_n(self.ochannels as _),
+                vmdata.vm.get_top_n(self.ochannels as _),
             );
             self.localbuffer.extend_from_slice(res);
             //update current time.
@@ -127,6 +116,6 @@ impl Driver for MockDriver {
     }
 }
 
-pub fn mock_driver(n: usize) -> Box<dyn Driver<Sample = f64>> {
-    Box::new(MockDriver::new(n))
+pub fn mock_driver(times: usize) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(MockDriver::new(times))
 }
