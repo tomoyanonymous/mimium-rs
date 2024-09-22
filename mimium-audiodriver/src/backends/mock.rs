@@ -11,6 +11,7 @@ pub struct MockDriver {
     count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,
+    n: usize,
     _ichannels: u64,
     ochannels: u64,
 }
@@ -24,6 +25,7 @@ impl Default for MockDriver {
             count,
             samplerate: SampleRate(48000),
             localbuffer: vec![],
+            n: 0,
             _ichannels: 0,
             ochannels: 0,
         }
@@ -31,17 +33,62 @@ impl Default for MockDriver {
 }
 
 impl MockDriver {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(n: usize) -> Self {
+        let count = Arc::new(AtomicU64::new(0));
+
+        Self {
+            vmdata: None,
+            count,
+            samplerate: SampleRate(48000),
+            localbuffer: vec![],
+            n,
+            _ichannels: 0,
+            ochannels: 0,
+        }
     }
-    pub fn play_times(&mut self, times: usize) -> &[<MockDriver as Driver>::Sample] {
+
+    pub fn get_ochannels(&self) -> usize {
+        self.ochannels as _
+    }
+
+    pub fn get_generated_samples(&self) -> &[<MockDriver as Driver>::Sample] {
+        &self.localbuffer
+    }
+}
+
+impl Driver for MockDriver {
+    type Sample = f64;
+
+    fn init(
+        &mut self,
+        program: mimium_lang::runtime::vm::Program,
+        sample_rate: Option<crate::driver::SampleRate>,
+    ) -> bool {
+        let dsp_i = program
+            .get_fun_index(&"dsp".to_symbol())
+            .expect("no dsp function found");
+        let (_, dsp_func) = &program.global_fn_table[dsp_i];
+        self.ochannels = dsp_func.nret as u64;
+        self.localbuffer = Vec::with_capacity(dsp_func.nret * self.n);
+        self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
+
+        //todo: split as trait interface method
+        let schedule_fn = scheduler::gen_schedule_at();
+        let getnow_fn = crate::runtime_fn::gen_getnowfn(self.count.clone());
+
+        self.vmdata = Some(RuntimeData::new(program, &[schedule_fn], &[getnow_fn]));
+
+        true
+    }
+
+    fn play(&mut self) -> bool {
         let _ = self
             .vmdata
             .as_mut()
             .expect("Not initialized yet?")
             .run_main();
         self.localbuffer.clear();
-        for _ in 0..times {
+        for _ in 0..self.n {
             let now = self.count.load(Ordering::Relaxed);
 
             let _ = self
@@ -60,43 +107,6 @@ impl MockDriver {
             //update current time.
             self.count.store(now + 1, Ordering::Relaxed);
         }
-        &self.localbuffer
-    }
-
-    pub fn get_ochannels(&self) -> usize {
-        self.ochannels as _
-    }
-}
-
-impl Driver for MockDriver {
-    type Sample = f64;
-
-    fn init(
-        &mut self,
-        program: mimium_lang::runtime::vm::Program,
-        sample_rate: Option<crate::driver::SampleRate>,
-    ) -> bool {
-        let dsp_i = program
-            .get_fun_index(&"dsp".to_symbol())
-            .expect("no dsp function found");
-        let (_, dsp_func) = &program.global_fn_table[dsp_i];
-        self.ochannels = dsp_func.nret as u64;
-        self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
-
-        //todo: split as trait interface method
-        let schedule_fn = scheduler::gen_schedule_at();
-        let getnow_fn = crate::runtime_fn::gen_getnowfn(self.count.clone());
-
-        self.vmdata = Some(RuntimeData::new(program, &[schedule_fn], &[getnow_fn]));
-
-        true
-    }
-
-    fn play(&mut self) -> bool {
-        debug_assert!(
-            false,
-            "this is driver for test purpose. to run program, use play_times method"
-        );
         false
     }
 
@@ -117,6 +127,6 @@ impl Driver for MockDriver {
     }
 }
 
-pub fn mock_driver() -> Box<dyn Driver<Sample = f64>> {
-    Box::new(MockDriver::new())
+pub fn mock_driver(n: usize) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(MockDriver::new(n))
 }

@@ -113,7 +113,7 @@ fn run_file(
             };
 
             // TODO: use mock_driver()
-            let mut driver = MockDriver::new();
+            let mut driver = MockDriver::new(10);
             driver.init(prog, None);
             let chunk_size = driver.get_ochannels();
 
@@ -123,7 +123,8 @@ fn run_file(
                 .join(",");
             println!("{header}");
 
-            for sample in driver.play_times(10).chunks(chunk_size) {
+            driver.play();
+            for sample in driver.get_generated_samples().chunks(chunk_size) {
                 let line = sample
                     .iter()
                     .map(|x| format!("{x:?}")) // :? is to display "0" as "0.0"

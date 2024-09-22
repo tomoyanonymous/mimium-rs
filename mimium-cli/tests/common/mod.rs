@@ -57,9 +57,10 @@ fn run_source_with_scheduler(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
 
-    let mut driver = MockDriver::new();
+    let mut driver = MockDriver::new(times as _);
     driver.init(bytecode, None);
-    Ok(driver.play_times(times as _).to_vec())
+    driver.play();
+    Ok(driver.get_generated_samples().to_vec())
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]

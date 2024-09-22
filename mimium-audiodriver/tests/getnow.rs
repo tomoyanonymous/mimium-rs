@@ -49,10 +49,11 @@ fn getnow_test() {
     };
 
     let times = 10;
-    let mut driver = MockDriver::new();
+    let mut driver = MockDriver::new(times);
     driver.init(prog, Some(SampleRate(48000)));
+    driver.play();
 
-    let res = driver.play_times(times);
+    let res = driver.get_generated_samples();
     let answer = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, answer);
 }
