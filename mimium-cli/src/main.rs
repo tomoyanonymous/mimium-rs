@@ -2,7 +2,7 @@ use std::io::stdin;
 use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::csv_driver;
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
@@ -24,6 +24,20 @@ pub struct Args {
     /// Write out the signal values to a file (e.g. out.csv).
     #[arg(long, short)]
     pub output: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, short, value_enum)]
+    pub output_format: Option<OutputFileFormat>,
+
+    /// How many times to execute the code. This is only effective when --output
+    /// is specified.
+    #[arg(long, short, default_value_t = 10)]
+    pub times: usize,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum OutputFileFormat {
+    Csv,
 }
 
 #[derive(clap::Args, Debug)]
@@ -104,8 +118,15 @@ fn run_file(
         }
 
         let mut driver = if let Some(output) = &args.output {
-            // TODO: check the file extension, specify times
-            csv_driver(10, output)
+            match args.output_format {
+                // When --output-format is explicitly specified, use it.
+                Some(OutputFileFormat::Csv) => csv_driver(args.times, output),
+                // Otherwise, guess from the file extension.
+                _ => match output.extension() {
+                    Some(x) if &x.to_os_string() == "csv" => csv_driver(args.times, output),
+                    _ => panic!("cannot determine the output file format"),
+                },
+            }
         } else {
             load_default_runtime()
         };
