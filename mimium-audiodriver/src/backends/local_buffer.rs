@@ -6,17 +6,19 @@ use std::sync::{
 use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm::Machine};
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
-pub struct MockDriver {
+
+/// Execute the program n times and write the result values to `localbuffer`.`
+pub struct LocalBufferDriver {
     pub vmdata: Option<RuntimeData>,
     count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,
-    times: usize, // MockDriver executes the code only n times.
+    times: usize,
     _ichannels: u64,
     ochannels: u64,
 }
 
-impl Default for MockDriver {
+impl Default for LocalBufferDriver {
     fn default() -> Self {
         let count = Arc::new(AtomicU64::new(0));
 
@@ -32,7 +34,7 @@ impl Default for MockDriver {
     }
 }
 
-impl MockDriver {
+impl LocalBufferDriver {
     pub fn new(times: usize) -> Self {
         let count = Arc::new(AtomicU64::new(0));
 
@@ -51,12 +53,12 @@ impl MockDriver {
         self.ochannels as _
     }
 
-    pub fn get_generated_samples(&self) -> &[<MockDriver as Driver>::Sample] {
+    pub fn get_generated_samples(&self) -> &[<LocalBufferDriver as Driver>::Sample] {
         &self.localbuffer
     }
 }
 
-impl Driver for MockDriver {
+impl Driver for LocalBufferDriver {
     type Sample = f64;
 
     fn init(
@@ -89,7 +91,7 @@ impl Driver for MockDriver {
             let now = self.count.load(Ordering::Relaxed);
 
             let _ = vmdata.run_dsp(Time(now));
-            let res = Machine::get_as_array::<<MockDriver as Driver>::Sample>(
+            let res = Machine::get_as_array::<<LocalBufferDriver as Driver>::Sample>(
                 vmdata.vm.get_top_n(self.ochannels as _),
             );
             self.localbuffer.extend_from_slice(res);
@@ -116,6 +118,6 @@ impl Driver for MockDriver {
     }
 }
 
-pub fn mock_driver(times: usize) -> Box<dyn Driver<Sample = f64>> {
-    Box::new(MockDriver::new(times))
+pub fn local_buffer_driver(times: usize) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(LocalBufferDriver::new(times))
 }

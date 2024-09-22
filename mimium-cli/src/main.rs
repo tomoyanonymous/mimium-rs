@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
 use clap::Parser;
-use mimium_audiodriver::backends::mock::MockDriver;
+use mimium_audiodriver::backends::local_buffer::LocalBufferDriver;
 use mimium_audiodriver::driver::{load_default_runtime, Driver};
 use mimium_lang::compiler::{emit_ast, emit_bytecode};
 use mimium_lang::interner::ExprNodeId;
@@ -112,8 +112,8 @@ fn run_file(
                 None => panic!("No extension found"),
             };
 
-            // TODO: use mock_driver()
-            let mut driver = MockDriver::new(10);
+            // TODO: use local_buffer_driver()
+            let mut driver = LocalBufferDriver::new(10);
             driver.init(prog, None);
             let chunk_size = driver.get_ochannels();
 

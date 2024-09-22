@@ -1,5 +1,5 @@
 use mimium_audiodriver::{
-    backends::mock::MockDriver,
+    backends::local_buffer::LocalBufferDriver,
     driver::{Driver, SampleRate},
 };
 use mimium_lang::{
@@ -49,7 +49,7 @@ fn getnow_test() {
     };
 
     let times = 10;
-    let mut driver = MockDriver::new(times);
+    let mut driver = LocalBufferDriver::new(times);
     driver.init(prog, Some(SampleRate(48000)));
     driver.play();
 

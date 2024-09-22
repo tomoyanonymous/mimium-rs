@@ -1,6 +1,6 @@
 mod common;
 use common::*;
-use mimium_audiodriver::{backends::mock::MockDriver, driver::Driver};
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::compiler;
 
 #[test]
@@ -43,17 +43,17 @@ fn scheduler_gc_test() {
     let (_, src) = load_src("scheduler_counter_indirect.mmm");
     let bytecode = compiler::emit_bytecode(&src).unwrap();
 
-    let mut driver2 = MockDriver::new(2);
+    let mut driver2 = LocalBufferDriver::new(2);
     driver2.init(bytecode.clone(), None);
     driver2.play();
     let first = driver2.vmdata.unwrap().vm.closures.len();
 
-    let mut driver3 = MockDriver::new(3);
+    let mut driver3 = LocalBufferDriver::new(3);
     driver3.init(bytecode.clone(), None);
     driver3.play();
     let second = driver3.vmdata.unwrap().vm.closures.len();
 
-    let mut driver4 = MockDriver::new(4);
+    let mut driver4 = LocalBufferDriver::new(4);
     driver4.init(bytecode.clone(), None);
     driver4.play();
     let third = driver4.vmdata.unwrap().vm.closures.len();
