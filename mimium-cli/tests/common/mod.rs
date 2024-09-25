@@ -1,7 +1,7 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
-use mimium_audiodriver::backends::mock::MockDriver;
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
     compiler,
     interner::ToSymbol,
@@ -57,8 +57,10 @@ fn run_source_with_scheduler(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let bytecode = compiler::emit_bytecode(src)?;
 
-    let mut driver = MockDriver::new(bytecode, None);
-    Ok(driver.play_times(times as _).to_vec())
+    let mut driver = LocalBufferDriver::new(times as _);
+    driver.init(bytecode, None);
+    driver.play();
+    Ok(driver.get_generated_samples().to_vec())
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
