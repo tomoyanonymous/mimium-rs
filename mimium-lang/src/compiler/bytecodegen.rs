@@ -127,9 +127,10 @@ impl ByteCodeGenerator {
             Type::Function(_, _, _) => 1,
             Type::Ref(_) => 1,
             Type::Code(_) => todo!(),
-            Type::TypeScheme(_, _) => todo!(),
-            Type::Intermediate(_) => 1, // TODO
-            Type::Unknown => todo!(),
+            _ => {
+                //todo: this may contain intermediate types
+                1
+            }
         }
     }
     pub fn calc_state_size<T: AsRef<[StateSize]>>(state_sizes: T) -> u64 {

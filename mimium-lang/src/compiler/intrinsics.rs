@@ -1,5 +1,7 @@
 // unary
 pub(crate) const NEG: &'static str = "neg";
+pub(crate) const TOFLOAT: &'static str = "tofloat";
+
 
 // binary
 pub(crate) const ADD: &'static str = "add";

@@ -5,7 +5,7 @@ use crate::pattern::{Pattern, TypedPattern};
 use crate::runtime::vm::builtin;
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
-use crate::{function, numeric, unit};
+use crate::{function, integer, numeric, unit};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -83,7 +83,12 @@ impl ReportableError for Error {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
     interm_idx: u64,
+    typescheme_idx: u64,
+    instantiated_idx: u64,
+    level: u64,
     subst_map: BTreeMap<i64, TypeNodeId>,
+    generalize_map: BTreeMap<u64, u64>,
+    instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
@@ -91,7 +96,12 @@ impl std::default::Default for InferContext {
     fn default() -> Self {
         let mut res = Self {
             interm_idx: 0,
+            typescheme_idx: 0,
+            instantiated_idx: 0,
+            level: 0,
             subst_map: Default::default(),
+            generalize_map: Default::default(),
+            instantiate_map: Default::default(),
             result_map: Default::default(),
             env: Environment::<TypeNodeId>::new(),
         };
@@ -128,6 +138,7 @@ impl InferContext {
             intrinsics::ABS,
             intrinsics::SQRT,
         ];
+
         let mut binds = binop_names
             .iter()
             .map(|n| (n.to_symbol(), binop_ty))
@@ -136,10 +147,17 @@ impl InferContext {
             .iter()
             .map(|n| (n.to_symbol(), uniop_ty))
             .collect_into(&mut binds);
-        binds.push((
-            intrinsics::DELAY.to_symbol(),
-            function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
-        ));
+        binds.extend_from_slice(&[
+            (
+                intrinsics::DELAY.to_symbol(),
+                function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
+            ),
+            (
+                intrinsics::TOFLOAT.to_symbol(),
+                function!(vec![integer!()], numeric!()),
+            ),
+        ]);
+
         env.add_bind(&binds);
     }
     fn register_builtin(env: &mut Environment<TypeNodeId>) {
@@ -150,14 +168,36 @@ impl InferContext {
         env.add_bind(&binds);
     }
     fn gen_intermediate_type(&mut self) -> TypeNodeId {
-        let res =
-            Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx)))).into_id();
+        let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
+            self.interm_idx,
+            self.level,
+        ))))
+        .into_id();
         self.interm_idx += 1;
         res
     }
+    fn get_typescheme(&mut self, tvid: u64) -> TypeNodeId {
+        self.generalize_map.get(&tvid).cloned().map_or_else(
+            || self.gen_typescheme(),
+            |id| Type::TypeScheme(id).into_id(),
+        )
+    }
+    fn gen_typescheme(&mut self) -> TypeNodeId {
+        let res = Type::TypeScheme(self.typescheme_idx).into_id();
+        self.typescheme_idx += 1;
+        res
+    }
+    fn gen_instantiated(&mut self) -> TypeNodeId {
+        let res = Type::Instantiated(self.instantiated_idx).into_id();
+        self.instantiated_idx += 1;
+        res
+    }
     fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
-        let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(self.interm_idx))))
-            .into_id_with_span(span);
+        let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
+            self.interm_idx,
+            self.level,
+        ))))
+        .into_id_with_span(span);
         self.interm_idx += 1;
         res
     }
@@ -209,7 +249,7 @@ impl InferContext {
     fn substitute_type(t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Intermediate(cell) => {
-                let TypeVar { parent, var: _ } = &cell.borrow() as &TypeVar;
+                let TypeVar { parent, .. } = &cell.borrow() as &TypeVar;
                 match parent {
                     Some(p) => Self::substitute_type(*p),
                     None => t,
@@ -245,7 +285,7 @@ impl InferContext {
                 .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
                 .try_collect()
         };
-        log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
+        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
@@ -255,6 +295,11 @@ impl InferContext {
                     return Ok(t1r);
                 }
                 let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
+                if tv1.level != tv2.level {
+                    let l = tv1.level.min(tv2.level);
+                    tv1.level = l;
+                    tv2.level = l;
+                }
                 match (tv1.parent, tv2.parent) {
                     (None, None) => {
                         if tv1.var > tv2.var {
@@ -285,6 +330,8 @@ impl InferContext {
                 tv2.parent = Some(t1r);
                 Ok(t1r)
             }
+            (t1, Type::Instantiated(_)) => Ok(t1.clone().into_id_with_span(span)),
+            (Type::Instantiated(_), t2) => Ok(t2.clone().into_id_with_span(span)),
             (Type::Array(a1), Type::Array(a2)) => {
                 Ok(Type::Array(Self::unify_types(*a1, *a2, span)?).into_id())
             }
@@ -315,6 +362,37 @@ impl InferContext {
             (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), span)),
         }
     }
+    fn generalize(&mut self, t: TypeNodeId) -> TypeNodeId {
+        match t.to_type() {
+            Type::Intermediate(tvar) => {
+                let &TypeVar { level, var, .. } = &tvar.borrow() as _;
+                if level > self.level {
+                    self.get_typescheme(var)
+                } else {
+                    t
+                }
+            }
+            _ => t.apply_fn(|t| self.generalize(t)),
+        }
+    }
+    fn instantiate(&mut self, t: TypeNodeId) -> TypeNodeId {
+        let mut g_i_map = BTreeMap::<u64, TypeNodeId>::default();
+        self.instantiate_in(t, &mut g_i_map)
+    }
+    fn instantiate_in(
+        &mut self,
+        t: TypeNodeId,
+        g_i_map: &mut BTreeMap<u64, TypeNodeId>,
+    ) -> TypeNodeId {
+        match t.to_type() {
+            Type::TypeScheme(id) => g_i_map
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| self.gen_instantiated()),
+            _ => t.apply_fn(|t| self.instantiate_in(t, g_i_map)),
+        }
+    }
+
     // Note: the third argument `span` is used for the error location in case of
     // type mismatch. This is needed because `t`'s span refers to the location
     // where it originally defined (e.g. the explicit return type of the
@@ -328,7 +406,8 @@ impl InferContext {
         let TypedPattern { pat, .. } = ty_pat;
         let pat_t = match pat {
             Pattern::Single(id) => {
-                self.env.add_bind(&[(*id, t)]);
+                let gt = self.generalize(t);
+                self.env.add_bind(&[(*id, gt)]);
                 Ok(t)
             }
             Pattern::Tuple(pats) => {
@@ -373,6 +452,12 @@ impl InferContext {
     }
     fn infer_vec(&mut self, e: &[ExprNodeId]) -> Result<Vec<TypeNodeId>, Error> {
         e.iter().map(|e| self.infer_type(*e)).try_collect()
+    }
+    fn infer_type_levelup(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
+        self.level += 1;
+        let res = self.infer_type(e);
+        self.level -= 1;
+        res
     }
     fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
         let span = e.to_span().clone();
@@ -430,20 +515,9 @@ impl InferContext {
                 Ok(Type::Function(ptypes, bty, None).into_id())
             }
             Expr::Let(tpat, body, then) => {
-                let bodyt = self.infer_type(*body)?;
-                let idt = if !tpat.is_unknown() {
-                    match tpat.ty.to_type() {
-                        Type::Function(atypes, rty, s) => {
-                            self.convert_unknown_function(&atypes, rty, s)
-                        }
-                        _ => tpat.ty,
-                    }
-                } else {
-                    self.gen_intermediate_type()
-                };
+                let bodyt = self.infer_type_levelup(*body)?;
 
-                let bodyt_u = Self::unify_types(idt, bodyt, body.to_span())?;
-                let _ = self.bind_pattern(bodyt_u, tpat, body.to_span())?;
+                let _ = self.bind_pattern(bodyt, tpat, body.to_span())?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -461,12 +535,10 @@ impl InferContext {
                     }
                     (true, _) => self.gen_intermediate_type(),
                 };
-
-                let body_i = self.gen_intermediate_type();
-                self.env.add_bind(&[(id.id, body_i)]);
-                let bodyt = self.infer_type(*body)?;
+                self.env.add_bind(&[(id.id, idt)]);
+                //polymorphic inference is not allowed in recursive function.
+                let bodyt = self.infer_type_levelup(*body)?;
                 let _ = Self::unify_types(idt, bodyt, body.to_span())?;
-
                 match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
@@ -482,7 +554,11 @@ impl InferContext {
                 let _ = self.infer_type(*e)?;
                 then.map_or(Ok(unit!()), |t| self.infer_type(t))
             }
-            Expr::Var(name) => self.lookup(name, &span),
+            Expr::Var(name) => {
+                let res = self.lookup(name, &span)?;
+                // log::debug!("{} {} /level{}", name.as_str(), res, self.level);
+                Ok(self.instantiate(res))
+            }
             Expr::Apply(fun, callee) => {
                 let fnl = self.infer_type(*fun)?;
                 let callee_t = self.infer_vec(callee.as_slice())?;
@@ -511,6 +587,7 @@ impl InferContext {
                     self.infer_type(e)
                 })?;
                 let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
+                log::debug!("then: {}, else: {}", thent.to_type(), elset.to_type());
                 Self::unify_types(thent, elset, else_span)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {

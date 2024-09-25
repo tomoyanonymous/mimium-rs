@@ -323,6 +323,7 @@ impl Context {
         t: TypeNodeId,
         span: &Span,
     ) -> Result<VPtr, CompileError> {
+        log::debug!("rv t:{} {}", name.to_string(), t.to_type());
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i) => {
@@ -654,6 +655,7 @@ impl Context {
                     self.get_current_basicblock().0.len()
                 };
                 let (bodyv, t) = self.eval_expr(*body)?;
+                log::debug!("let body: {}", t.to_type());
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
