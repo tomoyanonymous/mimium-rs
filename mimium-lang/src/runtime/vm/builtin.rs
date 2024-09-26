@@ -3,12 +3,11 @@ use crate::runtime::scheduler;
 use crate::types::{PType, Type};
 use crate::{function, integer, numeric, unit};
 
-use std::cell::LazyCell;
 
 use super::{ExtFunType, Machine, ReturnCode};
 pub type BulitinInfo = (&'static str, ExtFunType, TypeNodeId);
 
-pub fn probef(machine: &mut Machine) -> ReturnCode {
+fn probef(machine: &mut Machine) -> ReturnCode {
     let rv = machine.get_stack(0);
     let i = super::Machine::get_as::<f64>(rv);
     print!("{i}");
@@ -16,7 +15,7 @@ pub fn probef(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-pub fn probelnf(machine: &mut Machine) -> ReturnCode {
+fn probelnf(machine: &mut Machine) -> ReturnCode {
     let rv = machine.get_stack(0);
     let i = super::Machine::get_as::<f64>(rv);
     println!("{} ", i);
@@ -24,7 +23,6 @@ pub fn probelnf(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-// TODO: use predefined symbols instead of strings
 pub fn get_builtin_fns() -> [BulitinInfo; 3] {
     [
         ("probe", probef, function!(vec![numeric!()], numeric!())),
