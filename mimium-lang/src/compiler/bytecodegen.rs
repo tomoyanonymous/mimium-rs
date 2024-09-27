@@ -522,7 +522,7 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::GetState(d, size))
             }
 
-            mir::Instruction::JmpIf(cond, tbb, ebb) => {
+            mir::Instruction::JmpIf(cond, tbb, ebb, pbb) => {
                 let c = self.find(cond);
                 let mut then_bytecodes: Vec<VmInstruction> = vec![];
                 let mut else_bytecodes: Vec<VmInstruction> = vec![];
@@ -558,7 +558,7 @@ impl ByteCodeGenerator {
                             else_bytecodes.push(inst);
                         };
                     });
-                let phiblock = &mirfunc.body[(*ebb + 1) as usize].0;
+                let phiblock = &mirfunc.body[*pbb as usize].0;
                 let (phidst, pinst) = phiblock.first().unwrap();
                 let phi = self.vregister.add_newvalue(phidst);
                 if let mir::Instruction::Phi(t, e) = pinst {
@@ -567,15 +567,11 @@ impl ByteCodeGenerator {
                     let e = self.find(e);
                     else_bytecodes.push(VmInstruction::Move(phi, e));
                 } else {
-                    unreachable!();
+                    unreachable!("Unexpected inst: {pinst:?}");
                 }
                 funcproto
                     .bytecodes
                     .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
-
-                let ret_offset = else_bytecodes.len() + 1;
-
-                then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
 
                 funcproto.bytecodes.append(&mut then_bytecodes);
                 funcproto.bytecodes.append(&mut else_bytecodes);

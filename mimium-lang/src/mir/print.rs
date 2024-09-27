@@ -144,7 +144,7 @@ impl std::fmt::Display for Instruction {
             }
 
             Instruction::GetState(ty) => write!(f, "getstate {}", ty.to_type()),
-            Instruction::JmpIf(cond, tbb, ebb) => write!(f, "jmpif {cond} {tbb} {ebb}"),
+            Instruction::JmpIf(cond, tbb, ebb, pbb) => write!(f, "jmpif {cond} {tbb} {ebb} {pbb}"),
             Instruction::Jmp(bb) => write!(f, "jmp {bb}"),
             Instruction::Phi(t, e) => write!(f, "phi {t} {e}"),
             Instruction::Return(a, rty) => write!(f, "ret {} {}", *a, rty.to_type()),
