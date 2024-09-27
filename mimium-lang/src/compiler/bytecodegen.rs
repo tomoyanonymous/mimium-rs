@@ -568,21 +568,13 @@ impl ByteCodeGenerator {
                 } else {
                     unreachable!("Unexpected inst: {pinst:?}");
                 }
-                let then_len = mirfunc.body[(*tbb as _)..(*ebb as _)]
-                    .iter()
-                    .map(|b| b.0.len())
-                    .sum::<usize>();
-                let else_offset = then_len + 3; // 2 for before and after the blocks, and 1 for Jmp
+                let else_offset = then_bytecodes.len() + 3;
                 funcproto
                     .bytecodes
                     .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
 
                 // bytes between else and phi
-                let else_len = mirfunc.body[(*ebb as _)..(*pbb as _)]
-                    .iter()
-                    .map(|b| b.0.len())
-                    .sum::<usize>();
-                let ret_offset = else_len + 2;
+                let ret_offset = else_bytecodes.len() + 1;
 
                 then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
 
