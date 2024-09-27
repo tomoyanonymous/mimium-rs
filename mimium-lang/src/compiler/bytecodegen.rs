@@ -568,12 +568,12 @@ impl ByteCodeGenerator {
                 } else {
                     unreachable!("Unexpected inst: {pinst:?}");
                 }
-                let else_offset = then_bytecodes.len() + 3;
+                let else_offset = then_bytecodes.len() + 2; // +1 for Jmp, which will be added later
                 funcproto
                     .bytecodes
                     .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
 
-                // bytes between else and phi
+                // bytes between the bottom of then block and phi
                 let ret_offset = else_bytecodes.len() + 1;
 
                 then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
