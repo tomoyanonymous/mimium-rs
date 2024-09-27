@@ -541,7 +541,6 @@ impl ByteCodeGenerator {
                             then_bytecodes.push(inst);
                         }
                     });
-                let else_offset = then_bytecodes.len() + 3; //add offset to jmp inst and loading phi
 
                 mirfunc.body[*ebb as usize]
                     .0
@@ -569,16 +568,21 @@ impl ByteCodeGenerator {
                 } else {
                     unreachable!("Unexpected inst: {pinst:?}");
                 }
+                let then_len = mirfunc.body[(*tbb as _)..(*ebb as _)]
+                    .iter()
+                    .map(|b| b.0.len())
+                    .sum::<usize>();
+                let else_offset = then_len + 3; // 2 for before and after the blocks, and 1 for Jmp
                 funcproto
                     .bytecodes
                     .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
 
                 // bytes between else and phi
-                let ret_offset = mirfunc.body[(*ebb as _)..(*pbb as _)]
+                let else_len = mirfunc.body[(*ebb as _)..(*pbb as _)]
                     .iter()
                     .map(|b| b.0.len())
-                    .sum::<usize>()
-                    + 1;
+                    .sum::<usize>();
+                let ret_offset = else_len + 2;
 
                 then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
 
