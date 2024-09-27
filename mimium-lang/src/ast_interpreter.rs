@@ -365,5 +365,6 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
         ast::Expr::Error => panic!("Some Error happend in previous stages"),
         ast::Expr::Assign(_, _) => todo!(),
         ast::Expr::Then(_, _) => todo!(),
+        ast::Expr::ArrayAccess(_, _) => todo!(),
     }
 }

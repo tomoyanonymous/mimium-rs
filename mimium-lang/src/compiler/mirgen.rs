@@ -367,11 +367,18 @@ impl Context {
     }
     fn eval_assign(
         &mut self,
-        name: Symbol,
+        assignee: ExprNodeId,
         src: VPtr,
         t: TypeNodeId,
         span: &Span,
     ) -> Result<(), CompileError> {
+        let name = match assignee.to_expr() {
+            Expr::Var(v) => v,
+            Expr::ArrayAccess(_, _) => {
+                unimplemented!("Assignment to array is not implemented yet.")
+            }
+            _ => unreachable!(),
+        };
         match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Argument(_i, _a) => Err(CompileError(
@@ -520,6 +527,8 @@ impl Context {
                 Ok((dst, ty))
             }
             Expr::Proj(_, _) => todo!(),
+            Expr::ArrayAccess(_, _) => todo!(),
+
             Expr::Apply(f, args) => {
                 let (f, ft) = self.eval_expr(*f)?;
                 let del = self.make_delay(&f, args)?;

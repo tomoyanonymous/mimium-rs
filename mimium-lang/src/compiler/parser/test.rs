@@ -166,7 +166,7 @@ fn test_apply() {
 fn test_assign1() {
     let ans = Expr::Then(
         Expr::Assign(
-            "hoge".to_symbol(),
+            Expr::Var("hoge".to_symbol()).into_id(0..4),
             Expr::Var("fuga".to_symbol()).into_id(7..11),
         )
         .into_id(0..11),
@@ -179,7 +179,7 @@ fn test_assign1() {
 fn test_assign2() {
     let ans = Expr::Then(
         Expr::Assign(
-            "hoge".to_symbol(),
+            Expr::Var("hoge".to_symbol()).into_id(0..4),
             Expr::Var("fuga".to_symbol()).into_id(7..11),
         )
         .into_id(0..11),

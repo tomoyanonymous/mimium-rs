@@ -529,7 +529,6 @@ impl Machine {
         let cls = self.get_closure_mut(clsidx);
         cls.is_closed = true;
     }
-    #[allow(clippy::filter_map_bool_then)]
     fn release_open_closures(&mut self, local_closures: &[ClosureIdx]) {
         for clsidx in local_closures.iter() {
             let cls = self.get_closure(*clsidx);

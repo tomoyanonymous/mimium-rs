@@ -544,8 +544,15 @@ impl InferContext {
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
                 }
             }
-            Expr::Assign(name, expr) => {
-                let assignee_t = self.lookup(name, &span)?;
+            Expr::Assign(assignee, expr) => {
+                let name = match assignee.to_expr() {
+                    Expr::Var(v) => v,
+                    Expr::ArrayAccess(_, _) => {
+                        unimplemented!("Assignment to array is not implemented yet.")
+                    }
+                    _ => unreachable!(),
+                };
+                let assignee_t = self.lookup(&name, &span)?;
                 let e_t = self.infer_type(*expr)?;
                 Self::unify_types(assignee_t, e_t, expr.to_span())?;
                 Ok(unit!())

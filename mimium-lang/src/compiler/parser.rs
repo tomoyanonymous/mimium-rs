@@ -78,11 +78,6 @@ where
         .map(|(id, t)| (id, t))
 }
 
-fn placement_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
-    //todo! it can be the left hand expression of assignment i.e. they can have memory address,
-    //including var(`v`), Tuple dot access(`v.0`), array access(`v[2]`), struct member access...
-    ident_parser().labelled("placement_values")
-}
 fn lvar_parser_typed() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(ident_parser())
         .map_with_span(|(sym, t), span| match t {
@@ -251,18 +246,32 @@ fn atom_parser<'a>(
 }
 fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
     recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
+        enum FoldItem {
+            Args(Vec<ExprNodeId>),
+            ArrayIndex(ExprNodeId),
+        }
         let parenitems = items_parser(expr.clone())
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map_with_span(|args, args_span| (args, args_span));
-        let folder = |f: ExprNodeId, (args, args_span): (Vec<ExprNodeId>, Span)| {
+            .map_with_span(|args, args_span| (FoldItem::Args(args), args_span));
+        let angle_paren_expr = expr
+            .clone()
+            .delimited_by(just(Token::ArrayBegin), just(Token::ArrayEnd))
+            .map_with_span(|e, s| (FoldItem::ArrayIndex(e), s));
+
+        let folder = |f: ExprNodeId, (item, args_span): (FoldItem, Span)| {
             let f_span = f.to_span();
             let span = f_span.start..args_span.end;
-            Expr::Apply(f, args).into_id(span)
+            match item {
+                FoldItem::Args(args) => Expr::Apply(f, args).into_id(span),
+                FoldItem::ArrayIndex(index) => Expr::ArrayAccess(f, index).into_id(span),
+            }
         };
-        let apply = atom_parser(expr, expr_group)
-            .then(parenitems.repeated())
+
+        let apply = atom_parser(expr.clone(), expr_group)
+            .then(angle_paren_expr.or(parenitems).repeated())
             .foldl(folder)
             .labelled("apply");
+
         op_parser(apply)
     })
 }
@@ -304,10 +313,10 @@ fn statement_parser(
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
         .labelled("letrec");
-    let assign = placement_parser()
+    let assign = var_parser()
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
-        .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
+        .map_with_span(|(lvar, body), span| (Statement::Assign(lvar, body), span))
         .labelled("assign");
     let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
     let_.or(letrec).or(assign).or(single)
@@ -335,7 +344,7 @@ fn exprgroup_parser<'a>() -> ExprParser<'a> {
     recursive(|expr_group: ExprParser<'a>| {
         let expr = expr_parser(expr_group.clone());
 
-        let block = block_parser(expr.clone());
+        let block = block_parser(expr_group.clone());
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
             .ignore_then(
