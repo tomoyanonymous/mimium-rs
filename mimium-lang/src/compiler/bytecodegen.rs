@@ -524,6 +524,10 @@ impl ByteCodeGenerator {
 
             mir::Instruction::JmpIf(cond, tbb, ebb, pbb) => {
                 let c = self.find(cond);
+
+                // TODO: to allow &mut match, but there should be nicer way...
+                let mut bytecodes_dst = bytecodes_dst;
+
                 let mut then_bytecodes: Vec<VmInstruction> = vec![];
                 let mut else_bytecodes: Vec<VmInstruction> = vec![];
                 mirfunc.body[*tbb as usize]
@@ -569,22 +573,32 @@ impl ByteCodeGenerator {
                     unreachable!("Unexpected inst: {pinst:?}");
                 }
                 let else_offset = then_bytecodes.len() + 2; // +1 for Jmp, which will be added later
-                funcproto
-                    .bytecodes
-                    .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
+                let inst = VmInstruction::JmpIfNeg(c, else_offset as _);
+                match &mut bytecodes_dst {
+                    Some(dst) => dst.push(inst),
+                    None => funcproto.bytecodes.push(inst),
+                }
 
                 // bytes between the bottom of then block and phi
                 let ret_offset = else_bytecodes.len() + 1;
 
                 then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
 
-                funcproto.bytecodes.append(&mut then_bytecodes);
-                funcproto.bytecodes.append(&mut else_bytecodes);
+                for mut b in [then_bytecodes, else_bytecodes] {
+                    match &mut bytecodes_dst {
+                        Some(dst) => dst.append(&mut b),
+                        None => funcproto.bytecodes.append(&mut b),
+                    }
+                }
+
                 phiblock.iter().skip(1).for_each(|(dst, p_inst)| {
                     if let Some(inst) =
                         self.emit_instruction(funcproto, None, fidx, mirfunc, dst.clone(), p_inst)
                     {
-                        funcproto.bytecodes.push(inst);
+                        match &mut bytecodes_dst {
+                            Some(dst) => dst.push(inst),
+                            None => funcproto.bytecodes.push(inst),
+                        }
                     };
                 });
                 None
