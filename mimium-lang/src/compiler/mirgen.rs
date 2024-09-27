@@ -733,14 +733,12 @@ impl Context {
                 //insert then block
                 let then_top_bidx = cond_bidx + 1;
                 let (t, _) = self.eval_block(Some(*then))?;
-                self.push_inst(Instruction::Jmp(0));
                 let then_bottom_bidx = self.get_ctxdata().current_bb;
                 //jmp to ret is inserted in bytecodegen
                 //insert else block
                 let else_top_bidx = then_bottom_bidx + 1;
                 let (e, _) = self.eval_block(*else_)?;
                 let else_bottom_idx = self.get_ctxdata().current_bb;
-                self.push_inst(Instruction::Jmp(0));
                 //insert return block
                 self.add_new_basicblock();
                 let res = self.push_inst(Instruction::Phi(t, e));
@@ -753,40 +751,18 @@ impl Context {
 
                 let cur_body = &mut self.get_current_fn().body;
 
-                let t_jmp = cur_body
+                let jmp_if = cur_body
                     .get_mut(cond_bidx)
                     .expect("no basic block found")
                     .0
                     .last_mut()
                     .expect("the block contains no inst?");
-                match &mut t_jmp.1 {
+                match &mut jmp_if.1 {
                     Instruction::JmpIf(_, then_dst, else_dst, phi_dst) => {
                         *then_dst = then_top_bidx as _;
                         *else_dst = else_top_bidx as _;
                         *phi_dst = phi_bidx as _;
                     }
-                    _ => panic!("the last block should be Jmp"),
-                }
-
-                let t_jmp = cur_body
-                    .get_mut(then_bottom_bidx)
-                    .expect("no basic block found")
-                    .0
-                    .last_mut()
-                    .expect("the block contains no inst?");
-                match &mut t_jmp.1 {
-                    Instruction::Jmp(dst) => *dst = jmp_dst as _,
-                    _ => panic!("the last block should be Jmp"),
-                }
-
-                let e_jmp = cur_body
-                    .get_mut(else_bottom_idx)
-                    .expect("no basic block found")
-                    .0
-                    .last_mut()
-                    .expect("the block contains no inst?");
-                match &mut e_jmp.1 {
-                    Instruction::Jmp(dst) => *dst = jmp_dst as _,
                     _ => panic!("the last block should be Jmp"),
                 }
 

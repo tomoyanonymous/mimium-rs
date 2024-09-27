@@ -573,6 +573,15 @@ impl ByteCodeGenerator {
                     .bytecodes
                     .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
 
+                // bytes between else and phi
+                let ret_offset = mirfunc.body[(*ebb as _)..(*pbb as _)]
+                    .iter()
+                    .map(|b| b.0.len())
+                    .sum::<usize>()
+                    + 1;
+
+                then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
+
                 funcproto.bytecodes.append(&mut then_bytecodes);
                 funcproto.bytecodes.append(&mut else_bytecodes);
                 phiblock.iter().skip(1).for_each(|(dst, p_inst)| {
