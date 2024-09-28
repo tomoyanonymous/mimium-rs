@@ -61,7 +61,12 @@ impl ReportableError for Error {
 // can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
-    fn init(&mut self, program: vm::Program, sample_rate: Option<SampleRate>) -> bool;
+    fn init(
+        &mut self,
+        program: vm::Program,
+        vm: vm::Machine,
+        sample_rate: Option<SampleRate>,
+    ) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
@@ -77,13 +82,9 @@ pub struct RuntimeData {
 impl RuntimeData {
     pub fn new(
         program: vm::Program,
-        ext_funs: &[(Symbol, ExtFunType)],
+        mut vm: vm::Machine,
         ext_clss: &[(Symbol, ExtClsType)],
     ) -> Self {
-        let mut vm = vm::Machine::new(Box::new(SyncScheduler::new()));
-        ext_funs.iter().for_each(|(name, f)| {
-            vm.install_extern_fn(*name, *f);
-        });
         ext_clss.iter().for_each(|(name, f)| {
             vm.install_extern_cls(*name, f.clone());
         });

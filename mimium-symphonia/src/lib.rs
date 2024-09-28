@@ -1,1 +1,1 @@
-use mimium_lang::runtime::vm::builtin::BulitinInfo;
+use mimium_lang::runtime::vm::ExtFnInfo;

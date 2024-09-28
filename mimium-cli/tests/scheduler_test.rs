@@ -1,7 +1,7 @@
 mod common;
 use common::*;
 use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
-use mimium_lang::compiler;
+use mimium_lang::{compiler, ExecContext};
 
 #[test]
 fn scheduler_global_recursion() {
@@ -41,20 +41,23 @@ fn scheduler_counter_indirect() {
 #[test]
 fn scheduler_gc_test() {
     let (_, src) = load_src("scheduler_counter_indirect.mmm");
-    let bytecode = compiler::emit_bytecode(&src).unwrap();
+    let ctx = ExecContext::new(&[]);
+    let bytecode = ctx.compiler.emit_bytecode(&src).unwrap();
 
     let mut driver2 = LocalBufferDriver::new(2);
-    driver2.init(bytecode.clone(), None);
+    driver2.init(bytecode.clone(), ctx.vm, None);
     driver2.play();
     let first = driver2.vmdata.unwrap().vm.closures.len();
+    let ctx = ExecContext::new(&[]);
 
     let mut driver3 = LocalBufferDriver::new(3);
-    driver3.init(bytecode.clone(), None);
+    driver3.init(bytecode.clone(), ctx.vm, None);
     driver3.play();
     let second = driver3.vmdata.unwrap().vm.closures.len();
+    let ctx = ExecContext::new(&[]);
 
     let mut driver4 = LocalBufferDriver::new(4);
-    driver4.init(bytecode.clone(), None);
+    driver4.init(bytecode.clone(), ctx.vm, None);
     driver4.play();
     let third = driver4.vmdata.unwrap().vm.closures.len();
     assert!(first == second && second == third)

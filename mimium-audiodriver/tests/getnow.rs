@@ -6,7 +6,7 @@ use mimium_lang::{
     function,
     interner::ToSymbol as _,
     numeric,
-    runtime::vm::{FuncProto, Instruction, Program},
+    runtime::vm::{self, FuncProto, Instruction, Program},
     types::{PType, Type},
 };
 
@@ -50,7 +50,7 @@ fn getnow_test() {
 
     let times = 10;
     let mut driver = LocalBufferDriver::new(times);
-    driver.init(prog, Some(SampleRate(48000)));
+    driver.init(prog, vm::Machine::new_for_test(), Some(SampleRate(48000)));
     driver.play();
 
     let res = driver.get_generated_samples();

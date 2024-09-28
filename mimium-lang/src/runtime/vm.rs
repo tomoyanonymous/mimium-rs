@@ -13,7 +13,7 @@ use program::OpenUpValue;
 pub use program::{FuncProto, Program};
 
 use crate::{
-    interner::{Symbol, ToSymbol},
+    interner::{Symbol, ToSymbol, TypeNodeId},
     types::TypeSize,
 };
 
@@ -23,6 +23,8 @@ pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
 pub type ExtClsType = Arc<dyn Fn(&mut Machine) -> ReturnCode>;
+pub type ExtFnInfo = (&'static str, ExtFunType, TypeNodeId);
+pub type ExtClsInfo = (&'static str, ExtClsType, TypeNodeId);
 
 #[derive(Debug, Default, PartialEq)]
 struct StateStorage {
@@ -310,16 +312,14 @@ where
 }
 
 impl Machine {
-    pub fn new(scheduler: Box<dyn Scheduler>) -> Self {
-        let ext_fun_table = builtin::get_builtin_fns()
-            .iter()
-            .map(|(name, f, _t)| (name.to_symbol(), *f))
-            .collect::<Vec<_>>();
-        Self {
+    pub fn new(scheduler: Option<Box<dyn Scheduler>>, extfns: &[ExtFnInfo]) -> Self {
+        let scheduler = scheduler.unwrap_or(Box::new(DummyScheduler));
+
+        let mut res = Self {
             stack: vec![],
             base_pointer: 0,
             closures: Default::default(),
-            ext_fun_table,
+            ext_fun_table: vec![],
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
             cls_map: HashMap::new(),
@@ -329,10 +329,14 @@ impl Machine {
             global_vals: vec![],
             scheduler,
             debug_stacktype: vec![RawValType::Int; 255],
-        }
+        };
+        extfns
+            .iter()
+            .for_each(|(name, f, _)| res.install_extern_fn(name.to_symbol(), *f));
+        res
     }
-    pub fn new_without_scheduler() -> Self {
-        Self::new(Box::new(DummyScheduler))
+    pub fn new_for_test() -> Self {
+        Self::new(None, &[])
     }
     pub fn clear_stack(&mut self) {
         self.stack.fill(0);
@@ -897,7 +901,7 @@ impl Machine {
     }
     pub fn execute_task(&mut self, now: Time, prog: &Program) {
         self.scheduler.set_cur_time(now);
-        log::debug!("closures {}",self.closures.len());
+        log::debug!("closures {}", self.closures.len());
 
         while let Some(task_cls) = self.scheduler.pop_task(now, prog) {
             let closure = self.get_closure(task_cls);

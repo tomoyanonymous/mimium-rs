@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::load_default_runtime;
-use mimium_lang::compiler::{emit_ast, emit_bytecode};
+use mimium_lang::compiler::{self, emit_ast, Context};
 use mimium_lang::interner::ExprNodeId;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
-use mimium_lang::{compiler::emit_mir, compiler::mirgen::convert_pronoun, repl};
+use mimium_lang::ExecContext;
+use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -97,20 +98,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn get_default_context() -> ExecContext {
+    //todo: add symphonia
+    ExecContext::new(&[])
+}
+
 fn run_file(
     args: &Args,
     content: &str,
     fullpath: &Path,
 ) -> Result<(), Vec<Box<dyn ReportableError>>> {
     log::debug!("Filename: {}", fullpath.display());
+
+    let ctx = get_default_context();
     if args.mode.emit_ast {
         let ast = emit_ast_local(content)?;
         println!("{}", ast.pretty_print());
     } else if args.mode.emit_mir {
-        let mir = emit_mir(content)?;
+        let mir = ctx.compiler.emit_mir(content)?;
         println!("{mir}");
     } else {
-        let prog = emit_bytecode(content)?;
+        let prog = ctx.compiler.emit_bytecode(content)?;
 
         if args.mode.emit_bytecode {
             println!("{prog}");
@@ -129,7 +137,7 @@ fn run_file(
                 _ => panic!("cannot determine the output file format"),
             },
         };
-        driver.init(prog, None);
+        driver.init(prog, ctx.vm, None);
         driver.play();
 
         //wait until input something

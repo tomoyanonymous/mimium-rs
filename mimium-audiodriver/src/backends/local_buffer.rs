@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm::Machine};
+use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm};
 
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 
@@ -63,7 +63,8 @@ impl Driver for LocalBufferDriver {
 
     fn init(
         &mut self,
-        program: mimium_lang::runtime::vm::Program,
+        program: vm::Program,
+        vm: vm::Machine,
         sample_rate: Option<crate::driver::SampleRate>,
     ) -> bool {
         let dsp_i = program
@@ -74,11 +75,9 @@ impl Driver for LocalBufferDriver {
         self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
         self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
 
-        //todo: split as trait interface method
-        let schedule_fn = scheduler::gen_schedule_at();
         let getnow_fn = crate::runtime_fn::gen_getnowfn(self.count.clone());
 
-        self.vmdata = Some(RuntimeData::new(program, &[schedule_fn], &[getnow_fn]));
+        self.vmdata = Some(RuntimeData::new(program, vm, &[getnow_fn]));
 
         true
     }
@@ -91,7 +90,7 @@ impl Driver for LocalBufferDriver {
             let now = self.count.load(Ordering::Relaxed);
 
             let _ = vmdata.run_dsp(Time(now));
-            let res = Machine::get_as_array::<<LocalBufferDriver as Driver>::Sample>(
+            let res = vm::Machine::get_as_array::<<LocalBufferDriver as Driver>::Sample>(
                 vmdata.vm.get_top_n(self.ochannels as _),
             );
             self.localbuffer.extend_from_slice(res);
