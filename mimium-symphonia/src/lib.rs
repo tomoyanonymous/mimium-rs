@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::sync::Arc;
 
-use mimium_lang::interner::ToSymbol;
-use mimium_lang::runtime::vm::{self, Machine, ExtClsType, ExtFnInfo, ReturnCode};
+use mimium_lang::interner::{Symbol, ToSymbol, TypeNodeId};
+use mimium_lang::runtime::vm::{self, ExtClsType, ExtFnInfo, ExtFunType, Machine, ReturnCode};
+use mimium_lang::types::{PType, Type};
+use mimium_lang::{function, numeric, string_t};
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error;
@@ -49,7 +51,7 @@ pub struct FileSampler {
     data: Vec<f64>,
 }
 
-fn load_wavfile_to_vec(path:&str)->Vec<f64> {
+fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
     let (decoder, mut probed, id) = get_default_decoder(path).expect("failed to find file");
     let channels = decoder.codec_params().channels.unwrap().count() as u64;
     let max_frames = decoder.codec_params().max_frames_per_packet.unwrap();
@@ -69,12 +71,12 @@ fn load_wavfile_to_vec(path:&str)->Vec<f64> {
         Err(_) => todo!(),
     }
 }
-   
-fn load_wavfile(machine: &mut Machine)->ReturnCode{
+
+fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     //return closure
     let path = vm::Machine::get_as_array::<&str>(machine.get_stack_range(0, 2).1)[0];
     let vec = load_wavfile_to_vec(path);
-    let res =   move |machine: &mut Machine|->ReturnCode{
+    let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0)) as usize;
         let val = Machine::to_value(vec[pos]);
         machine.set_stack(0, val);
@@ -85,3 +87,7 @@ fn load_wavfile(machine: &mut Machine)->ReturnCode{
     1
 }
 
+fn export_signature() -> (Symbol, TypeNodeId, ExtFunType) {
+    let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
+    ("loadwav".to_symbol(), t, load_wavfile)
+}
