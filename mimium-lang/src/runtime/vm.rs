@@ -330,9 +330,9 @@ impl Machine {
             scheduler,
             debug_stacktype: vec![RawValType::Int; 255],
         };
-        extfns
-            .iter()
-            .for_each(|(name, f, _)| res.install_extern_fn(name.to_symbol(), *f));
+        extfns.iter().for_each(|(name, f, _)| {
+            let _ = res.install_extern_fn(name.to_symbol(), *f);
+        });
         res
     }
     pub fn new_for_test() -> Self {
@@ -830,11 +830,13 @@ impl Machine {
             pcounter = (pcounter as i64 + increment as i64) as usize;
         }
     }
-    pub fn install_extern_fn(&mut self, name: Symbol, f: ExtFunType) {
+    pub fn install_extern_fn(&mut self, name: Symbol, f: ExtFunType) -> usize {
         self.ext_fun_table.push((name, f));
+        self.ext_fun_table.len() - 1
     }
-    pub fn install_extern_cls(&mut self, name: Symbol, f: ExtClsType) {
+    pub fn install_extern_cls(&mut self, name: Symbol, f: ExtClsType) -> usize {
         self.ext_cls_table.push((name, f));
+        self.ext_cls_table.len() - 1
     }
     pub fn link_functions(&mut self, prog: &Program) {
         //link external functions
