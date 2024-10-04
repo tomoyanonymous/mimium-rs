@@ -5,14 +5,14 @@ use mimium_lang::interner::{Symbol, ToSymbol, TypeNodeId};
 use mimium_lang::runtime::vm::{self, ExtClsType, ExtFnInfo, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
 use mimium_lang::{function, numeric, string_t};
-use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
-use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::audio::{AudioBuffer, Layout, SampleBuffer, SignalSpec};
+use symphonia::core::codecs::{CodecParameters, Decoder, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::{Hint, ProbeResult};
-use symphonia::core::units::Time;
+use symphonia::core::units::{Duration, Time};
 type DecoderSet = (Box<dyn Decoder>, ProbeResult, u32);
 mod filemanager;
 use filemanager::FileManager;
@@ -52,30 +52,57 @@ pub struct FileSampler {
 }
 
 fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
-    let (decoder, mut probed, id) = get_default_decoder(path).expect("failed to find file");
-    let channels = decoder.codec_params().channels.unwrap().count() as u64;
+    let (mut decoder, mut probed, id) = get_default_decoder(path).expect("failed to find file");
     let max_frames = decoder.codec_params().max_frames_per_packet.unwrap();
-    let audiobuffer = SampleBuffer::<f32>::new(
-        max_frames,
-        SignalSpec::new_with_layout(48000, Layout::Stereo),
-    );
-    probed.format.seek(
+    let _ = probed.format.seek(
         SeekMode::Accurate,
         SeekTo::Time {
             time: Time::from_ss(0, 0).unwrap(),
             track_id: Some(id),
         },
     );
+    let CodecParameters {
+        channels,
+        sample_rate,
+        channel_layout,
+        ..
+    } = probed.format.default_track().unwrap().codec_params;
+    let mut res = Vec::<f64>::new();
+    let mut buf = SampleBuffer::<f64>::new(
+        max_frames,
+        SignalSpec::new_with_layout(
+            sample_rate.unwrap_or(48000),
+            channel_layout.unwrap_or(Layout::Mono),
+        ),
+    );
     match probed.format.next_packet() {
-        Ok(packet) => todo!(),
-        Err(_) => todo!(),
+        Ok(packet) => {
+            // Decode the packet into audio samples.
+            let _ = decoder.decode(&packet).map(|decoded| {
+                
+
+                buf.copy_interleaved_ref(decoded.clone());
+                // log::debug!(
+                //     "frames:{}, timestamp:{}, n_samples: {}",
+                //     decoded.frames(),
+                //     packet.ts(),
+                //     _nsamples
+                // );
+                res.extend_from_slice(buf.samples());
+            });
+            
+        }
+        Err(e) => {
+        // 
+        },
     }
+    res
 }
 
 fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     //return closure
     let path = vm::Machine::get_as_array::<&str>(machine.get_stack_range(0, 2).1)[0];
-    let vec = load_wavfile_to_vec(path);
+    let vec = load_wavfile_to_vec(path); //the generated vector is moved into the closure
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0)) as usize;
         let val = Machine::to_value(vec[pos]);
