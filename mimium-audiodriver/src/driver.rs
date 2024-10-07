@@ -2,7 +2,7 @@ use mimium_lang::{
     interner::{Symbol, ToSymbol},
     runtime::{
         scheduler::{Scheduler, SyncScheduler},
-        vm::{self, ExtClsType, ExtFunType, ReturnCode},
+        vm::{self, ExtClsType, ExtFunType, FuncProto, ReturnCode},
     },
     utils::error::ReportableError,
 };
@@ -61,12 +61,7 @@ impl ReportableError for Error {
 // can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
-    fn init(
-        &mut self,
-        program: vm::Program,
-        vm: vm::Machine,
-        sample_rate: Option<SampleRate>,
-    ) -> bool;
+    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
@@ -75,31 +70,28 @@ pub trait Driver {
 }
 
 pub struct RuntimeData {
-    pub program: vm::Program,
     pub vm: vm::Machine,
     pub dsp_i: usize,
 }
 impl RuntimeData {
-    pub fn new(
-        program: vm::Program,
-        mut vm: vm::Machine,
-        ext_clss: &[(Symbol, ExtClsType)],
-    ) -> Self {
+    pub fn new(mut vm: vm::Machine, ext_clss: &[(Symbol, ExtClsType)]) -> Self {
         ext_clss.iter().for_each(|(name, f)| {
             vm.install_extern_cls(*name, f.clone());
         });
-        vm.link_functions(&program);
         //todo:error handling
-        let dsp_i = program.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
-        Self { program, vm, dsp_i }
+        let dsp_i = vm.prog.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
+        Self { vm, dsp_i }
     }
     pub fn run_main(&mut self) -> ReturnCode {
-        self.vm.execute_main(&self.program)
+        self.vm.execute_main()
+    }
+    pub fn get_dsp_fn(&self) -> &FuncProto {
+        &self.vm.prog.global_fn_table[self.dsp_i].1
     }
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
         //TODO: this depends on the structure of Synchronous Scheduler.
-        self.vm.execute_task(time, &self.program);
-        self.vm.execute_idx(&self.program, self.dsp_i)
+        self.vm.execute_task(time);
+        self.vm.execute_idx(self.dsp_i)
     }
 }
 

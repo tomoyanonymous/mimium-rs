@@ -11,10 +11,12 @@ pub mod utils;
 
 pub mod compiler;
 pub mod runtime;
+use std::cell::LazyCell;
 
 pub struct ExecContext {
     pub compiler: compiler::Context,
-    pub vm: runtime::vm::Machine,
+    // pub vm: Option<runtime::vm::Machine>,
+    pub extfuns: Vec<ExtFnInfo>,
     //pub plugins: Vec<Plugin>
 }
 
@@ -33,8 +35,17 @@ impl ExecContext {
             .map(|(name, _, ty)| (name.to_symbol(), *ty))
             .collect::<Vec<_>>();
         let compiler = compiler::Context::new(&extfuntypes);
-        let vm = vm::Machine::new(Some(Box::new(SyncScheduler::new())), &extfuns);
-        Self { compiler, vm }
+
+        Self { compiler, extfuns }
+    }
+    pub fn prepare_machine(&mut self, src: &str) -> vm::Machine {
+        let prog = self.compiler.emit_bytecode(src).unwrap();
+        vm::Machine::new(
+            Some(Box::new(SyncScheduler::new())),
+            prog,
+            &self.extfuns,
+            &[],
+        )
     }
 }
 

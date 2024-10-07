@@ -19,10 +19,9 @@ use mimium_lang::{
 
 fn run_bytecode_test<'a>(
     machine: &'a mut vm::Machine,
-    bytecodes: &'a vm::Program,
     n: usize,
 ) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
-    let retcode = machine.execute_entry(bytecodes, &"dsp".to_symbol());
+    let retcode = machine.execute_entry(&"dsp".to_symbol());
     if retcode >= 0 {
         Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
     } else {
@@ -35,18 +34,16 @@ fn run_bytecode_test<'a>(
 
 fn run_bytecode_test_multiple(
     bytecodes: &vm::Program,
-    ctx: &mut ExecContext,
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let machine = &mut ctx.vm;
+    let mut machine = vm::Machine::new(None, bytecodes.clone(), &[], &[]);
 
-    machine.link_functions(bytecodes);
-    let _retcode = machine.execute_entry(bytecodes, &"_mimium_global".to_symbol());
+    let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
     let mut ret = Vec::with_capacity(times as usize * n);
     for i in 0..times {
-        let res = run_bytecode_test(machine, bytecodes, n)?;
+        let res = run_bytecode_test(&mut machine, n)?;
         ret.extend_from_slice(res);
         println!("time:{}, res: {:?}", i, res)
     }
@@ -57,11 +54,11 @@ fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[]);
-    let bytecode = ctx.compiler.emit_bytecode(src)?;
+    let mut ctx = ExecContext::new(&[]);
+    let vm = ctx.prepare_machine(src);
 
     let mut driver = LocalBufferDriver::new(times as _);
-    driver.init(bytecode, ctx.vm, None);
+    driver.init(vm, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
 }
@@ -72,10 +69,10 @@ pub(crate) fn run_source_test(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut ctx = ExecContext::new(&[]);
+    let ctx = ExecContext::new(&[]);
 
     let bytecode = ctx.compiler.emit_bytecode(src)?;
-    run_bytecode_test_multiple(&bytecode, &mut ctx, times, stereo)
+    run_bytecode_test_multiple(&bytecode, times, stereo)
 }
 pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);

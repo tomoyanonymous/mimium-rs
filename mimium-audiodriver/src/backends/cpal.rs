@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
+use mimium_lang::interner::ToSymbol;
 use mimium_lang::runtime::vm;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
@@ -54,18 +55,12 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(
-        program: vm::Program,
-        vm: vm::Machine,
-        buffer: HeapCons<f64>,
-        count: Arc<AtomicU64>,
-    ) -> Self {
+    pub fn new(vm: vm::Machine, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         //todo: split as trait interface method
-        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
-        let vmdata = RuntimeData::new(program, vm, &[getnow_fn]);
+        let (fname, getnow_fn) = crate::runtime_fn::gen_getnowfn(count.clone());
+        let vmdata = RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]);
+        let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
-        let (_, dsp_func) = &vmdata.program.global_fn_table[vmdata.dsp_i];
-        let dsp_ochannels = dsp_func.nret;
         Self {
             vmdata,
             dsp_ochannels,
@@ -204,12 +199,7 @@ impl NativeDriver {
 impl Driver for NativeDriver {
     type Sample = f64;
 
-    fn init(
-        &mut self,
-        program: vm::Program,
-        vm: vm::Machine,
-        sample_rate: Option<SampleRate>,
-    ) -> bool {
+    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
         let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
 
@@ -243,8 +233,8 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(program, vm, cons, self.count.clone());
-            processor.vmdata.vm.execute_main(&processor.vmdata.program);
+            let mut processor = NativeAudioData::new(vm, cons, self.count.clone());
+            processor.vmdata.vm.execute_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(

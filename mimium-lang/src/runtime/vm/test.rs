@@ -158,7 +158,6 @@ fn closuretest() {
         ("makecounter".to_symbol(), makecounter_f),
         ("inner".to_symbol(), inner_f),
     ];
-    let mut machine: Machine = Machine::new(None, &builtin::get_builtin_fns());
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
@@ -167,9 +166,8 @@ fn closuretest() {
         ext_cls_table: vec![],
         global_vals: vec![],
     };
-    // let mut feedstate = FeedState::default()
-    machine.link_functions(&prog);
-    let res = machine.execute_main(&prog);
+    let mut machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    let res = machine.execute_main();
     assert_eq!(res, 0);
 }
 
@@ -205,18 +203,21 @@ fn rust_closure_test() {
         m.set_stack(-1, Machine::to_value(i));
         1
     });
-    let mut machine = Machine::new_for_test();
-    machine.install_extern_fn("lib_printi".to_symbol(), lib_printi);
-    machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());
+    let unknownt = Type::Unknown.into_id();
+
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_symbol(), Type::Unknown.into_id())],
-        ext_cls_table: vec![("rustclosure".to_symbol(), Type::Unknown.into_id())],
+        ext_fun_table: vec![("lib_printi".to_symbol(), unknownt)],
+        ext_cls_table: vec![("rustclosure".to_symbol(), unknownt)],
         global_vals: vec![],
     };
-    machine.link_functions(&prog);
-    // let mut feedstate = FeedState::default();
-    let res = machine.execute_main(&prog);
+    let mut machine = Machine::new(
+        None,
+        prog,
+        &[("lib_printi", lib_printi, unknownt)],
+        &[("rustclosure", cls.clone(), unknownt)],
+    );
+    let res = machine.execute_main();
     assert_eq!(res, 0);
 }
 
@@ -267,16 +268,16 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
 #[test]
 fn closure_gc_open() {
     let prog = prep_closure_gc_program(false);
-    let mut machine: Machine = Machine::new_for_test();
-    machine.execute_main(&prog);
+    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    machine.execute_main();
     //open closure should be released.
     assert_eq!(machine.closures.len(), 0);
 }
 #[test]
 fn closure_gc_closed() {
     let prog = prep_closure_gc_program(true);
-    let mut machine: Machine = Machine::new_for_test();
-    machine.execute_main(&prog);
+    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    machine.execute_main();
     //closed closure should be kept.
     assert_eq!(machine.closures.len(), 1);
 }

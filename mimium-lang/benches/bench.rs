@@ -47,12 +47,11 @@ fn dsp(){{
         fn bench_multiosc(b: &mut Bencher, n: usize) {
             let content = make_multiosc_src(n);
             let compiler = compiler::Context::new(&[]);
-            let program = Box::new(compiler.emit_bytecode(&content).expect("ok"));
-            let mut machine = Machine::new_for_test();
-            machine.link_functions(&program);
-            machine.execute_main(&program);
+            let program = compiler.emit_bytecode(&content).expect("ok");
             let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");
-            b.iter(move || machine.execute_idx(&program, idx));
+            let mut machine = Machine::new(None, program, &[], &[]);
+            machine.execute_main();
+            b.iter(move || machine.execute_idx(idx));
         }
         #[bench]
         fn bench_multiosc5(b: &mut Bencher) {

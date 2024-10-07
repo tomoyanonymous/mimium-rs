@@ -8,11 +8,11 @@ use mimium_lang::{
     runtime::vm::{ExtClsType, Machine},
 };
 
-pub(crate) fn gen_getnowfn(count: Arc<AtomicU64>) -> (Symbol, ExtClsType) {
+pub fn gen_getnowfn(count: Arc<AtomicU64>) -> (&'static str, ExtClsType) {
     let func = Arc::new(move |machine: &mut Machine| {
         let count = count.load(Ordering::Relaxed) as f64;
         machine.set_stack(-1, Machine::to_value(count));
         1
     });
-    ("_mimium_getnow".to_symbol(), func)
+    ("_mimium_getnow", func)
 }

@@ -10,7 +10,7 @@ use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 /// Execute the program n times and write the result values to `localbuffer`.
 pub struct LocalBufferDriver {
     pub vmdata: Option<RuntimeData>,
-    count: Arc<AtomicU64>,
+    pub count: Arc<AtomicU64>,
     samplerate: SampleRate,
     localbuffer: Vec<f64>,
     times: usize,
@@ -61,23 +61,19 @@ impl LocalBufferDriver {
 impl Driver for LocalBufferDriver {
     type Sample = f64;
 
-    fn init(
-        &mut self,
-        program: vm::Program,
-        vm: vm::Machine,
-        sample_rate: Option<crate::driver::SampleRate>,
-    ) -> bool {
-        let dsp_i = program
+    fn init(&mut self, vm: vm::Machine, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+        let dsp_i = vm
+            .prog
             .get_fun_index(&"dsp".to_symbol())
             .expect("no dsp function found");
-        let (_, dsp_func) = &program.global_fn_table[dsp_i];
+        let (_, dsp_func) = &vm.prog.global_fn_table[dsp_i];
         self.ochannels = dsp_func.nret as u64;
         self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
         self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
 
-        let getnow_fn = crate::runtime_fn::gen_getnowfn(self.count.clone());
+        let (fname, getnow_fn) = crate::runtime_fn::gen_getnowfn(self.count.clone());
 
-        self.vmdata = Some(RuntimeData::new(program, vm, &[getnow_fn]));
+        self.vmdata = Some(RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]));
 
         true
     }

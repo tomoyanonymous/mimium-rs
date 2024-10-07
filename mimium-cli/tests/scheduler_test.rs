@@ -41,23 +41,25 @@ fn scheduler_counter_indirect() {
 #[test]
 fn scheduler_gc_test() {
     let (_, src) = load_src("scheduler_counter_indirect.mmm");
-    let ctx = ExecContext::new(&[]);
-    let bytecode = ctx.compiler.emit_bytecode(&src).unwrap();
+    let mut ctx = ExecContext::new(&[]);
+    let vm = ctx.prepare_machine(&src);
 
     let mut driver2 = LocalBufferDriver::new(2);
-    driver2.init(bytecode.clone(), ctx.vm, None);
+    driver2.init(vm, None);
     driver2.play();
     let first = driver2.vmdata.unwrap().vm.closures.len();
-    let ctx = ExecContext::new(&[]);
+    let mut ctx = ExecContext::new(&[]);
+    let vm = ctx.prepare_machine(&src);
 
     let mut driver3 = LocalBufferDriver::new(3);
-    driver3.init(bytecode.clone(), ctx.vm, None);
+    driver3.init(vm, None);
     driver3.play();
     let second = driver3.vmdata.unwrap().vm.closures.len();
-    let ctx = ExecContext::new(&[]);
+    let mut ctx = ExecContext::new(&[]);
+    let vm = ctx.prepare_machine(&src);
 
     let mut driver4 = LocalBufferDriver::new(4);
-    driver4.init(bytecode.clone(), ctx.vm, None);
+    driver4.init(vm, None);
     driver4.play();
     let third = driver4.vmdata.unwrap().vm.closures.len();
     assert!(first == second && second == third)

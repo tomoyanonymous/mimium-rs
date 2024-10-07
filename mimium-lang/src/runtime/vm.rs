@@ -186,6 +186,8 @@ impl Default for RawValType {
 }
 
 pub struct Machine {
+    // program will be modified while its execution, e.g., higher-order external closure creates its wrapper.
+    pub prog: Program,
     stack: Vec<RawVal>,
     base_pointer: u64,
     pub closures: ClosureStorage,
@@ -312,10 +314,16 @@ where
 }
 
 impl Machine {
-    pub fn new(scheduler: Option<Box<dyn Scheduler>>, extfns: &[ExtFnInfo]) -> Self {
+    pub fn new(
+        scheduler: Option<Box<dyn Scheduler>>,
+        prog: Program,
+        extfns: &[ExtFnInfo],
+        extcls: &[ExtClsInfo],
+    ) -> Self {
         let scheduler = scheduler.unwrap_or(Box::new(DummyScheduler));
 
         let mut res = Self {
+            prog,
             stack: vec![],
             base_pointer: 0,
             closures: Default::default(),
@@ -333,10 +341,11 @@ impl Machine {
         extfns.iter().for_each(|(name, f, _)| {
             let _ = res.install_extern_fn(name.to_symbol(), *f);
         });
+        extcls.iter().for_each(|(name,f,_)|{
+            let _ = res.install_extern_cls(name.to_symbol(), f.clone());
+        });
+        res.link_functions();
         res
-    }
-    pub fn new_for_test() -> Self {
-        Self::new(None, &[])
     }
     pub fn clear_stack(&mut self) {
         self.stack.fill(0);
@@ -501,6 +510,17 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
+    pub fn allocate_closure(
+        &mut self,
+        prog: &Program,
+        fn_i: usize,
+        upv_map: &mut LocalUpValueMap,
+    ) -> ClosureIdx {
+        let idx = self
+            .closures
+            .insert(Closure::new(prog, self.base_pointer, fn_i, upv_map));
+        ClosureIdx(idx)
+    }
     fn close_upvalues(&mut self, src: Reg) {
         let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
 
@@ -543,13 +563,8 @@ impl Machine {
         }
     }
     /// Execute function, return retcode.
-    pub fn execute(
-        &mut self,
-        func_i: usize,
-        prog: &Program,
-        cls_i: Option<ClosureIdx>,
-    ) -> ReturnCode {
-        let (_fname, func) = &prog.global_fn_table[func_i];
+    pub fn execute(&mut self, func_i: usize, cls_i: Option<ClosureIdx>) -> ReturnCode {
+        let (_fname, func) = self.prog.global_fn_table[func_i].clone();
         let mut local_closures: Vec<ClosureIdx> = vec![];
         let mut upv_map = LocalUpValueMap::default();
         let mut pcounter = 0;
@@ -596,14 +611,14 @@ impl Machine {
                     let pos_of_f = cls.fn_proto_pos;
                     self.states_stack.push(cls_i);
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, Some(cls_i))
+                        machine.execute(pos_of_f, Some(cls_i))
                     });
                     self.states_stack.pop();
                 }
                 Instruction::Call(func, nargs, nret_req) => {
                     let pos_of_f = Self::get_as::<usize>(self.get_stack(func as i64));
                     self.call_function(func, nargs, nret_req, move |machine| {
-                        machine.execute(pos_of_f, prog, None)
+                        machine.execute(pos_of_f, None)
                     });
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
@@ -631,7 +646,7 @@ impl Machine {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
 
                     let vaddr = ClosureIdx(self.closures.insert(Closure::new(
-                        prog,
+                        &self.prog,
                         self.base_pointer,
                         fn_proto_pos,
                         &mut upv_map,
@@ -838,10 +853,15 @@ impl Machine {
         self.ext_cls_table.push((name, f));
         self.ext_cls_table.len() - 1
     }
-    pub fn link_functions(&mut self, prog: &Program) {
+    pub fn wrap_extern_cls(&mut self, name: Symbol, f: ExtClsType) {
+        todo!()
+        // self.allocate_closure(fn_i, &mut vec![])
+    }
+    fn link_functions(&mut self) {
         //link external functions
-        self.global_vals = prog.global_vals.clone();
-        prog.ext_fun_table
+        self.global_vals = self.prog.global_vals.clone();
+        self.prog
+            .ext_fun_table
             .iter()
             .enumerate()
             .for_each(|(i, (name, _ty))| {
@@ -856,7 +876,8 @@ impl Machine {
                     panic!("external function {} cannot be found", name);
                 };
             });
-        prog.ext_cls_table
+        self.prog
+            .ext_cls_table
             .iter()
             .enumerate()
             .for_each(|(i, (name, _ty))| {
@@ -872,8 +893,8 @@ impl Machine {
                 };
             });
     }
-    pub fn execute_idx(&mut self, prog: &Program, idx: usize) -> ReturnCode {
-        let (_name, func) = &prog.global_fn_table[idx];
+    pub fn execute_idx(&mut self, idx: usize) -> ReturnCode {
+        let (_name, func) = &self.prog.global_fn_table[idx];
         if !func.bytecodes.is_empty() {
             self.global_states.resize(func.state_size as usize);
             // 0 is always base pointer to the main function
@@ -881,33 +902,33 @@ impl Machine {
                 self.stack[0] = 0;
             }
             self.base_pointer = 1;
-            self.execute(idx, prog, None)
+            self.execute(idx, None)
         } else {
             0
         }
     }
-    pub fn execute_entry(&mut self, prog: &Program, entry: &Symbol) -> ReturnCode {
-        if let Some(idx) = prog.get_fun_index(entry) {
-            self.execute_idx(prog, idx)
+    pub fn execute_entry(&mut self, entry: &Symbol) -> ReturnCode {
+        if let Some(idx) = self.prog.get_fun_index(entry) {
+            self.execute_idx(idx)
         } else {
             -1
         }
     }
-    pub fn execute_main(&mut self, prog: &Program) -> ReturnCode {
+    pub fn execute_main(&mut self) -> ReturnCode {
         //internal function table 0 is always mimium_main
         self.global_states
-            .resize(prog.global_fn_table[0].1.state_size as usize);
+            .resize(self.prog.global_fn_table[0].1.state_size as usize);
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
-        self.execute(0, prog, None)
+        self.execute(0, None)
     }
-    pub fn execute_task(&mut self, now: Time, prog: &Program) {
+    pub fn execute_task(&mut self, now: Time) {
         self.scheduler.set_cur_time(now);
         log::debug!("closures {}", self.closures.len());
 
-        while let Some(task_cls) = self.scheduler.pop_task(now, prog) {
+        while let Some(task_cls) = self.scheduler.pop_task(now) {
             let closure = self.get_closure(task_cls);
-            self.execute(closure.fn_proto_pos, prog, Some(task_cls));
+            self.execute(closure.fn_proto_pos, Some(task_cls));
             drop_closure(&mut self.closures, task_cls);
         }
     }

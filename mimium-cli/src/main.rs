@@ -111,7 +111,7 @@ fn run_file(
 ) -> Result<(), Vec<Box<dyn ReportableError>>> {
     log::debug!("Filename: {}", fullpath.display());
 
-    let ctx = get_default_context();
+    let mut ctx = get_default_context();
     if args.mode.emit_ast {
         let ast = emit_ast_local(content)?;
         println!("{}", ast.pretty_print());
@@ -119,10 +119,10 @@ fn run_file(
         let mir = ctx.compiler.emit_mir(content)?;
         println!("{mir}");
     } else {
-        let prog = ctx.compiler.emit_bytecode(content)?;
+        let machine = ctx.prepare_machine(content);
 
         if args.mode.emit_bytecode {
-            println!("{prog}");
+            println!("{}", machine.prog);
             return Ok(());
         }
 
@@ -138,7 +138,7 @@ fn run_file(
                 _ => panic!("cannot determine the output file format"),
             },
         };
-        driver.init(prog, ctx.vm, None);
+        driver.init(machine, None);
         driver.play();
 
         //wait until input something
