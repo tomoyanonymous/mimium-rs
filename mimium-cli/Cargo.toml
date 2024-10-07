@@ -16,4 +16,5 @@ log = "0.4.22"
 
 mimium-lang = {path = "../mimium-lang"}
 mimium-audiodriver = {path = "../mimium-audiodriver"}
+mimium-symphonia = {path = "../mimium-symphonia"}
 colog = "1.3.0"

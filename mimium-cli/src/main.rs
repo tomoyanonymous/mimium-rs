@@ -12,6 +12,7 @@ use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
 use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
+use mimium_symphonia;
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -99,8 +100,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_default_context() -> ExecContext {
-    //todo: add symphonia
-    ExecContext::new(&[])
+    let symphonia = mimium_symphonia::get_signature();
+    ExecContext::new(&[symphonia])
 }
 
 fn run_file(

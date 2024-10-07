@@ -47,10 +47,6 @@ fn get_default_decoder(path: &str) -> Result<DecoderSet, Box<dyn std::error::Err
     Ok((decoder, probed, id))
 }
 
-pub struct FileSampler {
-    data: Vec<f64>,
-}
-
 fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
     let (mut decoder, mut probed, id) = get_default_decoder(path).expect("failed to find file");
     let max_frames = decoder.codec_params().max_frames_per_packet.unwrap();
@@ -79,8 +75,6 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
         Ok(packet) => {
             // Decode the packet into audio samples.
             let _ = decoder.decode(&packet).map(|decoded| {
-                
-
                 buf.copy_interleaved_ref(decoded.clone());
                 // log::debug!(
                 //     "frames:{}, timestamp:{}, n_samples: {}",
@@ -90,11 +84,10 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
                 // );
                 res.extend_from_slice(buf.samples());
             });
-            
         }
         Err(e) => {
-        // 
-        },
+            //
+        }
     }
     res
 }
@@ -114,7 +107,7 @@ fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-fn export_signature() -> (Symbol, TypeNodeId, ExtFunType) {
+pub fn get_signature() -> (&'static str, ExtFunType, TypeNodeId) {
     let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
-    ("loadwav".to_symbol(), t, load_wavfile)
+    ("loadwav", load_wavfile, t)
 }
