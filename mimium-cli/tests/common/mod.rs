@@ -1,7 +1,9 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
-use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
+use mimium_audiodriver::{
+    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
+};
 use mimium_lang::{
     compiler,
     interner::ToSymbol,
@@ -54,10 +56,11 @@ fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut ctx = ExecContext::new(&[]);
-    let vm = ctx.prepare_machine(src);
-
     let mut driver = LocalBufferDriver::new(times as _);
+    let getnowfn = gen_getnowfn(driver.count.clone());
+    let mut ctx = ExecContext::new(&[], &[getnowfn]);
+    let mut vm = ctx.prepare_machine(src);
+
     driver.init(vm, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
@@ -69,7 +72,7 @@ pub(crate) fn run_source_test(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[]);
+    let ctx = ExecContext::new(&[], &[]);
 
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
@@ -117,7 +120,7 @@ pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, (
 pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new(&[]);
+    let ctx = ExecContext::new(&[], &[]);
     let bytecode = match ctx.compiler.emit_bytecode(&src) {
         Ok(res) => res,
         Err(errs) => {

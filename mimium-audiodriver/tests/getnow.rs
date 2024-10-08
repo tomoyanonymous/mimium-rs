@@ -51,7 +51,7 @@ fn getnow_test() {
 
     let times = 10;
     let mut driver = LocalBufferDriver::new(times);
-    let (fname, getnowfn) = runtime_fn::gen_getnowfn(driver.count.clone());
+    let (fname, getnowfn,_type) = runtime_fn::gen_getnowfn(driver.count.clone());
     driver.init(
         vm::Machine::new(
             None,

@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn get_default_context() -> ExecContext {
     let symphonia = mimium_symphonia::get_signature();
-    ExecContext::new(&[symphonia])
+    ExecContext::new(&[symphonia],&[])
 }
 
 fn run_file(

@@ -57,7 +57,7 @@ unsafe impl Send for NativeAudioData {}
 impl NativeAudioData {
     pub fn new(vm: vm::Machine, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         //todo: split as trait interface method
-        let (fname, getnow_fn) = crate::runtime_fn::gen_getnowfn(count.clone());
+        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(count.clone());
         let vmdata = RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
