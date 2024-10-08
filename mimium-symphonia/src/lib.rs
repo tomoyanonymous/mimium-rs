@@ -1,3 +1,4 @@
+use core::num;
 use std::fs::File;
 use std::sync::Arc;
 
@@ -102,8 +103,9 @@ fn load_wavfile(machine: &mut Machine) -> ReturnCode {
         machine.set_stack(0, val);
         todo!()
     };
-    let idx = machine.install_extern_cls("loadwavfile_impl".to_symbol(), Arc::new(res));
-    machine.set_stack(0, idx as _);
+    let ty = function!(vec![numeric!()], numeric!());
+    let idx = machine.wrap_extern_cls(("loadwavfile_impl", Arc::new(res), ty));
+    machine.set_stack(0, Machine::to_value(idx));
     1
 }
 

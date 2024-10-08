@@ -114,7 +114,7 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 impl ByteCodeGenerator {
     //Calculate byte size of the value for type T based on 1 word size (=currently 64bit).
     //The base word size may change depending on the backend in the future.
-    fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
+    pub(crate) fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
         match ty.to_type() {
             Type::Primitive(PType::Unit) => 0,
             Type::Primitive(_) => 1,

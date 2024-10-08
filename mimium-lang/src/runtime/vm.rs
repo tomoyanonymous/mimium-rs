@@ -13,8 +13,9 @@ use program::OpenUpValue;
 pub use program::{FuncProto, Program};
 
 use crate::{
+    compiler::bytecodegen::ByteCodeGenerator,
     interner::{Symbol, ToSymbol, TypeNodeId},
-    types::TypeSize,
+    types::{Type, TypeSize},
 };
 
 use super::scheduler::{DummyScheduler, Scheduler, Time};
@@ -341,7 +342,7 @@ impl Machine {
         extfns.iter().for_each(|(name, f, _)| {
             let _ = res.install_extern_fn(name.to_symbol(), *f);
         });
-        extcls.iter().for_each(|(name,f,_)|{
+        extcls.iter().for_each(|(name, f, _)| {
             let _ = res.install_extern_cls(name.to_symbol(), f.clone());
         });
         res.link_functions();
@@ -510,15 +511,62 @@ impl Machine {
         self.delaysizes_pos_stack.pop();
         nret
     }
-    pub fn allocate_closure(
-        &mut self,
-        prog: &Program,
-        fn_i: usize,
-        upv_map: &mut LocalUpValueMap,
-    ) -> ClosureIdx {
+    fn allocate_closure(&mut self, fn_i: usize, upv_map: &mut LocalUpValueMap) -> ClosureIdx {
         let idx = self
             .closures
-            .insert(Closure::new(prog, self.base_pointer, fn_i, upv_map));
+            .insert(Closure::new(&self.prog, self.base_pointer, fn_i, upv_map));
+        ClosureIdx(idx)
+    }
+    /// This API is used for defining higher-order external function that returns some external rust closure.
+    /// Because the native closure cannot be called with CallCls directly, the vm appends an additional function the program,
+    /// that wraps external closure call with an internal closure.
+    pub fn wrap_extern_cls(&mut self, extcls: ExtClsInfo) -> ClosureIdx {
+        let (name_str, f, t) = extcls;
+        let name = name_str.to_symbol();
+        self.prog.ext_cls_table.push((name, t));
+        let prog_clsid = self.prog.ext_cls_table.len() - 1;
+        self.ext_cls_table.push((name, f));
+        let vm_clsid = self.ext_cls_table.len() - 1;
+        self.cls_map.insert(prog_clsid, vm_clsid);
+
+        let (bytecodes, nargs, nret) = if let Type::Function(args, ret, _) = t.to_type() {
+            let mut wrap_bytecode = Vec::<Instruction>::new();
+            // todo: decouple bytecode generator dependency
+            let asizes = args.into_iter().map(ByteCodeGenerator::word_size_for_type);
+            let nargs = asizes.clone().sum();
+            let base = nargs;
+            let nret = ByteCodeGenerator::word_size_for_type(ret);
+            wrap_bytecode.push(Instruction::MoveConst(base as _, 0));
+            let _ = asizes.fold(0u8, |acc, size| {
+                //copy arguments for ext closure call
+                wrap_bytecode.push(Instruction::MoveRange(base + acc, acc, size as _));
+                acc + size
+            });
+            wrap_bytecode.extend_from_slice(&[
+                Instruction::CallExtCls(base, nargs, nret as _),
+                Instruction::Return(nargs, nret as _),
+            ]);
+            (wrap_bytecode, nargs, nret)
+        } else {
+            panic!("non-function type called for wrapping external closure");
+        };
+        let newfunc = FuncProto {
+            nparam: nargs as _,
+            nret: nret as _,
+            upindexes: vec![],
+            bytecodes,
+            constants: vec![prog_clsid as _],
+            state_size: 0,
+            delay_sizes: vec![],
+        };
+        self.prog.global_fn_table.push((name, newfunc));
+        let fn_i = self.prog.global_fn_table.len() - 1;
+        let idx = self.closures.insert(Closure::new(
+            &self.prog,
+            self.base_pointer,
+            fn_i,
+            &mut LocalUpValueMap(vec![]),
+        ));
         ClosureIdx(idx)
     }
     fn close_upvalues(&mut self, src: Reg) {
@@ -644,14 +692,7 @@ impl Machine {
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
-
-                    let vaddr = ClosureIdx(self.closures.insert(Closure::new(
-                        &self.prog,
-                        self.base_pointer,
-                        fn_proto_pos,
-                        &mut upv_map,
-                    )));
-
+                    let vaddr = self.allocate_closure(fn_proto_pos, &mut upv_map);
                     local_closures.push(vaddr);
                     self.set_stack(dst as i64, Self::to_value(vaddr));
                 }
@@ -853,10 +894,7 @@ impl Machine {
         self.ext_cls_table.push((name, f));
         self.ext_cls_table.len() - 1
     }
-    pub fn wrap_extern_cls(&mut self, name: Symbol, f: ExtClsType) {
-        todo!()
-        // self.allocate_closure(fn_i, &mut vec![])
-    }
+
     fn link_functions(&mut self) {
         //link external functions
         self.global_vals = self.prog.global_vals.clone();
