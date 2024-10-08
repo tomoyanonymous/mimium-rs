@@ -36,6 +36,7 @@ pub enum Instruction {
     Integer(i64),
     //constant float
     Float(f64),
+    String(Symbol),
     // allocate memory from stack depending on the size
     Alloc(TypeNodeId),
     // load value to register from the pointer type

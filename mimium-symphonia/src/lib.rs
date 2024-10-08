@@ -95,8 +95,8 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
 
 fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     //return closure
-    let path = vm::Machine::get_as_array::<&str>(machine.get_stack_range(0, 2).1)[0];
-    let vec = load_wavfile_to_vec(path); //the generated vector is moved into the closure
+    let path = vm::Machine::get_as_array::<Symbol>(machine.get_stack_range(0, 2).1)[0];
+    let vec = load_wavfile_to_vec(path.as_str()); //the generated vector is moved into the closure
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0)) as usize;
         let val = Machine::to_value(vec[pos]);

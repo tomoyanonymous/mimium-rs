@@ -18,13 +18,9 @@ fn getnow_test() {
     // }
     let inner_insts_main = vec![Instruction::Return0];
     let main_f = FuncProto {
-        nparam: 0,
-        nret: 0,
-        upindexes: vec![],
         bytecodes: inner_insts_main,
         constants: vec![], //cls, int 4
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let inner_insts = vec![
         Instruction::MoveConst(0, 0),     //load constant 0 for closure index
@@ -34,11 +30,9 @@ fn getnow_test() {
     let dsp_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0], //cls,
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let fns = vec![("main".to_symbol(), main_f), ("dsp".to_symbol(), dsp_f)];
 
@@ -51,7 +45,7 @@ fn getnow_test() {
 
     let times = 10;
     let mut driver = LocalBufferDriver::new(times);
-    let (fname, getnowfn,_type) = runtime_fn::gen_getnowfn(driver.count.clone());
+    let (fname, getnowfn, _type) = runtime_fn::gen_getnowfn(driver.count.clone());
     driver.init(
         vm::Machine::new(
             None,

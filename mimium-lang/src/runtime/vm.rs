@@ -553,11 +553,9 @@ impl Machine {
         let newfunc = FuncProto {
             nparam: nargs as _,
             nret: nret as _,
-            upindexes: vec![],
             bytecodes,
             constants: vec![prog_clsid as _],
-            state_size: 0,
-            delay_sizes: vec![],
+            ..Default::default()
         };
         self.prog.global_fn_table.push((name, newfunc));
         let fn_i = self.prog.global_fn_table.len() - 1;

@@ -10,6 +10,7 @@ pub struct FuncProto {
     pub upindexes: Vec<OpenUpValue>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
+    pub strings: Vec<Symbol>,
     // feedvalues are mapped in this vector
     pub state_size: u64,
     pub delay_sizes: Vec<u64>,
@@ -22,6 +23,7 @@ impl FuncProto {
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
+            strings: vec![],
             state_size: 0,
             delay_sizes: vec![],
         }
@@ -31,6 +33,15 @@ impl FuncProto {
             self.constants.push(cval);
             self.constants.len() - 1
         })
+    }
+    pub fn add_new_str(&mut self, s: Symbol) -> usize {
+        self.strings
+            .iter()
+            .position(|&c| s == c)
+            .unwrap_or_else(|| {
+                self.strings.push(s);
+                self.strings.len() - 1
+            })
     }
 }
 
@@ -61,6 +72,15 @@ impl std::fmt::Display for Program {
             let _ = write!(f, "upindexes: {:?}  ", fns.1.upindexes);
             let _ = write!(f, "state_size: {}  \n", fns.1.state_size);
             let _ = write!(f, "constants:  {:?}\n", fns.1.constants);
+            let _ = write!(
+                f,
+                "strings:  {:?}\n",
+                fns.1
+                    .strings
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            );
             let _ = write!(f, "instructions:\n");
             for inst in fns.1.bytecodes.iter() {
                 let _ = write!(f, "  {}\n", inst);

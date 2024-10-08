@@ -302,7 +302,7 @@ impl Context {
 
     pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
         let v = match lit {
-            Literal::String(_) => todo!(),
+            Literal::String(s) => self.push_inst(Instruction::String((&s).to_symbol())),
             Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
             Literal::Float(f) => self.push_inst(Instruction::Float(
                 f.parse::<f64>().expect("illegal float format"),
