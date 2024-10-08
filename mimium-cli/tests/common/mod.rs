@@ -6,7 +6,7 @@ use mimium_audiodriver::{
 };
 use mimium_lang::{
     compiler,
-    interner::ToSymbol,
+    interner::{Symbol, ToSymbol},
     runtime::{
         self,
         scheduler::{Scheduler, SyncScheduler},
@@ -58,7 +58,7 @@ fn run_source_with_scheduler(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut driver = LocalBufferDriver::new(times as _);
     let getnowfn = gen_getnowfn(driver.count.clone());
-    let mut ctx = ExecContext::new(&[], &[getnowfn]);
+    let mut ctx = ExecContext::new(&[], &[getnowfn], None);
     let mut vm = ctx.prepare_machine(src);
 
     driver.init(vm, None);
@@ -71,8 +71,9 @@ pub(crate) fn run_source_test(
     src: &str,
     times: u64,
     stereo: bool,
+    path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[], &[]);
+    let ctx = ExecContext::new(&[], &[], path);
 
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
@@ -90,7 +91,8 @@ pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>
 }
 pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_test(&src, times, stereo);
+    let path_sym = file.to_string_lossy().to_symbol();
+    let res = run_source_test(&src, times, stereo, Some(path_sym));
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -120,7 +122,7 @@ pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, (
 pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new(&[], &[]);
+    let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));
     let bytecode = match ctx.compiler.emit_bytecode(&src) {
         Ok(res) => res,
         Err(errs) => {

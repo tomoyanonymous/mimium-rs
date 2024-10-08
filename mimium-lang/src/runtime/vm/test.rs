@@ -158,8 +158,7 @@ fn closuretest() {
     let prog = Program {
         global_fn_table,
         ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
-        ext_cls_table: vec![],
-        global_vals: vec![],
+        ..Default::default()
     };
     let mut machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
     let res = machine.execute_main();
@@ -202,7 +201,7 @@ fn rust_closure_test() {
         global_fn_table,
         ext_fun_table: vec![("lib_printi".to_symbol(), unknownt)],
         ext_cls_table: vec![("rustclosure".to_symbol(), unknownt)],
-        global_vals: vec![],
+        ..Default::default()
     };
     let mut machine = Machine::new(
         None,
@@ -246,8 +245,7 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
     let prog = Program {
         global_fn_table,
         ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
-        ext_cls_table: vec![],
-        global_vals: vec![],
+        ..Default::default()
     };
     prog
 }

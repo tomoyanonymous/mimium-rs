@@ -38,9 +38,8 @@ fn getnow_test() {
 
     let prog = Program {
         global_fn_table: fns,
-        ext_fun_table: vec![],
         ext_cls_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
-        global_vals: vec![],
+        ..Default::default()
     };
 
     let times = 10;

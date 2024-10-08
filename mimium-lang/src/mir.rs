@@ -197,4 +197,5 @@ impl Function {
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
+    pub file_path: Option<Symbol>
 }

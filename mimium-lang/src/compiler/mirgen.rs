@@ -790,6 +790,7 @@ impl ReportableError for CompileError {
 pub fn compile(
     root_expr_id: ExprNodeId,
     builtin_types: &[(Symbol, TypeNodeId)],
+    file_path: Option<Symbol>,
 ) -> Result<Mir, Box<dyn ReportableError>> {
     let ast2 = recursecheck::convert_recurse(root_expr_id);
     let expr2 = convert_pronoun::convert_pronoun(ast2).map_err(|e| {
@@ -803,5 +804,6 @@ pub fn compile(
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
+    ctx.program.file_path = file_path;
     Ok(ctx.program.clone())
 }

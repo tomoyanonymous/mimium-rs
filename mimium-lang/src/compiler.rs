@@ -83,16 +83,18 @@ pub fn emit_ast(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> 
 
 pub struct Context {
     builtin_fns: Vec<(Symbol, TypeNodeId)>,
+    file_path: Option<Symbol>,
 }
 impl Context {
-    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)]) -> Self {
+    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)], file_path: Option<Symbol>) -> Self {
         Self {
             builtin_fns: builtin_fns.to_vec(),
+            file_path,
         }
     }
     pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
         let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-        mirgen::compile(ast, &self.builtin_fns).map_err(|e| {
+        mirgen::compile(ast, &self.builtin_fns, self.file_path).map_err(|e| {
             let bres = e as Box<dyn ReportableError>;
             vec![bres]
         })

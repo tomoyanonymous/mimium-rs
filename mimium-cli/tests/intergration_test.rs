@@ -13,7 +13,7 @@ fn dsp(){{
     test(2.0)
 }}"
     );
-    let res = run_source_test(&src, times, false);
+    let res = run_source_test(&src, times, false, None);
     match res {
         Ok(res) => {
             let ans = [expect].repeat(times as usize);

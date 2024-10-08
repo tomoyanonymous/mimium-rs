@@ -43,7 +43,7 @@ fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let mut driver = LocalBufferDriver::new(2);
     let getnowfn = gen_getnowfn(driver.count.clone());
 
-    let mut ctx = ExecContext::new(&[], &[getnowfn]);
+    let mut ctx = ExecContext::new(&[], &[getnowfn],None);
     let vm = ctx.prepare_machine(&src);
     driver.init(vm, None);
     driver

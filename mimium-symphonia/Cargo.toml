@@ -12,3 +12,4 @@ edition = "2021"
 
 mimium-lang = {path = "../mimium-lang"}
 symphonia = "0.5.4"
+log = "0.4.22"

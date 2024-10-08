@@ -10,7 +10,6 @@ pub struct FuncProto {
     pub upindexes: Vec<OpenUpValue>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
-    pub strings: Vec<Symbol>,
     // feedvalues are mapped in this vector
     pub state_size: u64,
     pub delay_sizes: Vec<u64>,
@@ -23,7 +22,6 @@ impl FuncProto {
             upindexes: vec![],
             bytecodes: vec![],
             constants: vec![],
-            strings: vec![],
             state_size: 0,
             delay_sizes: vec![],
         }
@@ -33,6 +31,27 @@ impl FuncProto {
             self.constants.push(cval);
             self.constants.len() - 1
         })
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Program {
+    pub global_fn_table: Vec<(Symbol, FuncProto)>,
+    pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
+    pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
+    pub global_vals: Vec<RawVal>,
+    pub strings: Vec<Symbol>,
+    pub file_path: Option<Symbol>,
+}
+impl Program {
+    pub fn get_fun_index(&self, name: &Symbol) -> Option<usize> {
+        self.global_fn_table
+            .iter()
+            .position(|(label, _f)| label == name)
+    }
+    pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
+        self.get_fun_index(&"dsp".to_symbol())
+            .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
     }
     pub fn add_new_str(&mut self, s: Symbol) -> usize {
         self.strings
@@ -45,25 +64,6 @@ impl FuncProto {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Program {
-    pub global_fn_table: Vec<(Symbol, FuncProto)>,
-    pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
-    pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
-    pub global_vals: Vec<RawVal>,
-}
-impl Program {
-    pub fn get_fun_index(&self, name: &Symbol) -> Option<usize> {
-        self.global_fn_table
-            .iter()
-            .position(|(label, _f)| label == name)
-    }
-    pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
-        self.get_fun_index(&"dsp".to_symbol())
-            .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
-    }
-}
-
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fns in self.global_fn_table.iter() {
@@ -72,15 +72,6 @@ impl std::fmt::Display for Program {
             let _ = write!(f, "upindexes: {:?}  ", fns.1.upindexes);
             let _ = write!(f, "state_size: {}  \n", fns.1.state_size);
             let _ = write!(f, "constants:  {:?}\n", fns.1.constants);
-            let _ = write!(
-                f,
-                "strings:  {:?}\n",
-                fns.1
-                    .strings
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-            );
             let _ = write!(f, "instructions:\n");
             for inst in fns.1.bytecodes.iter() {
                 let _ = write!(f, "  {}\n", inst);
@@ -98,6 +89,14 @@ impl std::fmt::Display for Program {
                 })
         );
         let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
-        write!(f, "globals:\n{:?}", self.global_vals)
+        let _ = write!(f, "globals:\n{:?}", self.global_vals);
+        write!(
+            f,
+            "strings:  {:?}\n",
+            self.strings
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        )
     }
 }

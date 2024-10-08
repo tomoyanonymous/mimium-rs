@@ -21,14 +21,18 @@ pub struct ExecContext {
     //pub plugins: Vec<Plugin>
 }
 
-use interner::ToSymbol;
+use interner::{Symbol, ToSymbol};
 use runtime::{
     scheduler::{Scheduler, SyncScheduler},
     vm::{self, ExtClsInfo, ExtFnInfo},
 };
 impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
-    pub fn new(additional_extfuns: &[ExtFnInfo], extcls: &[ExtClsInfo]) -> Self {
+    pub fn new(
+        additional_extfuns: &[ExtFnInfo],
+        extcls: &[ExtClsInfo],
+        file_path: Option<Symbol>,
+    ) -> Self {
         let mut extfuns = runtime::vm::builtin::get_builtin_fns().to_vec();
         extfuns.append(&mut additional_extfuns.to_vec());
         let mut extfuntypes = extfuns
@@ -40,7 +44,7 @@ impl ExecContext {
             .map(|(name, _, ty)| (name.to_symbol(), *ty))
             .collect::<Vec<_>>();
         extfuntypes.append(&mut extclstypes);
-        let compiler = compiler::Context::new(&extfuntypes);
+        let compiler = compiler::Context::new(&extfuntypes, file_path);
 
         Self {
             compiler,

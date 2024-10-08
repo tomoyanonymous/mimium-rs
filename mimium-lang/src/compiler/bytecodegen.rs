@@ -120,7 +120,7 @@ impl ByteCodeGenerator {
         match ty.to_type() {
             Type::Primitive(PType::Unit) => 0,
             Type::Primitive(PType::String) => 1,
-            Type::Primitive(_)=>1,
+            Type::Primitive(_) => 1,
             Type::Array(_ty) => todo!(),
             Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(*t)).sum(),
             Type::Struct(types) => types
@@ -331,7 +331,7 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::String(s) => {
-                let pos = funcproto.add_new_str(*s);
+                let pos = self.program.add_new_str(*s);
                 Some(VmInstruction::MoveConst(
                     self.get_destination(dst, 1),
                     pos as ConstPos,
@@ -708,7 +708,7 @@ impl ByteCodeGenerator {
                 self.generate_funcproto(func, i)
             })
             .collect();
-
+        self.program.file_path = mir.file_path;
         self.program.clone()
     }
 }

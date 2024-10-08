@@ -528,7 +528,6 @@ impl Machine {
         self.ext_cls_table.push((name, f));
         let vm_clsid = self.ext_cls_table.len() - 1;
         self.cls_map.insert(prog_clsid, vm_clsid);
-
         let (bytecodes, nargs, nret) = if let Type::Function(args, ret, _) = t.to_type() {
             let mut wrap_bytecode = Vec::<Instruction>::new();
             // todo: decouple bytecode generator dependency
@@ -543,6 +542,7 @@ impl Machine {
                 acc + size
             });
             wrap_bytecode.extend_from_slice(&[
+                Instruction::MoveConst(base, prog_clsid as _),
                 Instruction::CallExtCls(base, nargs, nret as _),
                 Instruction::Return(nargs, nret as _),
             ]);
@@ -559,12 +559,15 @@ impl Machine {
         };
         self.prog.global_fn_table.push((name, newfunc));
         let fn_i = self.prog.global_fn_table.len() - 1;
-        let idx = self.closures.insert(Closure::new(
+        let mut cls = Closure::new(
             &self.prog,
             self.base_pointer,
             fn_i,
             &mut LocalUpValueMap(vec![]),
-        ));
+        );
+        // wrapper closure will not be released automatically.
+        cls.is_closed = true;
+        let idx = self.closures.insert(cls);
         ClosureIdx(idx)
     }
     fn close_upvalues(&mut self, src: Reg) {
@@ -960,8 +963,6 @@ impl Machine {
     }
     pub fn execute_task(&mut self, now: Time) {
         self.scheduler.set_cur_time(now);
-        log::debug!("closures {}", self.closures.len());
-
         while let Some(task_cls) = self.scheduler.pop_task(now) {
             let closure = self.get_closure(task_cls);
             self.execute(closure.fn_proto_pos, Some(task_cls));

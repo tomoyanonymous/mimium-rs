@@ -95,13 +95,23 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
 
 fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     //return closure
-    let path = vm::Machine::get_as_array::<Symbol>(machine.get_stack_range(0, 2).1)[0];
-    let vec = load_wavfile_to_vec(path.as_str()); //the generated vector is moved into the closure
+
+    let relpath = machine.prog.strings[vm::Machine::get_as::<usize>(machine.get_stack(0))];
+    let relpath2 = std::path::Path::new(relpath.as_str());
+    let filepath = machine
+        .prog
+        .file_path
+        .map_or_else(|| "".to_string(), |s| s.to_string());
+    let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
+    let abspath = mmm_dirpath.join(relpath2);
+    log::debug!("file path: {}", abspath.to_string_lossy());
+    let vec = load_wavfile_to_vec(&abspath.to_string_lossy()); //the generated vector is moved into the closure
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0)) as usize;
-        let val = Machine::to_value(vec[pos]);
+        // this sampler read with boundary checks.
+        let val = Machine::to_value(vec.get(pos).unwrap_or(&0.0));
         machine.set_stack(0, val);
-        todo!()
+        1
     };
     let ty = function!(vec![numeric!()], numeric!());
     let idx = machine.wrap_extern_cls(("loadwavfile_impl", Arc::new(res), ty));

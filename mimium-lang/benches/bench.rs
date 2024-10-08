@@ -46,7 +46,7 @@ fn dsp(){{
 
         fn bench_multiosc(b: &mut Bencher, n: usize) {
             let content = make_multiosc_src(n);
-            let compiler = compiler::Context::new(&[]);
+            let compiler = compiler::Context::new(&[], None);
             let program = compiler.emit_bytecode(&content).expect("ok");
             let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");
             let mut machine = Machine::new(None, program, &[], &[]);
@@ -121,7 +121,7 @@ fn dsp() {{
 
         fn bench_many_symbols(b: &mut Bencher, n: usize) {
             let content = make_many_symbols_src(n);
-            let compiler = compiler::Context::new(&[]);
+            let compiler = compiler::Context::new(&[], None);
             b.iter(move || compiler.emit_mir(&content).expect("ok"));
         }
 
