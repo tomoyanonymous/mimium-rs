@@ -1,19 +1,17 @@
-use core::num;
-use std::fs::File;
 use std::sync::Arc;
 
-use mimium_lang::interner::{Symbol, ToSymbol, TypeNodeId};
-use mimium_lang::runtime::vm::{self, ExtClsType, ExtFnInfo, ExtFunType, Machine, ReturnCode};
+use mimium_lang::interner::TypeNodeId;
+use mimium_lang::runtime::vm::{self, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
 use mimium_lang::{function, numeric, string_t};
-use symphonia::core::audio::{AudioBuffer, Layout, SampleBuffer, SignalSpec};
+use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{CodecParameters, Decoder, DecoderOptions, CODEC_TYPE_NULL};
-use symphonia::core::errors::Error;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
+use symphonia::core::errors::Error as SymphoniaError;
+use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::{Hint, ProbeResult};
-use symphonia::core::units::{Duration, Time};
+use symphonia::core::units::Time;
 type DecoderSet = (Box<dyn Decoder>, ProbeResult, u32);
 mod filemanager;
 use filemanager::FileManager;
@@ -38,7 +36,7 @@ fn get_default_decoder(path: &str) -> Result<DecoderSet, Box<dyn std::error::Err
         .tracks()
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-        .ok_or(Error::Unsupported("no supported audio tracks"))?;
+        .ok_or(SymphoniaError::Unsupported("no supported audio tracks"))?;
     let id = track.id;
     // Use the default options for the decoder.
     let dec_opts: DecoderOptions = Default::default();
@@ -48,7 +46,7 @@ fn get_default_decoder(path: &str) -> Result<DecoderSet, Box<dyn std::error::Err
     Ok((decoder, probed, id))
 }
 
-fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
+fn load_wavfile_to_vec(path: &str) -> Result<Vec<f64>, SymphoniaError> {
     let (mut decoder, mut probed, id) = get_default_decoder(path).expect("failed to find file");
     let max_frames = decoder.codec_params().max_frames_per_packet.unwrap();
     let _ = probed.format.seek(
@@ -72,25 +70,33 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
             channel_layout.unwrap_or(Layout::Mono),
         ),
     );
-    match probed.format.next_packet() {
-        Ok(packet) => {
-            // Decode the packet into audio samples.
-            let _ = decoder.decode(&packet).map(|decoded| {
-                buf.copy_interleaved_ref(decoded.clone());
-                // log::debug!(
-                //     "frames:{}, timestamp:{}, n_samples: {}",
-                //     decoded.frames(),
-                //     packet.ts(),
-                //     _nsamples
-                // );
-                res.extend_from_slice(buf.samples());
-            });
-        }
-        Err(e) => {
-            //
+    if channels.is_some_and(|c| c.count() != 1) {
+        panic!("loadwav_mono only supports mono format.")
+    }
+    loop {
+        match probed.format.next_packet() {
+            Ok(packet) => {
+                // Decode the packet into audio samples.
+                let _ = decoder.decode(&packet).map(|decoded| {
+                    buf.copy_interleaved_ref(decoded.clone());
+                    res.extend_from_slice(buf.samples());
+                });
+            }
+            Err(e) => match e {
+                SymphoniaError::IoError(ioerror)
+                    if ioerror.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
+                    break; //file reached to the end of stream.
+                }
+                SymphoniaError::DecodeError(_) => {
+                    //contains broken packet but recoverable.
+                    continue;
+                }
+                _ => return Err(e),
+            },
         }
     }
-    res
+    Ok(res)
 }
 
 /// helper function that does bilinear interpolation
@@ -109,8 +115,8 @@ fn interpolate_vec(vec: &[f64], pos: f64) -> f64 {
     }
 }
 
-fn load_wavfile(machine: &mut Machine) -> ReturnCode {
-    //return closure
+fn loadwav_mono(machine: &mut Machine) -> ReturnCode {
+    //return higher order closure
 
     let relpath = machine.prog.strings[vm::Machine::get_as::<usize>(machine.get_stack(0))];
     let relpath2 = std::path::Path::new(relpath.as_str());
@@ -120,9 +126,13 @@ fn load_wavfile(machine: &mut Machine) -> ReturnCode {
         .map_or_else(|| "".to_string(), |s| s.to_string());
     let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
     let abspath = mmm_dirpath.join(relpath2).canonicalize().unwrap();
-    log::debug!("file path: {}", abspath.to_string_lossy());
-    let vec = load_wavfile_to_vec(&abspath.to_string_lossy()); //the generated vector is moved into the closure
-    log::debug!("{:?}", vec);
+
+    let vec = load_wavfile_to_vec(&abspath.to_string_lossy())
+        .inspect_err(|e| {
+            panic!("loadwav error: {}", e.to_string());
+        })
+        .unwrap(); //the generated vector is moved into the closure
+
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0));
         // this sampler read with boundary checks.
@@ -138,5 +148,5 @@ fn load_wavfile(machine: &mut Machine) -> ReturnCode {
 
 pub fn get_signature() -> (&'static str, ExtFunType, TypeNodeId) {
     let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
-    ("loadwav", load_wavfile, t)
+    ("loadwav_mono", loadwav_mono, t)
 }
