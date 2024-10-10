@@ -544,7 +544,7 @@ impl Machine {
             wrap_bytecode.extend_from_slice(&[
                 Instruction::MoveConst(base, prog_clsid as _),
                 Instruction::CallExtCls(base, nargs, nret as _),
-                Instruction::Return(nargs, nret as _),
+                Instruction::Return(base, nret as _),
             ]);
             (wrap_bytecode, nargs, nret)
         } else {
@@ -689,7 +689,14 @@ impl Machine {
                         .expect("closure map not resolved.");
                     let (_name, cls) = &self.ext_cls_table[*cls_idx];
                     let cls = cls.clone();
-                    self.call_function(func, nargs, nret_req, move |machine| cls(machine));
+                    let nret =
+                        self.call_function(func, nargs, nret_req, move |machine| cls(machine));
+                    // return
+                    let base = self.base_pointer as usize;
+                    let iret = base + func as usize + 1;
+                    self.stack
+                        .copy_within(iret..(iret + nret as usize), base + func as usize);
+                    self.stack.truncate(base + func as usize + nret as usize);
                 }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
