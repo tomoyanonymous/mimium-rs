@@ -101,8 +101,7 @@ fn closuretest() {
         ],
         bytecodes: inner_insts,
         constants: vec![], //no constants in the inner function
-        state_size: 0,
-        delay_sizes: vec![],
+        ..Default::default()
     };
     let inner_insts2 = vec![
         // reg0:beg, reg1: inc
@@ -116,11 +115,9 @@ fn closuretest() {
     let makecounter_f = FuncProto {
         nparam: 2,
         nret: 1,
-        upindexes: vec![],
         bytecodes: inner_insts2,
         constants: vec![1u64, 2], // 1, position of inner in global table
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let main_inst = vec![
         // no stack in the entry
@@ -147,29 +144,24 @@ fn closuretest() {
     let main_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
         bytecodes: main_inst,
         constants: vec![13u64, 7u64, 1, 0], //13,7, makecounter, print_f
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let global_fn_table = vec![
         ("main".to_symbol(), main_f),
         ("makecounter".to_symbol(), makecounter_f),
         ("inner".to_symbol(), inner_f),
     ];
-    let mut machine: Machine = Machine::new_without_scheduler();
 
     // machine.install_extern_fn("lib_printi".to_string(), lib_printi);
     let prog = Program {
         global_fn_table,
         ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
-        ext_cls_table: vec![],
-        global_vals: vec![],
+        ..Default::default()
     };
-    // let mut feedstate = FeedState::default()
-    machine.link_functions(&prog);
-    let res = machine.execute_main(&prog);
+    let mut machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    let res = machine.execute_main();
     assert_eq!(res, 0);
 }
 
@@ -187,11 +179,9 @@ fn rust_closure_test() {
     let main_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0u64, 4u64], //cls, int 4
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let fns = vec![main_f];
     let fnames = vec!["main".to_symbol()];
@@ -205,18 +195,21 @@ fn rust_closure_test() {
         m.set_stack(-1, Machine::to_value(i));
         1
     });
-    let mut machine = Machine::new_without_scheduler();
-    machine.install_extern_fn("lib_printi".to_symbol(), lib_printi);
-    machine.install_extern_cls("rustclosure".to_symbol(), cls.clone());
+    let unknownt = Type::Unknown.into_id();
+
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_symbol(), Type::Unknown.into_id())],
-        ext_cls_table: vec![("rustclosure".to_symbol(), Type::Unknown.into_id())],
-        global_vals: vec![],
+        ext_fun_table: vec![("lib_printi".to_symbol(), unknownt)],
+        ext_cls_table: vec![("rustclosure".to_symbol(), unknownt)],
+        ..Default::default()
     };
-    machine.link_functions(&prog);
-    // let mut feedstate = FeedState::default();
-    let res = machine.execute_main(&prog);
+    let mut machine = Machine::new(
+        None,
+        prog,
+        &[("lib_printi", lib_printi, unknownt)],
+        &[("rustclosure", cls.clone(), unknownt)],
+    );
+    let res = machine.execute_main();
     assert_eq!(res, 0);
 }
 
@@ -228,11 +221,9 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
     let cls_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![0], //13,7, makecounter, print_f
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let mut inner_insts = vec![
         Instruction::MoveConst(0, 0), //load closure
@@ -246,18 +237,15 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
     let main_f = FuncProto {
         nparam: 0,
         nret: 1,
-        upindexes: vec![],
         bytecodes: inner_insts,
         constants: vec![1], //13,7, makecounter, print_f
-        delay_sizes: vec![],
-        state_size: 0,
+        ..Default::default()
     };
     let global_fn_table = vec![("main".to_symbol(), main_f), ("cls".to_symbol(), cls_f)];
     let prog = Program {
         global_fn_table,
         ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
-        ext_cls_table: vec![],
-        global_vals: vec![],
+        ..Default::default()
     };
     prog
 }
@@ -267,16 +255,16 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
 #[test]
 fn closure_gc_open() {
     let prog = prep_closure_gc_program(false);
-    let mut machine: Machine = Machine::new_without_scheduler();
-    machine.execute_main(&prog);
+    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    machine.execute_main();
     //open closure should be released.
     assert_eq!(machine.closures.len(), 0);
 }
 #[test]
 fn closure_gc_closed() {
     let prog = prep_closure_gc_program(true);
-    let mut machine: Machine = Machine::new_without_scheduler();
-    machine.execute_main(&prog);
+    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    machine.execute_main();
     //closed closure should be kept.
     assert_eq!(machine.closures.len(), 1);
 }

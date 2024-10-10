@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use mimium_lang::runtime::vm;
+
 use crate::driver::Driver;
 
 use super::local_buffer::LocalBufferDriver;
@@ -25,12 +27,8 @@ impl CsvDriver {
 impl Driver for CsvDriver {
     type Sample = <LocalBufferDriver as Driver>::Sample;
 
-    fn init(
-        &mut self,
-        program: mimium_lang::runtime::vm::Program,
-        sample_rate: Option<crate::driver::SampleRate>,
-    ) -> bool {
-        let res = self.driver.init(program, sample_rate);
+    fn init(&mut self, vm: vm::Machine, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+        let res = self.driver.init(vm, sample_rate);
 
         let chunk_size = self.driver.get_ochannels();
         let mut header = String::new();

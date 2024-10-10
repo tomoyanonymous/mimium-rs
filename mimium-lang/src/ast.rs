@@ -40,10 +40,11 @@ pub enum Expr {
     Block(Option<ExprNodeId>),
     Tuple(Vec<ExprNodeId>),
     Proj(ExprNodeId, i64),
+    ArrayAccess(ExprNodeId, ExprNodeId),
     Apply(ExprNodeId, Vec<ExprNodeId>),
     PipeApply(ExprNodeId, ExprNodeId), // LHS and RHS
     Lambda(Vec<TypedId>, Option<TypeNodeId>, ExprNodeId), //lambda, maybe information for internal state is needed
-    Assign(Symbol, ExprNodeId),
+    Assign(ExprNodeId, ExprNodeId),
     Then(ExprNodeId, Option<ExprNodeId>),
     Feed(Symbol, ExprNodeId), //feedback connection primitive operation. This will be shown only after self-removal stage
     Let(TypedPattern, ExprNodeId, Option<ExprNodeId>),
@@ -118,6 +119,9 @@ impl MiniPrint for Expr {
             Expr::Proj(e, idx) => format!("(proj {} {})", e.simple_print(), idx),
             Expr::Apply(e1, e2) => {
                 format!("(app {} ({}))", e1.simple_print(), concat_vec(e2))
+            }
+            Expr::ArrayAccess(e, i) => {
+                format!("(arrayaccess {} ({}))", e.simple_print(), i.simple_print())
             }
             Expr::PipeApply(lhs, rhs) => {
                 format!("(pipe {} {})", lhs.simple_print(), rhs.simple_print())

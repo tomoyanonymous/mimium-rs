@@ -81,6 +81,7 @@ impl std::fmt::Display for Instruction {
             Instruction::Uinteger(u) => write!(f, "uint {u}"),
             Instruction::Integer(i) => write!(f, "int {i}"),
             Instruction::Float(n) => write!(f, "float {n}"),
+            Instruction::String(s) => write!(f, "string {}", s.as_str()),
             Instruction::Alloc(t) => write!(f, "alloc {}", t.to_type()),
             Instruction::Load(src, ty) => write!(f, "load {src}, {}", ty.to_type()),
             Instruction::Store(dst, src, ty) => write!(f, "store {dst}, {src}, {}", ty.to_type()),

@@ -302,7 +302,7 @@ impl Context {
 
     pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
         let v = match lit {
-            Literal::String(_) => todo!(),
+            Literal::String(s) => self.push_inst(Instruction::String((&s).to_symbol())),
             Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
             Literal::Float(f) => self.push_inst(Instruction::Float(
                 f.parse::<f64>().expect("illegal float format"),
@@ -367,11 +367,18 @@ impl Context {
     }
     fn eval_assign(
         &mut self,
-        name: Symbol,
+        assignee: ExprNodeId,
         src: VPtr,
         t: TypeNodeId,
         span: &Span,
     ) -> Result<(), CompileError> {
+        let name = match assignee.to_expr() {
+            Expr::Var(v) => v,
+            Expr::ArrayAccess(_, _) => {
+                unimplemented!("Assignment to array is not implemented yet.")
+            }
+            _ => unreachable!(),
+        };
         match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Argument(_i, _a) => Err(CompileError(
@@ -520,6 +527,8 @@ impl Context {
                 Ok((dst, ty))
             }
             Expr::Proj(_, _) => todo!(),
+            Expr::ArrayAccess(_, _) => todo!(),
+
             Expr::Apply(f, args) => {
                 let (f, ft) = self.eval_expr(*f)?;
                 let del = self.make_delay(&f, args)?;
@@ -778,18 +787,23 @@ impl ReportableError for CompileError {
     }
 }
 
-pub fn compile(root_expr_id: ExprNodeId) -> Result<Mir, Box<dyn ReportableError>> {
+pub fn compile(
+    root_expr_id: ExprNodeId,
+    builtin_types: &[(Symbol, TypeNodeId)],
+    file_path: Option<Symbol>,
+) -> Result<Mir, Box<dyn ReportableError>> {
     let ast2 = recursecheck::convert_recurse(root_expr_id);
     let expr2 = convert_pronoun::convert_pronoun(ast2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
-    let infer_ctx = infer_root(expr2)
+    let infer_ctx = infer_root(expr2, builtin_types)
         .map_err(|err| Box::new(CompileError::from(err)) as Box<dyn ReportableError>)?;
     let mut ctx = Context::new(infer_ctx);
     let _res = ctx.eval_expr(expr2).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         eb
     })?;
+    ctx.program.file_path = file_path;
     Ok(ctx.program.clone())
 }

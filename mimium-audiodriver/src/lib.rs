@@ -2,5 +2,5 @@
 
 pub mod backends;
 pub mod driver;
-pub(crate) mod runtime_fn;
+pub mod runtime_fn;
 pub use driver::load_default_runtime;

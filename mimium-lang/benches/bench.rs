@@ -9,7 +9,7 @@ fn main() {
 mod tests {
 
     mod runtime {
-        use mimium_lang::compiler::emit_bytecode;
+        use mimium_lang::compiler;
         use mimium_lang::interner::ToSymbol;
         use mimium_lang::runtime::vm::Machine;
         use test::Bencher;
@@ -46,12 +46,12 @@ fn dsp(){{
 
         fn bench_multiosc(b: &mut Bencher, n: usize) {
             let content = make_multiosc_src(n);
-            let program = Box::new(emit_bytecode(&content).expect("ok"));
-            let mut machine = Machine::new_without_scheduler();
-            machine.link_functions(&program);
-            machine.execute_main(&program);
+            let compiler = compiler::Context::new(&[], None);
+            let program = compiler.emit_bytecode(&content).expect("ok");
             let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");
-            b.iter(move || machine.execute_idx(&program, idx));
+            let mut machine = Machine::new(None, program, &[], &[]);
+            machine.execute_main();
+            b.iter(move || machine.execute_idx(idx));
         }
         #[bench]
         fn bench_multiosc5(b: &mut Bencher) {
@@ -72,7 +72,7 @@ fn dsp(){{
     }
 
     mod parse {
-        use mimium_lang::compiler::emit_mir;
+        use mimium_lang::compiler;
         use test::Bencher;
 
         fn gen_fn(fn_name: &str, n: usize) -> String {
@@ -121,7 +121,8 @@ fn dsp() {{
 
         fn bench_many_symbols(b: &mut Bencher, n: usize) {
             let content = make_many_symbols_src(n);
-            b.iter(move || emit_mir(&content).expect("ok"));
+            let compiler = compiler::Context::new(&[], None);
+            b.iter(move || compiler.emit_mir(&content).expect("ok"));
         }
 
         #[bench]

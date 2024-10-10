@@ -92,8 +92,8 @@ pub struct InferContext {
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
 }
-impl std::default::Default for InferContext {
-    fn default() -> Self {
+impl InferContext {
+    fn new(builtins: &[(Symbol, TypeNodeId)]) -> Self {
         let mut res = Self {
             interm_idx: 0,
             typescheme_idx: 0,
@@ -106,14 +106,13 @@ impl std::default::Default for InferContext {
             env: Environment::<TypeNodeId>::new(),
         };
         res.env.extend();
-        Self::register_intrinsics(&mut res.env);
-        Self::register_builtin(&mut res.env);
-
+        res.env.add_bind(&Self::intrinsic_types());
+        res.env.add_bind(builtins);
         res
     }
 }
 impl InferContext {
-    fn register_intrinsics(env: &mut Environment<TypeNodeId>) {
+    fn intrinsic_types() -> Vec<(Symbol, TypeNodeId)> {
         let binop_ty = function!(vec![numeric!(), numeric!()], numeric!());
         let binop_names = [
             intrinsics::ADD,
@@ -158,14 +157,7 @@ impl InferContext {
             ),
         ]);
 
-        env.add_bind(&binds);
-    }
-    fn register_builtin(env: &mut Environment<TypeNodeId>) {
-        let binds = builtin::get_builtin_fns()
-            .iter()
-            .map(|(name, _, t)| (name.to_symbol(), *t))
-            .collect::<Vec<_>>();
-        env.add_bind(&binds);
+        binds
     }
     fn gen_intermediate_type(&mut self) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
@@ -544,8 +536,15 @@ impl InferContext {
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
                 }
             }
-            Expr::Assign(name, expr) => {
-                let assignee_t = self.lookup(name, &span)?;
+            Expr::Assign(assignee, expr) => {
+                let name = match assignee.to_expr() {
+                    Expr::Var(v) => v,
+                    Expr::ArrayAccess(_, _) => {
+                        unimplemented!("Assignment to array is not implemented yet.")
+                    }
+                    _ => unreachable!(),
+                };
+                let assignee_t = self.lookup(&name, &span)?;
                 let e_t = self.infer_type(*expr)?;
                 Self::unify_types(assignee_t, e_t, expr.to_span())?;
                 Ok(unit!())
@@ -607,8 +606,8 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(e: ExprNodeId) -> Result<InferContext, Error> {
-    let mut ctx = InferContext::default();
+pub fn infer_root(e: ExprNodeId,builtin_types:&[(Symbol,TypeNodeId)]) -> Result<InferContext, Error> {
+    let mut ctx = InferContext::new(builtin_types);
     let _ = ctx.infer_type(e)?;
     ctx.substitute_all_intermediates();
     Ok(ctx)

@@ -112,11 +112,14 @@ fn gen_raw_float(n: &f64) -> vm::RawVal {
 }
 
 impl ByteCodeGenerator {
-    //Calculate byte size of the value for type T based on 1 word size (=currently 64bit).
-    //The base word size may change depending on the backend in the future.
-    fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
+    /// Calculate byte size of the value for type T based on 1 word size (=currently 64bit).
+    /// The base word size may change depending on the backend in the future.
+    /// Currently, the string type is a immutable Symbol, so the word size is 1.
+    /// In the future, string may be represented as a fat pointer, pair of pointer and length.
+    pub(crate) fn word_size_for_type(ty: TypeNodeId) -> TypeSize {
         match ty.to_type() {
             Type::Primitive(PType::Unit) => 0,
+            Type::Primitive(PType::String) => 1,
             Type::Primitive(_) => 1,
             Type::Array(_ty) => todo!(),
             Type::Tuple(types) => types.iter().map(|t| Self::word_size_for_type(*t)).sum(),
@@ -322,6 +325,13 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::Float(n) => {
                 let pos = funcproto.add_new_constant(gen_raw_float(n));
+                Some(VmInstruction::MoveConst(
+                    self.get_destination(dst, 1),
+                    pos as ConstPos,
+                ))
+            }
+            mir::Instruction::String(s) => {
+                let pos = self.program.add_new_str(*s);
                 Some(VmInstruction::MoveConst(
                     self.get_destination(dst, 1),
                     pos as ConstPos,
@@ -669,11 +679,8 @@ impl ByteCodeGenerator {
                     .get()
                     .expect("return type not inferred correctly"),
             ) as _,
-            upindexes: vec![],
-            bytecodes: vec![],
-            constants: vec![],
             state_size,
-            delay_sizes: vec![],
+            ..Default::default()
         };
         self.vregister.0.push(VRegister::default());
         for (a, t) in mirfunc.args.iter().zip(mirfunc.argtypes.iter()) {
@@ -701,7 +708,7 @@ impl ByteCodeGenerator {
                 self.generate_funcproto(func, i)
             })
             .collect();
-
+        self.program.file_path = mir.file_path;
         self.program.clone()
     }
 }
