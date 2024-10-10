@@ -1,3 +1,5 @@
+//! Main module of compiler and runtime for **mimium**, an infrastructural programming language for sound and music.
+
 #![feature(iterator_try_collect)]
 #![feature(iter_collect_into)]
 #![feature(if_let_guard)]
@@ -11,7 +13,9 @@ pub mod utils;
 
 pub mod compiler;
 pub mod runtime;
-use std::cell::LazyCell;
+
+/// A set of compilr and external functions (plugins).
+/// From this information, user can generate VM with [`Self::prepare_machine`].
 
 pub struct ExecContext {
     pub compiler: compiler::Context,
