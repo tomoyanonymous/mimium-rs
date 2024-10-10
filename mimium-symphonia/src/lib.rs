@@ -148,5 +148,5 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
 
 pub fn get_signature() -> (&'static str, ExtFunType, TypeNodeId) {
     let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
-    ("gen_sampelr_mono", gen_sampler_mono, t)
+    ("gen_sampler_mono", gen_sampler_mono, t)
 }
