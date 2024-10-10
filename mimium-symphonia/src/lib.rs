@@ -71,7 +71,7 @@ fn load_wavfile_to_vec(path: &str) -> Result<Vec<f64>, SymphoniaError> {
         ),
     );
     if channels.is_some_and(|c| c.count() != 1) {
-        panic!("loadwav_mono only supports mono format.")
+        panic!("gen_sampler_mono only supports mono format.")
     }
     loop {
         match probed.format.next_packet() {
@@ -115,7 +115,7 @@ fn interpolate_vec(vec: &[f64], pos: f64) -> f64 {
     }
 }
 
-fn loadwav_mono(machine: &mut Machine) -> ReturnCode {
+fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
     //return higher order closure
 
     let relpath = machine.prog.strings[vm::Machine::get_as::<usize>(machine.get_stack(0))];
@@ -129,7 +129,7 @@ fn loadwav_mono(machine: &mut Machine) -> ReturnCode {
 
     let vec = load_wavfile_to_vec(&abspath.to_string_lossy())
         .inspect_err(|e| {
-            panic!("loadwav error: {}", e.to_string());
+            panic!("gen_sampler_mono error: {}", e.to_string());
         })
         .unwrap(); //the generated vector is moved into the closure
 
@@ -141,12 +141,12 @@ fn loadwav_mono(machine: &mut Machine) -> ReturnCode {
         1
     };
     let ty = function!(vec![numeric!()], numeric!());
-    let idx = machine.wrap_extern_cls(("loadwavfile_impl", Arc::new(res), ty));
+    let idx = machine.wrap_extern_cls(("sampler_mono", Arc::new(res), ty));
     machine.set_stack(0, Machine::to_value(idx));
     1
 }
 
 pub fn get_signature() -> (&'static str, ExtFunType, TypeNodeId) {
     let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
-    ("loadwav_mono", loadwav_mono, t)
+    ("gen_sampelr_mono", gen_sampler_mono, t)
 }
