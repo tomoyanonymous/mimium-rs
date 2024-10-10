@@ -4,7 +4,7 @@
 
 a programming language as an infrastructure for sound and music
 
-<p style="display:flex; justify-content:center;">
+<p align="center" style="display:flex; justify-content:center;">
 <img src = "mimium_logo_slant.svg" width="300" alt="An icon of the mimium. The word “mimium” is written in small caps, white letters at an angle on a gray diamond-shaped background with a gradient. The vertical bars of the letters are evenly spaced, making it look like a pedestrian crossing." />
 </p>
 
