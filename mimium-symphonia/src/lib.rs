@@ -93,6 +93,22 @@ fn load_wavfile_to_vec(path: &str) -> Vec<f64> {
     res
 }
 
+/// helper function that does bilinear interpolation
+fn interpolate_vec(vec: &[f64], pos: f64) -> f64 {
+    let bound = vec.len();
+    let pos_u = pos.floor() as usize;
+    //todo: efficient boundary check
+    match pos_u {
+        _ if pos >= 0.0 && ((pos_u + 1) as usize) < bound => {
+            let frac = pos.fract();
+            let frac_rem = 1.0 - frac;
+            vec[pos_u] * frac_rem + vec[pos_u + 1] * frac
+        }
+        _ if pos_u + 1 == bound => vec[pos_u],
+        _ => 0.0,
+    }
+}
+
 fn load_wavfile(machine: &mut Machine) -> ReturnCode {
     //return closure
 
@@ -103,14 +119,15 @@ fn load_wavfile(machine: &mut Machine) -> ReturnCode {
         .file_path
         .map_or_else(|| "".to_string(), |s| s.to_string());
     let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
-    let abspath = mmm_dirpath.join(relpath2);
+    let abspath = mmm_dirpath.join(relpath2).canonicalize().unwrap();
     log::debug!("file path: {}", abspath.to_string_lossy());
     let vec = load_wavfile_to_vec(&abspath.to_string_lossy()); //the generated vector is moved into the closure
+    log::debug!("{:?}", vec);
     let res = move |machine: &mut Machine| -> ReturnCode {
-        let pos = vm::Machine::get_as::<f64>(machine.get_stack(0)) as usize;
+        let pos = vm::Machine::get_as::<f64>(machine.get_stack(0));
         // this sampler read with boundary checks.
-        let val = Machine::to_value(vec.get(pos).unwrap_or(&0.0));
-        machine.set_stack(0, val);
+        let val = interpolate_vec(&vec, pos);
+        machine.set_stack(0, Machine::to_value(val));
         1
     };
     let ty = function!(vec![numeric!()], numeric!());
