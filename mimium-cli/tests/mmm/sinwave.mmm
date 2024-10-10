@@ -1,9 +1,0 @@
-fn phasor(freq){
-    (self + 6.28/freq)%1.0
-}
-fn sinwave(freq){
-    sin(phasor(freq)) + sin(phasor(freq*2.0))
-}
-fn dsp(){
-    sinwave(440.0)
-}

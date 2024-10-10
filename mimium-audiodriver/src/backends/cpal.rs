@@ -4,9 +4,8 @@ use std::sync::Arc;
 use crate::driver::{Driver, RuntimeData, SampleRate, Time};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
-use mimium_lang::interner::{Symbol, ToSymbol};
-use mimium_lang::runtime::scheduler;
-use mimium_lang::runtime::vm::{self, ExtClsType, Machine, ReturnCode};
+use mimium_lang::interner::ToSymbol;
+use mimium_lang::runtime::vm;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 const BUFFER_RATIO: usize = 2;
@@ -18,9 +17,10 @@ pub struct NativeDriver {
     istream: Option<cpal::Stream>,
     ostream: Option<cpal::Stream>,
     count: Arc<AtomicU64>,
+    buffer_size: usize,
 }
-impl Default for NativeDriver {
-    fn default() -> Self {
+impl NativeDriver {
+    pub fn new(buffer_size: usize) -> Self {
         Self {
             sr: SampleRate(48000),
             hardware_ichannels: 1,
@@ -29,8 +29,19 @@ impl Default for NativeDriver {
             istream: None,
             ostream: None,
             count: Default::default(),
+            buffer_size,
         }
     }
+}
+
+impl Default for NativeDriver {
+    fn default() -> Self {
+        Self::new(4096)
+    }
+}
+
+pub fn native_driver(buffer_size: usize) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(NativeDriver::new(buffer_size))
 }
 
 //Runtime data, which will be created and immidiately send to audio thread.
@@ -44,14 +55,12 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(program: vm::Program, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
+    pub fn new(vm: vm::Machine, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         //todo: split as trait interface method
-        let schedule_fn = scheduler::gen_schedule_at();
-        let getnow_fn = crate::runtime_fn::gen_getnowfn(count.clone());
-        let vmdata = RuntimeData::new(program, &[schedule_fn], &[getnow_fn]);
+        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(count.clone());
+        let vmdata = RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]);
+        let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
-        let (_, dsp_func) = &vmdata.program.global_fn_table[vmdata.dsp_i];
-        let dsp_ochannels = dsp_func.nret;
         Self {
             vmdata,
             dsp_ochannels,
@@ -190,19 +199,14 @@ impl NativeDriver {
 impl Driver for NativeDriver {
     type Sample = f64;
 
-    fn init(
-        &mut self,
-        program: vm::Program,
-        sample_rate: Option<SampleRate>,
-        buffer_size: usize,
-    ) -> bool {
+    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
-        let (prod, cons) = HeapRb::<Self::Sample>::new(buffer_size).split();
+        let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
             let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            iconfig.buffer_size = BufferSize::Fixed((buffer_size / BUFFER_RATIO) as u32);
+            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
@@ -229,10 +233,10 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(program, cons, self.count.clone());
-            processor.vmdata.vm.execute_main(&processor.vmdata.program);
+            let mut processor = NativeAudioData::new(vm, cons, self.count.clone());
+            processor.vmdata.vm.execute_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
-            oconfig.buffer_size = cpal::BufferSize::Fixed((buffer_size / BUFFER_RATIO) as u32);
+            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(
                 "output device {}buffer size:{:?}",
                 odevice.name().unwrap_or_default(),

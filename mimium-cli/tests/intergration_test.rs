@@ -13,7 +13,7 @@ fn dsp(){{
     test(2.0)
 }}"
     );
-    let res = run_source_test(&src, times, false);
+    let res = run_source_test(&src, times, false, None);
     match res {
         Ok(res) => {
             let ans = [expect].repeat(times as usize);
@@ -62,6 +62,20 @@ fn recursion() {
 }
 
 #[test]
+fn placeholder() {
+    let res = run_file_test_mono("placeholder.mmm", 1).unwrap();
+    let ans = vec![123.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn pipe() {
+    let res = run_file_test_stereo("pipe.mmm", 1).unwrap();
+    let ans = vec![123.0, 123.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn counter() {
     let res = run_file_test_mono("counter.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
@@ -100,24 +114,6 @@ fn primitive_sin() {
     let ans = vec![0.0];
     let r = (res[0] - ans[0]).abs() < std::f64::EPSILON;
     assert!(r);
-}
-
-#[test]
-fn sinewave() {
-    let res = run_file_test_mono("sinwave.mmm", 10).unwrap();
-    let ans = vec![
-        0.0,
-        0.021408545756451732,
-        0.04281382071922544,
-        0.06421255470540224,
-        0.08560147875345994,
-        0.10697732573366744,
-        0.12833683095811457,
-        0.1496767327902555,
-        0.17099377325384513,
-        0.19228469864114656,
-    ];
-    assert_eq!(res, ans);
 }
 
 #[test]

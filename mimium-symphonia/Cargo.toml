@@ -1,5 +1,5 @@
 [package]
-name = "mimium-lang"
+name = "mimium-symphonia"
 version = "2.0.0-alpha-1"
 license = "MPL 2.0"
 edition = "2021"
@@ -10,9 +10,6 @@ edition = "2021"
 
 [dependencies]
 
-chumsky = "0.9"
-ariadne = "0.4"
+mimium-lang = {path = "../mimium-lang"}
+symphonia = "0.5.4"
 log = "0.4.22"
-string-interner = "0.17.0"
-slotmap = "1.0.7"
-colog = "1.3.0"

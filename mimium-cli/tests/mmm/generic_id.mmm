@@ -1,0 +1,7 @@
+//test for generic type inference.
+fn id(x){
+    x
+}
+fn dsp(){
+    tofloat(id(0)) + id(0.0)
+}

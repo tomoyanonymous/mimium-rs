@@ -28,10 +28,11 @@ pub trait Scheduler {
     where
         Self: Sized;
     fn schedule_at(&mut self, time: Time, task: ClosureIdx);
-    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx>;
+    fn pop_task(&mut self, now: Time) -> Option<ClosureIdx>;
     fn set_cur_time(&mut self, time: Time);
 }
 
+#[derive(Clone)]
 pub struct SyncScheduler {
     tasks: BinaryHeap<Reverse<Task>>,
     cur_time: Time,
@@ -55,7 +56,7 @@ impl Scheduler for SyncScheduler {
         self.tasks.push(Reverse(Task { when, cls }));
     }
 
-    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
+    fn pop_task(&mut self, now: Time) -> Option<ClosureIdx> {
         match self.tasks.peek() {
             Some(Reverse(Task { when, cls })) if *when <= now => {
                 let res = Some(*cls);
@@ -71,6 +72,7 @@ impl Scheduler for SyncScheduler {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct DummyScheduler;
 impl Scheduler for DummyScheduler {
     fn new() -> Self
@@ -81,11 +83,12 @@ impl Scheduler for DummyScheduler {
     }
 
     fn schedule_at(&mut self, time: Time, task: ClosureIdx) {
-        debug_assert!(false, "dummy scheduler invoked");
+        // do nothing
     }
 
-    fn pop_task(&mut self, now: Time, prog: &vm::Program) -> Option<ClosureIdx> {
-        panic!("dummy scheduler invoked")
+    fn pop_task(&mut self, now: Time) -> Option<ClosureIdx> {
+        // do nothing
+        None
     }
 
     fn set_cur_time(&mut self, _time: Time) {

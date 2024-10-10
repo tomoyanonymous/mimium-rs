@@ -1,10 +1,12 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
-use mimium_audiodriver::backends::mock::MockDriver;
+use mimium_audiodriver::{
+    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
+};
 use mimium_lang::{
     compiler,
-    interner::ToSymbol,
+    interner::{Symbol, ToSymbol},
     runtime::{
         self,
         scheduler::{Scheduler, SyncScheduler},
@@ -14,14 +16,14 @@ use mimium_lang::{
         error::{report, ReportableError},
         fileloader,
     },
+    ExecContext,
 };
 
 fn run_bytecode_test<'a>(
     machine: &'a mut vm::Machine,
-    bytecodes: &'a vm::Program,
     n: usize,
 ) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
-    let retcode = machine.execute_entry(bytecodes, &"dsp".to_symbol());
+    let retcode = machine.execute_entry(&"dsp".to_symbol());
     if retcode >= 0 {
         Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
     } else {
@@ -37,14 +39,13 @@ fn run_bytecode_test_multiple(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new_without_scheduler();
+    let mut machine = vm::Machine::new(None, bytecodes.clone(), &[], &[]);
 
-    machine.link_functions(bytecodes);
-    let _retcode = machine.execute_entry(bytecodes, &"_mimium_global".to_symbol());
+    let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
     let mut ret = Vec::with_capacity(times as usize * n);
     for i in 0..times {
-        let res = run_bytecode_test(&mut machine, bytecodes, n)?;
+        let res = run_bytecode_test(&mut machine, n)?;
         ret.extend_from_slice(res);
         println!("time:{}, res: {:?}", i, res)
     }
@@ -55,10 +56,14 @@ fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let bytecode = compiler::emit_bytecode(src)?;
+    let mut driver = LocalBufferDriver::new(times as _);
+    let getnowfn = gen_getnowfn(driver.count.clone());
+    let mut ctx = ExecContext::new(&[], &[getnowfn], None);
+    let mut vm = ctx.prepare_machine(src);
 
-    let mut driver = MockDriver::new(bytecode, None);
-    Ok(driver.play_times(times as _).to_vec())
+    driver.init(vm, None);
+    driver.play();
+    Ok(driver.get_generated_samples().to_vec())
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
@@ -66,8 +71,11 @@ pub(crate) fn run_source_test(
     src: &str,
     times: u64,
     stereo: bool,
+    path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let bytecode = compiler::emit_bytecode(src)?;
+    let ctx = ExecContext::new(&[], &[], path);
+
+    let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
 }
 pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
@@ -83,7 +91,8 @@ pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>
 }
 pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_test(&src, times, stereo);
+    let path_sym = file.to_string_lossy().to_symbol();
+    let res = run_source_test(&src, times, stereo, Some(path_sym));
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -113,7 +122,8 @@ pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, (
 pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let bytecode = match compiler::emit_bytecode(&src) {
+    let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));
+    let bytecode = match ctx.compiler.emit_bytecode(&src) {
         Ok(res) => res,
         Err(errs) => {
             report(&src, file, &errs);

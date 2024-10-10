@@ -115,6 +115,9 @@ fn eval_literal(e: &ast::Literal) -> Value {
         ast::Literal::Now => {
             panic!("now literal should not be shown in evaluation stage.")
         }
+        ast::Literal::PlaceHolder => {
+            panic!("_ literal should not be shown in evaluation stage.")
+        }
     }
 }
 
@@ -310,6 +313,9 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
             };
             res
         }
+        ast::Expr::PipeApply(_, _) => {
+            panic!("|> should not be shown in evaluation stage.")
+        }
         ast::Expr::Lambda(a, r, e) => Ok(Value::Function(
             a.iter().map(|tid| tid.clone()).collect(),
             *e,
@@ -359,5 +365,6 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
         ast::Expr::Error => panic!("Some Error happend in previous stages"),
         ast::Expr::Assign(_, _) => todo!(),
         ast::Expr::Then(_, _) => todo!(),
+        ast::Expr::ArrayAccess(_, _) => todo!(),
     }
 }

@@ -59,6 +59,7 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
         Token::Str(s) => Literal::String(s),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
+        Token::PlaceHolder => Literal::PlaceHolder,
     }
     .map_with_span(|e, s| Expr::Literal(e).into_id(s))
     .labelled("literal")
@@ -77,11 +78,6 @@ where
         .map(|(id, t)| (id, t))
 }
 
-fn placement_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
-    //todo! it can be the left hand expression of assignment i.e. they can have memory address,
-    //including var(`v`), Tuple dot access(`v.0`), array access(`v[2]`), struct member access...
-    ident_parser().labelled("placement_values")
-}
 fn lvar_parser_typed() -> impl Parser<Token, TypedId, Error = Simple<Token>> + Clone {
     with_type_annotation(ident_parser())
         .map_with_span(|(sym, t), span| match t {
@@ -100,7 +96,12 @@ fn pattern_parser() -> impl Parser<Token, TypedPattern, Error = Simple<Token>> +
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map(Pattern::Tuple)
-            .or(select! { Token::Ident(s) => Pattern::Single(s) })
+            .or(select! {
+                Token::Ident(s) => Pattern::Single(s),
+                // Note: _ represents an unused variable, but it is treated as
+                // an ordinary symbol here.
+                Token::PlaceHolder => Pattern::Single("_".to_symbol()),
+            })
             .labelled("Pattern")
     });
     with_type_annotation(pat).map_with_span(|(pat, ty), s| match ty {
@@ -117,15 +118,21 @@ where
     OP: Parser<Token, (Op, Span), Error = Simple<Token>> + Clone + 'a,
 {
     prec.clone()
-        .then(op.then(prec).repeated())
+        .then(
+            op.then_ignore(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+                .then(prec)
+                .repeated(),
+        )
         .foldl(move |x, ((op, opspan), y)| {
+            let apply_span = x.to_span().start..y.to_span().end;
             let arg = match op {
+                Op::Pipe => return Expr::PipeApply(x, y).into_id(apply_span),
                 // A@B is a syntactic sugar of _mimium_schedule_at(B, A)
                 Op::At => vec![y, x],
                 _ => vec![x, y],
             };
             Expr::Apply(Expr::Var(op.get_associated_fn_name()).into_id(opspan), arg)
-                .into_id(x.to_span().start..y.to_span().end)
+                .into_id(apply_span)
         })
         .boxed()
 }
@@ -163,6 +170,13 @@ where
             })
             .boxed()
     };
+    // allow pipe opertor to absorb linebreaks so that it can be also used at
+    // the head of the line.
+    let pipe = just(Token::LineBreak)
+        .repeated()
+        .then(just(Token::Op(Op::Pipe)))
+        .map_with_span(|_, s| (Op::Pipe, s))
+        .boxed();
     //defining binary operators in order of precedence.
     let ops = [
         optoken(Op::Exponent),
@@ -183,7 +197,7 @@ where
             optoken(Op::GreaterEqual),
         ))
         .boxed(),
-        optoken(Op::Pipe),
+        pipe,
         optoken(Op::At),
     ];
     ops.into_iter().fold(unary.boxed(), binop_folder)
@@ -232,18 +246,32 @@ fn atom_parser<'a>(
 }
 fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
     recursive(|expr: Recursive<Token, ExprNodeId, Simple<Token>>| {
+        enum FoldItem {
+            Args(Vec<ExprNodeId>),
+            ArrayIndex(ExprNodeId),
+        }
         let parenitems = items_parser(expr.clone())
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
-            .map_with_span(|args, args_span| (args, args_span));
-        let folder = |f: ExprNodeId, (args, args_span): (Vec<ExprNodeId>, Span)| {
+            .map_with_span(|args, args_span| (FoldItem::Args(args), args_span));
+        let angle_paren_expr = expr
+            .clone()
+            .delimited_by(just(Token::ArrayBegin), just(Token::ArrayEnd))
+            .map_with_span(|e, s| (FoldItem::ArrayIndex(e), s));
+
+        let folder = |f: ExprNodeId, (item, args_span): (FoldItem, Span)| {
             let f_span = f.to_span();
             let span = f_span.start..args_span.end;
-            Expr::Apply(f, args).into_id(span)
+            match item {
+                FoldItem::Args(args) => Expr::Apply(f, args).into_id(span),
+                FoldItem::ArrayIndex(index) => Expr::ArrayAccess(f, index).into_id(span),
+            }
         };
-        let apply = atom_parser(expr, expr_group)
-            .then(parenitems.repeated())
+
+        let apply = atom_parser(expr.clone(), expr_group)
+            .then(angle_paren_expr.or(parenitems).repeated())
             .foldl(folder)
             .labelled("apply");
+
         op_parser(apply)
     })
 }
@@ -285,10 +313,10 @@ fn statement_parser(
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
         .labelled("letrec");
-    let assign = placement_parser()
+    let assign = var_parser()
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
-        .map_with_span(|(ident, body), span| (Statement::Assign(ident, body), span))
+        .map_with_span(|(lvar, body), span| (Statement::Assign(lvar, body), span))
         .labelled("assign");
     let single = expr.map_with_span(|e, span| (Statement::Single(e), span));
     let_.or(letrec).or(assign).or(single)
@@ -316,7 +344,7 @@ fn exprgroup_parser<'a>() -> ExprParser<'a> {
     recursive(|expr_group: ExprParser<'a>| {
         let expr = expr_parser(expr_group.clone());
 
-        let block = block_parser(expr.clone());
+        let block = block_parser(expr_group.clone());
         //todo: should be recursive(to paranthes be not needed)
         let if_ = just(Token::If)
             .ignore_then(

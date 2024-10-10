@@ -40,6 +40,8 @@ pub struct Program {
     pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
     pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
     pub global_vals: Vec<RawVal>,
+    pub strings: Vec<Symbol>,
+    pub file_path: Option<Symbol>,
 }
 impl Program {
     pub fn get_fun_index(&self, name: &Symbol) -> Option<usize> {
@@ -50,6 +52,15 @@ impl Program {
     pub fn get_dsp_fn(&self) -> Option<&FuncProto> {
         self.get_fun_index(&"dsp".to_symbol())
             .and_then(|idx| self.global_fn_table.get(idx).map(|(_, f)| f))
+    }
+    pub fn add_new_str(&mut self, s: Symbol) -> usize {
+        self.strings
+            .iter()
+            .position(|&c| s == c)
+            .unwrap_or_else(|| {
+                self.strings.push(s);
+                self.strings.len() - 1
+            })
     }
 }
 
@@ -78,6 +89,14 @@ impl std::fmt::Display for Program {
                 })
         );
         let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
-        write!(f, "globals:\n{:?}", self.global_vals)
+        let _ = write!(f, "globals:\n{:?}", self.global_vals);
+        write!(
+            f,
+            "strings:  {:?}\n",
+            self.strings
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        )
     }
 }

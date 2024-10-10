@@ -52,7 +52,6 @@ pub enum Token {
     Op(Op),
     SelfLit,
     Now,
-    At,
 
     Comma,
     Dot,
@@ -74,9 +73,10 @@ pub enum Token {
     BlockEnd,
     LambdaArgBeginEnd,
 
-    Function, //"fn"
-    Macro,    //"macro"
-    Arrow,    // ->
+    Function,    //"fn"
+    Macro,       //"macro"
+    Arrow,       // ->
+    PlaceHolder, // _
 
     If,
     Else,
@@ -109,7 +109,7 @@ impl Op {
             Op::And => intrinsics::AND,
             Op::Or => intrinsics::OR,
             Op::At => "_mimium_schedule_at",
-            Op::Pipe => "pipe",
+            Op::Pipe => unreachable!(), // pipe is a syntax sugar, not a function
             Op::Unknown(x) => x.as_str(),
         }
         .to_symbol() // TODO: use prefilled symbols instead of converting on the fly.
@@ -155,7 +155,6 @@ impl fmt::Display for Token {
             Token::Op(x) => write!(f, "{}", x),
             Token::SelfLit => write!(f, "self"),
             Token::Now => write!(f, "now"),
-            Token::At => write!(f, "@"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
             Token::Colon => write!(f, ":"),
@@ -175,6 +174,7 @@ impl fmt::Display for Token {
             Token::Function => write!(f, "fn"),
             Token::Macro => write!(f, "macro"),
             Token::Arrow => write!(f, "->"),
+            Token::PlaceHolder => write!(f, "_"),
 
             Token::If => write!(f, "if"),
             Token::Else => write!(f, "else"),

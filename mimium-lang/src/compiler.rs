@@ -70,7 +70,7 @@ use mirgen::recursecheck;
 
 use crate::{
     ast_interpreter,
-    interner::ExprNodeId,
+    interner::{ExprNodeId, Symbol, TypeNodeId},
     mir::Mir,
     runtime::vm,
     types::Type,
@@ -81,16 +81,28 @@ pub fn emit_ast(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> 
     Ok(recursecheck::convert_recurse(ast))
 }
 
-pub fn emit_mir(src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
-    let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-    mirgen::compile(ast).map_err(|e| {
-        let bres = e as Box<dyn ReportableError>;
-        vec![bres]
-    })
+pub struct Context {
+    builtin_fns: Vec<(Symbol, TypeNodeId)>,
+    file_path: Option<Symbol>,
 }
-pub fn emit_bytecode(src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
-    let mir = emit_mir(src)?;
-    bytecodegen::gen_bytecode(mir)
+impl Context {
+    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)], file_path: Option<Symbol>) -> Self {
+        Self {
+            builtin_fns: builtin_fns.to_vec(),
+            file_path,
+        }
+    }
+    pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
+        let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
+        mirgen::compile(ast, &self.builtin_fns, self.file_path).map_err(|e| {
+            let bres = e as Box<dyn ReportableError>;
+            vec![bres]
+        })
+    }
+    pub fn emit_bytecode(&self, src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+        let mir = self.emit_mir(src)?;
+        bytecodegen::gen_bytecode(mir)
+    }
 }
 
 pub fn interpret_top(

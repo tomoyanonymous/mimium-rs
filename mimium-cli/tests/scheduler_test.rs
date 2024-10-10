@@ -1,7 +1,9 @@
 mod common;
 use common::*;
-use mimium_audiodriver::backends::mock::MockDriver;
-use mimium_lang::compiler;
+use mimium_audiodriver::{
+    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
+};
+use mimium_lang::{compiler, ExecContext};
 
 #[test]
 fn scheduler_global_recursion() {
@@ -37,22 +39,29 @@ fn scheduler_counter_indirect() {
     assert_eq!(res, ans);
 }
 
+fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
+    let mut driver = LocalBufferDriver::new(2);
+    let getnowfn = gen_getnowfn(driver.count.clone());
+
+    let mut ctx = ExecContext::new(&[], &[getnowfn],None);
+    let vm = ctx.prepare_machine(&src);
+    driver.init(vm, None);
+    driver
+}
 //check if the number of closure does not change over times.
 #[test]
 fn scheduler_gc_test() {
     let (_, src) = load_src("scheduler_counter_indirect.mmm");
-    let bytecode = compiler::emit_bytecode(&src).unwrap();
+    let mut driver1 = prep_gc_test_machine(2, &src);
+    driver1.play();
+    let first = driver1.vmdata.unwrap().vm.closures.len();
 
-    let mut driver = MockDriver::new(bytecode.clone(), None);
-    let _ = driver.play_times(2 as _);
-    let first = driver.vmdata.vm.closures.len();
+    let mut driver2 = prep_gc_test_machine(3, &src);
+    driver2.play();
+    let second = driver2.vmdata.unwrap().vm.closures.len();
 
-    let mut driver = MockDriver::new(bytecode.clone(), None);
-    let _ = driver.play_times(3 as _);
-    let second = driver.vmdata.vm.closures.len();
-
-    let mut driver = MockDriver::new(bytecode, None);
-    let _ = driver.play_times(4 as _);
-    let third = driver.vmdata.vm.closures.len();
+    let mut driver3 = prep_gc_test_machine(4, &src);
+    driver3.play();
+    let third = driver3.vmdata.unwrap().vm.closures.len();
     assert!(first == second && second == third)
 }

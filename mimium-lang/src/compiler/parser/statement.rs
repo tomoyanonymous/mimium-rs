@@ -13,7 +13,7 @@ pub(super) enum Statement {
     Let(TypedPattern, ExprNodeId),
     MacroExpand(TypedId, ExprNodeId),
     LetRec(TypedId, ExprNodeId),
-    Assign(Symbol, ExprNodeId),
+    Assign(ExprNodeId, ExprNodeId),
     Single(ExprNodeId),
 }
 
