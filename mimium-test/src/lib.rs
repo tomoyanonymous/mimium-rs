@@ -5,11 +5,9 @@ use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
 };
 use mimium_lang::{
-    compiler,
     interner::{Symbol, ToSymbol},
     runtime::{
         self,
-        scheduler::{Scheduler, SyncScheduler},
         vm,
     },
     utils::{
@@ -19,7 +17,7 @@ use mimium_lang::{
     ExecContext,
 };
 
-fn run_bytecode_test<'a>(
+pub fn run_bytecode_test<'a>(
     machine: &'a mut vm::Machine,
     n: usize,
 ) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
@@ -34,7 +32,7 @@ fn run_bytecode_test<'a>(
     }
 }
 
-fn run_bytecode_test_multiple(
+pub fn run_bytecode_test_multiple(
     bytecodes: &vm::Program,
     times: u64,
     stereo: bool,
@@ -52,7 +50,7 @@ fn run_bytecode_test_multiple(
     Ok(ret)
 }
 
-fn run_source_with_scheduler(
+pub fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
@@ -67,7 +65,7 @@ fn run_source_with_scheduler(
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
-pub(crate) fn run_source_test(
+pub fn run_source_test(
     src: &str,
     times: u64,
     stereo: bool,
@@ -78,7 +76,7 @@ pub(crate) fn run_source_test(
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
 }
-pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
     let res = run_source_with_scheduler(&src, times);
     match res {
@@ -89,7 +87,7 @@ pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>
         }
     }
 }
-pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
+pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
     let path_sym = file.to_string_lossy().to_symbol();
     let res = run_source_test(&src, times, stereo, Some(path_sym));
@@ -102,7 +100,7 @@ pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<
     }
 }
 
-pub(crate) fn load_src(path: &str) -> (PathBuf, String) {
+pub fn load_src(path: &str) -> (PathBuf, String) {
     let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
         .iter()
         .collect();
@@ -111,15 +109,15 @@ pub(crate) fn load_src(path: &str) -> (PathBuf, String) {
     (file, src)
 }
 
-pub(crate) fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     run_file_test(path, times, false)
 }
 
-pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     run_file_test(path, times, true)
 }
 
-pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
+pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
     let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));

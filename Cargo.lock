@@ -598,6 +598,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mimium-test"
+version = "2.0.0-alpha-1"
+dependencies = [
+ "log",
+ "mimium-audiodriver",
+ "mimium-lang",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

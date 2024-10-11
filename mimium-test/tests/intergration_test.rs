@@ -1,7 +1,6 @@
-mod common;
-use std::path::Path;
 
-use common::*;
+use std::path::Path;
+use mimium_test::*;
 use mimium_lang::utils::error::report;
 
 fn run_simple_test(expr: &str, expect: f64, times: u64) {
