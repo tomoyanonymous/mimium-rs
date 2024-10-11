@@ -1,7 +1,6 @@
-
-use std::path::Path;
-use mimium_test::*;
 use mimium_lang::utils::error::report;
+use mimium_test::*;
+use std::path::Path;
 
 fn run_simple_test(expr: &str, expect: f64, times: u64) {
     let src = format!(
