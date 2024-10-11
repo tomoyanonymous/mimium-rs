@@ -5,12 +5,10 @@ use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
 };
 use mimium_lang::{
-    compiler,
     interner::{Symbol, ToSymbol},
     runtime::{
         self,
-        scheduler::{Scheduler, SyncScheduler},
-        vm,
+        vm::{self, ExtClsInfo, ExtFnInfo},
     },
     utils::{
         error::{report, ReportableError},
@@ -19,7 +17,7 @@ use mimium_lang::{
     ExecContext,
 };
 
-fn run_bytecode_test<'a>(
+pub fn run_bytecode_test<'a>(
     machine: &'a mut vm::Machine,
     n: usize,
 ) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
@@ -34,7 +32,7 @@ fn run_bytecode_test<'a>(
     }
 }
 
-fn run_bytecode_test_multiple(
+pub fn run_bytecode_test_multiple(
     bytecodes: &vm::Program,
     times: u64,
     stereo: bool,
@@ -52,22 +50,34 @@ fn run_bytecode_test_multiple(
     Ok(ret)
 }
 
-fn run_source_with_scheduler(
+pub fn run_source_with_plugins(
     src: &str,
+    path: Option<&str>,
     times: u64,
+    extfuns: &[ExtFnInfo],
+    extcls: &[ExtClsInfo],
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
+    let mut clss = extcls.to_vec().clone();
     let mut driver = LocalBufferDriver::new(times as _);
     let getnowfn = gen_getnowfn(driver.count.clone());
-    let mut ctx = ExecContext::new(&[], &[getnowfn], None);
-    let mut vm = ctx.prepare_machine(src);
+    clss.push(getnowfn);
+    let mut ctx = ExecContext::new(extfuns, &clss, path.map(|s| s.to_symbol()));
+    let vm = ctx.prepare_machine(src);
 
     driver.init(vm, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
 }
 
+pub fn run_source_with_scheduler(
+    src: &str,
+    times: u64,
+) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
+    run_source_with_plugins(src, None, times, &[], &[])
+}
+
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
-pub(crate) fn run_source_test(
+pub fn run_source_test(
     src: &str,
     times: u64,
     stereo: bool,
@@ -78,9 +88,15 @@ pub(crate) fn run_source_test(
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
 }
-pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+
+pub fn run_file_with_plugins(
+    path: &str,
+    times: u64,
+    extfuns: &[ExtFnInfo],
+    extcls: &[ExtClsInfo],
+) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_with_scheduler(&src, times);
+    let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, extfuns, extcls);
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -89,7 +105,10 @@ pub(crate) fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>
         }
     }
 }
-pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
+pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+    run_file_with_plugins(path, times, &[], &[])
+}
+pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
     let path_sym = file.to_string_lossy().to_symbol();
     let res = run_source_test(&src, times, stereo, Some(path_sym));
@@ -102,24 +121,30 @@ pub(crate) fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<
     }
 }
 
-pub(crate) fn load_src(path: &str) -> (PathBuf, String) {
-    let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
-        .iter()
-        .collect();
+pub fn load_src(path: &str) -> (PathBuf, String) {
+    let crate_root = std::env::var("TEST_ROOT").expect(
+        r#"You must set TEST_ROOT environment variable to run test.
+You should put the line like below to your build.rs.
+fn main() {
+    println!("cargo:rustc-env=TEST_ROOT={}", env!("CARGO_MANIFEST_DIR"));
+}
+"#,
+    );
+    let file: PathBuf = [crate_root.as_str(), "tests/mmm", path].iter().collect();
     println!("{}", file.to_str().unwrap());
     let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
     (file, src)
 }
 
-pub(crate) fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     run_file_test(path, times, false)
 }
 
-pub(crate) fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     run_file_test(path, times, true)
 }
 
-pub(crate) fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
+pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
     let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));

@@ -1,10 +1,10 @@
 [package]
-name = "mimium-symphonia"
+name = "mimium-test"
 version = "2.0.0-alpha-1"
 license = "MPL 2.0"
 edition = "2021"
+description = "Common test modules & basic regression tests for mimium"
 build = "build.rs"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
 
@@ -12,8 +12,5 @@ build = "build.rs"
 [dependencies]
 
 mimium-lang = { path = "../mimium-lang" }
-symphonia = "0.5.4"
+mimium-audiodriver = { path = "../mimium-audiodriver" }
 log = "0.4.22"
-
-[dev-dependencies]
-mimium-test = { path = "../mimium-test" }

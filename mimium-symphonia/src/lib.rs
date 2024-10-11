@@ -125,7 +125,20 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
         .file_path
         .map_or_else(|| "".to_string(), |s| s.to_string());
     let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
-    let abspath = mmm_dirpath.join(relpath2).canonicalize().unwrap();
+    println!("{}", mmm_dirpath.to_str().unwrap());
+    let abspath = [mmm_dirpath, relpath2]
+        .into_iter()
+        .collect::<std::path::PathBuf>()
+        .canonicalize()
+        .inspect_err(|e| {
+            panic!(
+                "canonicalize error: {} {}/{}",
+                e.to_string(),
+                mmm_dirpath.to_string_lossy(),
+                relpath2.to_string_lossy()
+            );
+        })
+        .unwrap();
 
     let vec = load_wavfile_to_vec(&abspath.to_string_lossy())
         .inspect_err(|e| {

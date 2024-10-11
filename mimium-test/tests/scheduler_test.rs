@@ -1,9 +1,8 @@
-mod common;
-use common::*;
 use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
 };
-use mimium_lang::{compiler, ExecContext};
+use mimium_lang::ExecContext;
+use mimium_test::*;
 
 #[test]
 fn scheduler_global_recursion() {
@@ -40,10 +39,10 @@ fn scheduler_counter_indirect() {
 }
 
 fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
-    let mut driver = LocalBufferDriver::new(2);
+    let mut driver = LocalBufferDriver::new(times);
     let getnowfn = gen_getnowfn(driver.count.clone());
 
-    let mut ctx = ExecContext::new(&[], &[getnowfn],None);
+    let mut ctx = ExecContext::new(&[], &[getnowfn], None);
     let vm = ctx.prepare_machine(&src);
     driver.init(vm, None);
     driver

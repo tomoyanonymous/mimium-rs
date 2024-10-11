@@ -4,7 +4,8 @@ members = [
     "mimium-lang",
     "mimium-audiodriver",
     "mimium-cli",
-    "mimium-symphonia"
+    "mimium-test",
+    "mimium-symphonia",
 ]
 
 resolver = "2"
