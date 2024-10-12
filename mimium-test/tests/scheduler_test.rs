@@ -40,9 +40,8 @@ fn scheduler_counter_indirect() {
 
 fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let mut driver = LocalBufferDriver::new(times);
-    let getnowfn = gen_getnowfn(driver.count.clone());
 
-    let mut ctx = ExecContext::new(&[], &[getnowfn], None);
+    let mut ctx = ExecContext::new(&[], None);
     let vm = ctx.prepare_machine(&src);
     driver.init(vm, None);
     driver

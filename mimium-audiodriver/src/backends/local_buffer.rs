@@ -73,7 +73,7 @@ impl Driver for LocalBufferDriver {
 
         let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(self.count.clone());
 
-        self.vmdata = Some(RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]));
+        self.vmdata = Some(RuntimeData::new(vm, &[(fname, getnow_fn)]));
 
         true
     }

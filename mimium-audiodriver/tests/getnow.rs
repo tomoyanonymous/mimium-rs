@@ -49,8 +49,8 @@ fn getnow_test() {
         vm::Machine::new(
             None,
             prog,
-            &[],
-            &[(fname, getnowfn, function!(vec![], numeric!()))],
+            [].into_iter(),
+            [(fname, getnowfn, function!(vec![], numeric!()))].into_iter(),
         ),
         Some(SampleRate(48000)),
     );

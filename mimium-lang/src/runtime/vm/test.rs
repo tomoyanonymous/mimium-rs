@@ -160,7 +160,12 @@ fn closuretest() {
         ext_fun_table: vec![("probe".to_symbol(), function!(vec![numeric!()], numeric!()))],
         ..Default::default()
     };
-    let mut machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    let mut machine = Machine::new(
+        None,
+        prog,
+        builtin::get_builtin_fns().into_iter(),
+        [].into_iter(),
+    );
     let res = machine.execute_main();
     assert_eq!(res, 0);
 }
@@ -187,7 +192,7 @@ fn rust_closure_test() {
     let fnames = vec!["main".to_symbol()];
     let global_fn_table = fnames.into_iter().zip(fns).collect::<Vec<_>>();
     // let mut count = 0;
-    let cls = Arc::new(|m: &mut Machine| {
+    let cls = Arc::new(|m: &mut Machine| -> ReturnCode {
         let v = m.get_top_n(1)[0];
         let i = Machine::get_as::<u64>(v) + 3;
         println!("Call from closure: {}", i);
@@ -206,8 +211,13 @@ fn rust_closure_test() {
     let mut machine = Machine::new(
         None,
         prog,
-        &[("lib_printi", lib_printi, unknownt)],
-        &[("rustclosure", cls.clone(), unknownt)],
+        [("lib_printi".to_symbol(), lib_printi as ExtFunType, unknownt)].into_iter(),
+        [(
+            "rustclosure".to_symbol(),
+            cls.clone() as ExtClsType,
+            unknownt,
+        )]
+        .into_iter(),
     );
     let res = machine.execute_main();
     assert_eq!(res, 0);
@@ -255,7 +265,12 @@ fn prep_closure_gc_program(is_closed: bool) -> Program {
 #[test]
 fn closure_gc_open() {
     let prog = prep_closure_gc_program(false);
-    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    let mut machine: Machine = Machine::new(
+        None,
+        prog,
+        builtin::get_builtin_fns().into_iter(),
+        [].into_iter(),
+    );
     machine.execute_main();
     //open closure should be released.
     assert_eq!(machine.closures.len(), 0);
@@ -263,7 +278,12 @@ fn closure_gc_open() {
 #[test]
 fn closure_gc_closed() {
     let prog = prep_closure_gc_program(true);
-    let mut machine: Machine = Machine::new(None, prog, &builtin::get_builtin_fns(), &[]);
+    let mut machine: Machine = Machine::new(
+        None,
+        prog,
+        builtin::get_builtin_fns().into_iter(),
+        [].into_iter(),
+    ); 
     machine.execute_main();
     //closed closure should be kept.
     assert_eq!(machine.closures.len(), 1);

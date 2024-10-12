@@ -1,5 +1,6 @@
 use std::io::stdin;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // pub mod wcalculus;
 use clap::{Parser, ValueEnum};
@@ -12,7 +13,7 @@ use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
 use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
-use mimium_symphonia;
+use mimium_symphonia::{self, SamplerPlugin};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -100,8 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_default_context(path: Option<Symbol>) -> ExecContext {
-    let symphonia = mimium_symphonia::get_signature();
-    ExecContext::new(&[symphonia], &[], path)
+    ExecContext::new(&[Arc::new(SamplerPlugin::default())], path)
 }
 
 fn run_file(

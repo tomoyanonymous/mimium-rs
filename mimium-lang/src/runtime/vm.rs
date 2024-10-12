@@ -24,8 +24,8 @@ pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
 pub type ExtClsType = Arc<dyn Fn(&mut Machine) -> ReturnCode>;
-pub type ExtFnInfo = (&'static str, ExtFunType, TypeNodeId);
-pub type ExtClsInfo = (&'static str, ExtClsType, TypeNodeId);
+pub type ExtFnInfo = (Symbol, ExtFunType, TypeNodeId);
+pub type ExtClsInfo = (Symbol, ExtClsType, TypeNodeId);
 
 #[derive(Debug, Default, PartialEq)]
 struct StateStorage {
@@ -318,8 +318,8 @@ impl Machine {
     pub fn new(
         scheduler: Option<Box<dyn Scheduler>>,
         prog: Program,
-        extfns: &[ExtFnInfo],
-        extcls: &[ExtClsInfo],
+        extfns: impl Iterator<Item= ExtFnInfo>,
+        extcls: impl Iterator<Item= ExtClsInfo>,
     ) -> Self {
         let scheduler = scheduler.unwrap_or(Box::new(DummyScheduler));
 
@@ -339,11 +339,11 @@ impl Machine {
             scheduler,
             debug_stacktype: vec![RawValType::Int; 255],
         };
-        extfns.iter().for_each(|(name, f, _)| {
-            let _ = res.install_extern_fn(name.to_symbol(), *f);
+        extfns.for_each(|(name, f, _)| {
+            let _ = res.install_extern_fn(name, f);
         });
-        extcls.iter().for_each(|(name, f, _)| {
-            let _ = res.install_extern_cls(name.to_symbol(), f.clone());
+        extcls.for_each(|(name, f, _)| {
+            let _ = res.install_extern_cls(name, f);
         });
         res.link_functions();
         res
@@ -521,8 +521,8 @@ impl Machine {
     /// Because the native closure cannot be called with CallCls directly, the vm appends an additional function the program,
     /// that wraps external closure call with an internal closure.
     pub fn wrap_extern_cls(&mut self, extcls: ExtClsInfo) -> ClosureIdx {
-        let (name_str, f, t) = extcls;
-        let name = name_str.to_symbol();
+        let (name, f, t) = extcls;
+
         self.prog.ext_cls_table.push((name, t));
         let prog_clsid = self.prog.ext_cls_table.len() - 1;
         self.ext_cls_table.push((name, f));

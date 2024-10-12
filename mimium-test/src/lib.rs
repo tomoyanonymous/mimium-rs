@@ -1,11 +1,12 @@
 extern crate mimium_lang;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
 };
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    plugin::Plugin,
     runtime::{
         self,
         vm::{self, ExtClsInfo, ExtFnInfo},
@@ -37,7 +38,7 @@ pub fn run_bytecode_test_multiple(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new(None, bytecodes.clone(), &[], &[]);
+    let mut machine = vm::Machine::new(None, bytecodes.clone(), [].into_iter(), [].into_iter());
 
     let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
@@ -54,14 +55,12 @@ pub fn run_source_with_plugins(
     src: &str,
     path: Option<&str>,
     times: u64,
-    extfuns: &[ExtFnInfo],
-    extcls: &[ExtClsInfo],
+    plugins: &[Arc<dyn Plugin>],
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut clss = extcls.to_vec().clone();
     let mut driver = LocalBufferDriver::new(times as _);
     let getnowfn = gen_getnowfn(driver.count.clone());
-    clss.push(getnowfn);
-    let mut ctx = ExecContext::new(extfuns, &clss, path.map(|s| s.to_symbol()));
+
+    let mut ctx = ExecContext::new(plugins, path.map(|s| s.to_symbol()));
     let vm = ctx.prepare_machine(src);
 
     driver.init(vm, None);
@@ -73,7 +72,7 @@ pub fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    run_source_with_plugins(src, None, times, &[], &[])
+    run_source_with_plugins(src, None, times, &[])
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
@@ -83,7 +82,7 @@ pub fn run_source_test(
     stereo: bool,
     path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[], &[], path);
+    let ctx = ExecContext::new(&[], path);
 
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
@@ -92,11 +91,10 @@ pub fn run_source_test(
 pub fn run_file_with_plugins(
     path: &str,
     times: u64,
-    extfuns: &[ExtFnInfo],
-    extcls: &[ExtClsInfo],
+    plugins: &[Arc<dyn Plugin>],
 ) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, extfuns, extcls);
+    let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, plugins);
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -106,7 +104,7 @@ pub fn run_file_with_plugins(
     }
 }
 pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_with_plugins(path, times, &[], &[])
+    run_file_with_plugins(path, times, &[])
 }
 pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
@@ -147,7 +145,7 @@ pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));
+    let ctx = ExecContext::new(&[], Some(file.to_str().unwrap().to_symbol()));
     let bytecode = match ctx.compiler.emit_bytecode(&src) {
         Ok(res) => res,
         Err(errs) => {

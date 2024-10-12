@@ -4,9 +4,7 @@ use std::sync::{
 };
 
 use mimium_lang::{
-    function, numeric,
-    runtime::vm::{ExtClsInfo, Machine},
-    types::{PType, Type},
+    function, interner::ToSymbol, numeric, runtime::vm::{ExtClsInfo, Machine}, types::{PType, Type}
 };
 
 pub fn gen_getnowfn(count: Arc<AtomicU64>) -> ExtClsInfo {
@@ -15,5 +13,5 @@ pub fn gen_getnowfn(count: Arc<AtomicU64>) -> ExtClsInfo {
         machine.set_stack(0, Machine::to_value(count));
         1
     });
-    ("_mimium_getnow", func, function!(vec![], numeric!()))
+    ("_mimium_getnow".to_symbol(), func, function!(vec![], numeric!()))
 }
