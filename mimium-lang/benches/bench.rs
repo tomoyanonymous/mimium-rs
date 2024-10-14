@@ -49,7 +49,7 @@ fn dsp(){{
             let compiler = compiler::Context::new(&[], None);
             let program = compiler.emit_bytecode(&content).expect("ok");
             let idx = program.get_fun_index(&"dsp".to_symbol()).expect("ok");
-            let mut machine = Machine::new(None, program, [].into_iter(), [].into_iter());
+            let mut machine = Machine::new(program, [].into_iter(), [].into_iter());
             machine.execute_main();
             b.iter(move || machine.execute_idx(idx));
         }

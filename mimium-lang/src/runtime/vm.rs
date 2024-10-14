@@ -17,8 +17,6 @@ use crate::{
     interner::{Symbol, ToSymbol, TypeNodeId},
     types::{Type, TypeSize},
 };
-
-use super::scheduler::{DummyScheduler, Scheduler, Time};
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
@@ -200,7 +198,6 @@ pub struct Machine {
     states_stack: StateStorageStack,
     delaysizes_pos_stack: Vec<usize>,
     global_vals: Vec<RawVal>,
-    pub scheduler: Box<dyn Scheduler>,
     debug_stacktype: Vec<RawValType>,
 }
 
@@ -315,14 +312,11 @@ where
 }
 
 impl Machine {
-    pub fn new(
-        scheduler: Option<Box<dyn Scheduler>>,
+    pub fn new<'a>(
         prog: Program,
-        extfns: impl Iterator<Item= ExtFnInfo>,
-        extcls: impl Iterator<Item= ExtClsInfo>,
+        extfns: impl Iterator<Item = ExtFnInfo>,
+        extcls: impl Iterator<Item = ExtClsInfo>,
     ) -> Self {
-        let scheduler = scheduler.unwrap_or(Box::new(DummyScheduler));
-
         let mut res = Self {
             prog,
             stack: vec![],
@@ -336,7 +330,6 @@ impl Machine {
             states_stack: Default::default(),
             delaysizes_pos_stack: vec![0],
             global_vals: vec![],
-            scheduler,
             debug_stacktype: vec![RawValType::Int; 255],
         };
         extfns.for_each(|(name, f, _)| {
@@ -967,14 +960,6 @@ impl Machine {
         // 0 is always base pointer to the main function
         self.base_pointer += 1;
         self.execute(0, None)
-    }
-    pub fn execute_task(&mut self, now: Time) {
-        self.scheduler.set_cur_time(now);
-        while let Some(task_cls) = self.scheduler.pop_task(now) {
-            let closure = self.get_closure(task_cls);
-            self.execute(closure.fn_proto_pos, Some(task_cls));
-            drop_closure(&mut self.closures, task_cls);
-        }
     }
 }
 

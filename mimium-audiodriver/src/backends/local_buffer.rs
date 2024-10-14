@@ -3,9 +3,9 @@ use std::sync::{
     Arc,
 };
 
-use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm};
+use mimium_lang::{interner::ToSymbol, runtime::vm, runtime::Time};
 
-use crate::driver::{Driver, RuntimeData, SampleRate, Time};
+use crate::driver::{Driver, RuntimeData, SampleRate};
 
 /// Execute the program n times and write the result values to `localbuffer`.
 pub struct LocalBufferDriver {

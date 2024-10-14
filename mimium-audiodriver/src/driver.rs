@@ -1,8 +1,8 @@
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
     runtime::{
-        scheduler::{Scheduler, SyncScheduler},
         vm::{self, ExtClsType, ExtFunType, FuncProto, ReturnCode},
+        Time,
     },
     utils::error::ReportableError,
 };
@@ -35,9 +35,6 @@ pub trait Component {
 
 #[derive(Clone, Copy)]
 pub struct SampleRate(pub u32);
-
-pub use mimium_lang::runtime::scheduler::Time;
-
 #[derive(Debug)]
 pub enum Error {
     Unknown,
@@ -89,8 +86,7 @@ impl RuntimeData {
         &self.vm.prog.global_fn_table[self.dsp_i].1
     }
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
-        //TODO: this depends on the structure of Synchronous Scheduler.
-        self.vm.execute_task(time);
+        todo!("invoke plugin on_sample");
         self.vm.execute_idx(self.dsp_i)
     }
 }

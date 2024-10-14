@@ -1,11 +1,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use crate::driver::{Driver, RuntimeData, SampleRate, Time};
+use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
-use mimium_lang::interner::ToSymbol;
-use mimium_lang::runtime::vm;
+use mimium_lang::runtime::{vm, Time};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 const BUFFER_RATIO: usize = 2;
@@ -329,7 +328,7 @@ impl Driver for NativeDriver {
         self.sr
     }
 
-    fn get_current_sample(&self) -> crate::driver::Time {
+    fn get_current_sample(&self) -> Time {
         Time(self.count.load(Ordering::Relaxed))
     }
 }

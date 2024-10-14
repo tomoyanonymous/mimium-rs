@@ -29,10 +29,7 @@ use std::sync::Arc;
 
 use interner::{Symbol, ToSymbol};
 use plugin::Plugin;
-use runtime::{
-    scheduler::{Scheduler, SyncScheduler},
-    vm::{self, ExtClsInfo, ExtFnInfo},
-};
+use runtime::vm::{self, ExtClsInfo, ExtFnInfo};
 impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
     pub fn new(plugins: &[Arc<dyn Plugin>], file_path: Option<Symbol>) -> Self {
@@ -46,7 +43,6 @@ impl ExecContext {
     pub fn prepare_machine(&mut self, src: &str) -> vm::Machine {
         let prog = self.compiler.emit_bytecode(src).unwrap();
         vm::Machine::new(
-            Some(Box::new(SyncScheduler::new())),
             prog,
             plugin::get_extfuninfos(&self.plugins),
             plugin::get_extclsinfos(&self.plugins),

@@ -161,7 +161,7 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
 }
 
 pub struct SamplerPlugin {
-    extfn: [ExtFnInfo; 1],
+    extfn: ExtFnInfo,
 }
 impl std::default::Default for SamplerPlugin {
     fn default() -> Self {
@@ -171,16 +171,16 @@ impl std::default::Default for SamplerPlugin {
             gen_sampler_mono as ExtFunType,
             t,
         );
-        Self { extfn: [sig] }
+        Self { extfn: sig }
     }
 }
 
 impl Plugin for SamplerPlugin {
-    fn get_ext_functions(&self) -> &[vm::ExtFnInfo] {
-        &self.extfn
+    fn get_ext_functions<'a>(&self) -> &'a[&'a vm::ExtFnInfo] {
+        &[&self.extfn]
     }
 
-    fn get_ext_closures(&self) -> &[vm::ExtClsInfo] {
+    fn get_ext_closures(&self) -> &[&vm::ExtClsInfo] {
         &[]
     }
 }

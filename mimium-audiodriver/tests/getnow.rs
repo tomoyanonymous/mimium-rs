@@ -47,7 +47,6 @@ fn getnow_test() {
     let (fname, getnowfn, _type) = runtime_fn::gen_getnowfn(driver.count.clone());
     driver.init(
         vm::Machine::new(
-            None,
             prog,
             [].into_iter(),
             [(fname, getnowfn, function!(vec![], numeric!()))].into_iter(),

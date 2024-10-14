@@ -85,7 +85,7 @@ impl Driver for CsvDriver {
         self.driver.get_samplerate()
     }
 
-    fn get_current_sample(&self) -> mimium_lang::runtime::scheduler::Time {
+    fn get_current_sample(&self) -> mimium_lang::runtime::Time {
         self.driver.get_current_sample()
     }
 

@@ -1,16 +1,11 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use mimium_audiodriver::{
-    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
-};
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
     plugin::Plugin,
-    runtime::{
-        self,
-        vm::{self, ExtClsInfo, ExtFnInfo},
-    },
+    runtime::{self, vm},
     utils::{
         error::{report, ReportableError},
         fileloader,
@@ -18,10 +13,10 @@ use mimium_lang::{
     ExecContext,
 };
 
-pub fn run_bytecode_test<'a>(
-    machine: &'a mut vm::Machine,
+pub fn run_bytecode_test(
+    machine: &mut vm::Machine,
     n: usize,
-) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
+) -> Result<&[f64], Vec<Box<dyn ReportableError>>> {
     let retcode = machine.execute_entry(&"dsp".to_symbol());
     if retcode >= 0 {
         Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
@@ -38,7 +33,7 @@ pub fn run_bytecode_test_multiple(
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new(None, bytecodes.clone(), [].into_iter(), [].into_iter());
+    let mut machine = vm::Machine::new(bytecodes.clone(), [].into_iter(), [].into_iter());
 
     let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
@@ -58,8 +53,6 @@ pub fn run_source_with_plugins(
     plugins: &[Arc<dyn Plugin>],
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut driver = LocalBufferDriver::new(times as _);
-    let getnowfn = gen_getnowfn(driver.count.clone());
-
     let mut ctx = ExecContext::new(plugins, path.map(|s| s.to_symbol()));
     let vm = ctx.prepare_machine(src);
 
