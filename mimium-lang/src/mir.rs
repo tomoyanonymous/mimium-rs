@@ -69,8 +69,8 @@ pub enum Instruction {
     //load internal state to register(destination)
     GetState(TypeNodeId),
 
-    //condition,  basic block index for then else statement
-    JmpIf(VPtr, u64, u64),
+    //condition,  basic block index for then statement, else statement, and merge block
+    JmpIf(VPtr, u64, u64, u64),
     // basic block index (for return statement)
     Jmp(i16),
     //merge

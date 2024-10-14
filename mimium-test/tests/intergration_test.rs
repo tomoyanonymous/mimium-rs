@@ -122,6 +122,13 @@ fn ifblock() {
 }
 
 #[test]
+fn nested_ifblock() {
+    let res = run_file_test_mono("nested_if.mmm", 1).unwrap();
+    let ans = vec![119.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn letmulti() {
     let res = run_file_test_mono("let_multi.mmm", 1).unwrap();
     let ans = vec![3.0];
