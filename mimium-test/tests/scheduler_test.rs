@@ -41,9 +41,9 @@ fn scheduler_counter_indirect() {
 fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let mut driver = LocalBufferDriver::new(times);
 
-    let mut ctx = ExecContext::new(&[], None);
+    let mut ctx = ExecContext::new([].into_iter(), None);
     let vm = ctx.prepare_machine(&src);
-    driver.init(vm, None);
+    driver.init(ctx, None);
     driver
 }
 //check if the number of closure does not change over times.

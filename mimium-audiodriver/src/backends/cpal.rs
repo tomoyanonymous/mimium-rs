@@ -5,6 +5,7 @@ use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
 use mimium_lang::runtime::{vm, Time};
+use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 const BUFFER_RATIO: usize = 2;
@@ -54,10 +55,11 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(vm: vm::Machine, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
+    pub fn new(ctx: ExecContext, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         //todo: split as trait interface method
+        let vm = ctx.vm.expect("vm is not prepared yet");
         let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(count.clone());
-        let vmdata = RuntimeData::new(vm, &[(fname, getnow_fn)]);
+        let vmdata = RuntimeData::new(vm, ctx.sys_plugins, &[(fname, getnow_fn)]);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
         Self {
@@ -198,7 +200,7 @@ impl NativeDriver {
 impl Driver for NativeDriver {
     type Sample = f64;
 
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool {
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
         let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
 
@@ -232,7 +234,7 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(vm, cons, self.count.clone());
+            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
             processor.vmdata.vm.execute_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);

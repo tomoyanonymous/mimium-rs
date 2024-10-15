@@ -1,14 +1,14 @@
 use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver,
     driver::{Driver, SampleRate},
-    runtime_fn,
 };
 use mimium_lang::{
     function,
     interner::ToSymbol as _,
     numeric,
-    runtime::vm::{self, FuncProto, Instruction, Program},
+    runtime::vm::{FuncProto, Instruction, Program},
     types::{PType, Type},
+    ExecContext,
 };
 
 #[test]
@@ -44,15 +44,9 @@ fn getnow_test() {
 
     let times = 10;
     let mut driver = LocalBufferDriver::new(times);
-    let (fname, getnowfn, _type) = runtime_fn::gen_getnowfn(driver.count.clone());
-    driver.init(
-        vm::Machine::new(
-            prog,
-            [].into_iter(),
-            [(fname, getnowfn, function!(vec![], numeric!()))].into_iter(),
-        ),
-        Some(SampleRate(48000)),
-    );
+    let mut ctx = ExecContext::new([].into_iter(), None);
+    ctx.prepare_machine_with_bytecode(prog);
+    driver.init(ctx, Some(SampleRate(48000)));
     driver.play();
 
     let res = driver.get_generated_samples();

@@ -1,10 +1,14 @@
+use std::borrow::BorrowMut;
+
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
+    plugin::{SysPluginDyn, SystemPlugin},
     runtime::{
         vm::{self, ExtClsType, ExtFunType, FuncProto, ReturnCode},
         Time,
     },
     utils::error::ReportableError,
+    ExecContext,
 };
 use num_traits::Float;
 
@@ -58,7 +62,7 @@ impl ReportableError for Error {
 // can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool;
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
@@ -68,28 +72,49 @@ pub trait Driver {
 
 pub struct RuntimeData {
     pub vm: vm::Machine,
+    pub sys_plugins: Vec<SysPluginDyn>,
     pub dsp_i: usize,
 }
 impl RuntimeData {
-    pub fn new(mut vm: vm::Machine, ext_clss: &[(Symbol, ExtClsType)]) -> Self {
+    /// VM in RuntimeData additionally uses audio-driver specific external closure like `_mimium_getnow` so this constructor accepts it.
+    /// This initilization process maybe changed in the future due to more runtime-specific value will be introduced.
+    pub fn new(
+        mut vm: vm::Machine,
+        sys_plugins: Vec<SysPluginDyn>,
+        ext_clss: &[(Symbol, ExtClsType)],
+    ) -> Self {
         ext_clss.iter().for_each(|(name, f)| {
             vm.install_extern_cls(*name, f.clone());
         });
         //todo:error handling
         let dsp_i = vm.prog.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
-        Self { vm, dsp_i }
+        Self {
+            vm,
+            sys_plugins,
+            dsp_i,
+        }
     }
     pub fn run_main(&mut self) -> ReturnCode {
+        self.sys_plugins.iter().for_each(|plug: &SysPluginDyn| {
+            let mut p = (&*plug.0).borrow_mut();
+            let _ = p.on_init(&mut self.vm);
+        });
         self.vm.execute_main()
     }
     pub fn get_dsp_fn(&self) -> &FuncProto {
         &self.vm.prog.global_fn_table[self.dsp_i].1
     }
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
-        todo!("invoke plugin on_sample");
+        self.sys_plugins.iter().for_each(|plug: &SysPluginDyn| {
+            let mut p = (&*plug.0).borrow_mut();
+            let _ = p.on_sample(time, &mut self.vm);
+        });
         self.vm.execute_idx(self.dsp_i)
     }
 }
+
+
+
 
 pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
     crate::backends::cpal::native_driver(4096)

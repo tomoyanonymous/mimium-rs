@@ -15,13 +15,14 @@ pub use program::{FuncProto, Program};
 use crate::{
     compiler::bytecodegen::ByteCodeGenerator,
     interner::{Symbol, ToSymbol, TypeNodeId},
+    plugin::SystemPlugin,
     types::{Type, TypeSize},
 };
 pub type RawVal = u64;
 pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
-pub type ExtClsType = Arc<dyn Fn(&mut Machine) -> ReturnCode>;
+pub type ExtClsType = Rc<RefCell<dyn Fn(&mut Machine) -> ReturnCode>>;
 pub type ExtFnInfo = (Symbol, ExtFunType, TypeNodeId);
 pub type ExtClsInfo = (Symbol, ExtClsType, TypeNodeId);
 
@@ -146,7 +147,7 @@ impl Closure {
 }
 
 pub type ClosureStorage = SlotMap<DefaultKey, Closure>;
-fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
+pub fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
     let cls = storage.get_mut(id.0).unwrap();
     cls.refcount -= 1;
     if cls.refcount == 0 {
@@ -435,7 +436,7 @@ impl Machine {
         };
         (abs_pos..end, slice)
     }
-    pub(crate) fn get_closure(&self, idx: ClosureIdx) -> &Closure {
+    pub fn get_closure(&self, idx: ClosureIdx) -> &Closure {
         debug_assert!(
             self.closures.contains_key(idx.0),
             "Invalid Closure Id referred"
@@ -563,6 +564,9 @@ impl Machine {
         let idx = self.closures.insert(cls);
         ClosureIdx(idx)
     }
+    pub fn get_plugin_instance_mut(&mut self, id: usize) -> Rc<RefCell<dyn SystemPlugin>> {
+        todo!()
+    }
     fn close_upvalues(&mut self, src: Reg) {
         let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
 
@@ -681,9 +685,11 @@ impl Machine {
                         .get(&(self.get_stack(func as i64) as usize))
                         .expect("closure map not resolved.");
                     let (_name, cls) = &self.ext_cls_table[*cls_idx];
+
                     let cls = cls.clone();
-                    let nret =
-                        self.call_function(func, nargs, nret_req, move |machine| cls(machine));
+                    let nret = self.call_function(func, nargs, nret_req, move |machine| {
+                        cls.borrow_mut()(machine)
+                    });
                     // return
                     let base = self.base_pointer as usize;
                     let iret = base + func as usize + 1;

@@ -1,10 +1,10 @@
-use std::sync::Arc;
-
+use mimium_lang::plugin::Plugin;
 use mimium_symphonia::SamplerPlugin;
 use mimium_test::*;
 
 fn run_file_with_symphonia(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_with_plugins(path, times, &[Arc::new(SamplerPlugin::default())])
+    let plugins: [Box<dyn Plugin>; 1] = [Box::new(SamplerPlugin::default())];
+    run_file_with_plugins(path, times, plugins.into_iter())
 }
 
 #[test]

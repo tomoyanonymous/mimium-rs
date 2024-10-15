@@ -573,6 +573,7 @@ dependencies = [
  "log",
  "mimium-audiodriver",
  "mimium-lang",
+ "mimium-scheduler",
  "mimium-symphonia",
 ]
 

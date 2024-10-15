@@ -50,13 +50,13 @@ pub fn run_source_with_plugins(
     src: &str,
     path: Option<&str>,
     times: u64,
-    plugins: &[Arc<dyn Plugin>],
+    plugins: impl Iterator<Item = Box<dyn Plugin>>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut driver = LocalBufferDriver::new(times as _);
     let mut ctx = ExecContext::new(plugins, path.map(|s| s.to_symbol()));
-    let vm = ctx.prepare_machine(src);
+    ctx.prepare_machine(src);
 
-    driver.init(vm, None);
+    driver.init(ctx, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
 }
@@ -65,7 +65,7 @@ pub fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    run_source_with_plugins(src, None, times, &[])
+    run_source_with_plugins(src, None, times, [].into_iter())
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
@@ -75,7 +75,7 @@ pub fn run_source_test(
     stereo: bool,
     path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[], path);
+    let ctx = ExecContext::new([].into_iter(), path);
 
     let bytecode = ctx.compiler.emit_bytecode(src)?;
     run_bytecode_test_multiple(&bytecode, times, stereo)
@@ -84,7 +84,7 @@ pub fn run_source_test(
 pub fn run_file_with_plugins(
     path: &str,
     times: u64,
-    plugins: &[Arc<dyn Plugin>],
+    plugins: impl Iterator<Item = Box<dyn Plugin>>,
 ) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
     let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, plugins);
@@ -97,7 +97,7 @@ pub fn run_file_with_plugins(
     }
 }
 pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_with_plugins(path, times, &[])
+    run_file_with_plugins(path, times, [].into_iter())
 }
 pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
@@ -138,7 +138,7 @@ pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new(&[], Some(file.to_str().unwrap().to_symbol()));
+    let ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
     let bytecode = match ctx.compiler.emit_bytecode(&src) {
         Ok(res) => res,
         Err(errs) => {

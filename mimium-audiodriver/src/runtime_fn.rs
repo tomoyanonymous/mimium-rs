@@ -1,17 +1,29 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 use mimium_lang::{
-    function, interner::ToSymbol, numeric, runtime::vm::{ExtClsInfo, Machine}, types::{PType, Type}
+    function,
+    interner::ToSymbol,
+    numeric,
+    runtime::vm::{ExtClsInfo, Machine},
+    types::{PType, Type},
 };
 
 pub fn gen_getnowfn(count: Arc<AtomicU64>) -> ExtClsInfo {
-    let func = Arc::new(move |machine: &mut Machine| {
+    let func = Rc::new(RefCell::new(move |machine: &mut Machine| {
         let count = count.load(Ordering::Relaxed) as f64;
         machine.set_stack(0, Machine::to_value(count));
         1
-    });
-    ("_mimium_getnow".to_symbol(), func, function!(vec![], numeric!()))
+    }));
+    (
+        "_mimium_getnow".to_symbol(),
+        func,
+        function!(vec![], numeric!()),
+    )
 }

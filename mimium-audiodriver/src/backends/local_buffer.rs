@@ -3,7 +3,11 @@ use std::sync::{
     Arc,
 };
 
-use mimium_lang::{interner::ToSymbol, runtime::vm, runtime::Time};
+use mimium_lang::{
+    interner::ToSymbol,
+    runtime::{vm, Time},
+    ExecContext,
+};
 
 use crate::driver::{Driver, RuntimeData, SampleRate};
 
@@ -61,7 +65,8 @@ impl LocalBufferDriver {
 impl Driver for LocalBufferDriver {
     type Sample = f64;
 
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+        let vm = ctx.vm.expect("vm is not prepared yet");
         let dsp_i = vm
             .prog
             .get_fun_index(&"dsp".to_symbol())
@@ -73,7 +78,7 @@ impl Driver for LocalBufferDriver {
 
         let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(self.count.clone());
 
-        self.vmdata = Some(RuntimeData::new(vm, &[(fname, getnow_fn)]));
+        self.vmdata = Some(RuntimeData::new(vm, ctx.sys_plugins, &[(fname, getnow_fn)]));
 
         true
     }

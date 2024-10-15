@@ -8,11 +8,13 @@ use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::load_default_runtime;
 use mimium_lang::compiler::{self, emit_ast, Context};
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
+use mimium_lang::plugin::Plugin;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
 use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
+use mimium_scheduler::{SchedulerInterface, SyncScheduler};
 use mimium_symphonia::{self, SamplerPlugin};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -101,7 +103,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_default_context(path: Option<Symbol>) -> ExecContext {
-    ExecContext::new(&[Arc::new(SamplerPlugin::default())], path)
+    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin::default())];
+    let mut ctx = ExecContext::new(plugins.into_iter(), path);
+    ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin::<
+        SyncScheduler,
+    >());
+    ctx
 }
 
 fn run_file(
@@ -122,7 +129,7 @@ fn run_file(
         let machine = ctx.prepare_machine(content);
 
         if args.mode.emit_bytecode {
-            println!("{}", machine.prog);
+            println!("{}", ctx.vm.unwrap().prog);
             return Ok(());
         }
 
@@ -138,7 +145,7 @@ fn run_file(
                 _ => panic!("cannot determine the output file format"),
             },
         };
-        driver.init(machine, None);
+        driver.init(ctx, None);
         driver.play();
 
         //wait until input something

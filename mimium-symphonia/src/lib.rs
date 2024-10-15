@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use mimium_lang::interner::{ToSymbol, TypeNodeId};
+use mimium_lang::interner::ToSymbol;
 use mimium_lang::plugin::Plugin;
 use mimium_lang::runtime::vm::{self, ExtFnInfo, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
@@ -155,7 +156,7 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
         1
     };
     let ty = function!(vec![numeric!()], numeric!());
-    let idx = machine.wrap_extern_cls(("sampler_mono".to_symbol(), Arc::new(res), ty));
+    let idx = machine.wrap_extern_cls(("sampler_mono".to_symbol(), Rc::new(RefCell::new(res)), ty));
     machine.set_stack(0, Machine::to_value(idx));
     1
 }
@@ -176,11 +177,11 @@ impl std::default::Default for SamplerPlugin {
 }
 
 impl Plugin for SamplerPlugin {
-    fn get_ext_functions<'a>(&self) -> &'a[&'a vm::ExtFnInfo] {
-        &[&self.extfn]
+    fn get_ext_functions(&self) -> Vec<vm::ExtFnInfo> {
+        vec![self.extfn]
     }
 
-    fn get_ext_closures(&self) -> &[&vm::ExtClsInfo] {
-        &[]
+    fn get_ext_closures(&self) -> Vec<vm::ExtClsInfo> {
+        vec![]
     }
 }

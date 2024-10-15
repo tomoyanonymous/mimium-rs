@@ -187,14 +187,14 @@ fn rust_closure_test() {
     let fnames = vec!["main".to_symbol()];
     let global_fn_table = fnames.into_iter().zip(fns).collect::<Vec<_>>();
     // let mut count = 0;
-    let cls = Arc::new(|m: &mut Machine| -> ReturnCode {
+    let cls = Rc::new(RefCell::new(|m: &mut Machine| -> ReturnCode {
         let v = m.get_top_n(1)[0];
         let i = Machine::get_as::<u64>(v) + 3;
         println!("Call from closure: {}", i);
         //?????
         m.set_stack(-1, Machine::to_value(i));
         1
-    });
+    }));
     let unknownt = Type::Unknown.into_id();
 
     let prog = Program {
