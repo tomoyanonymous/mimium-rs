@@ -8,16 +8,12 @@
 //! 3. **System Plugin**. If your plugin needs to mutate states of system-wide instance (1 plugin instance per 1 vm), you need to implement `SystemPlugin` traits. System plugin can have callbacks invoked at the important timings of the system like `on_init`, `before_on_sample` & so on. Internal synchronous event scheduler is implemented through this plugins system. `mimium-rand` is also an example of this type of module.
 
 mod system_plugin;
-use std::sync::Arc;
 pub use system_plugin::{to_ext_cls_info, SysPluginDyn, SysPluginSignature, SystemPlugin};
 
 use crate::{
-    interner::{Symbol, ToSymbol, TypeNodeId},
-    runtime::{
-        vm::{self, ExtClsInfo, ExtFnInfo, Machine, ReturnCode},
-        Time,
-    },
-    ExecContext,
+    compiler::ExtFunTypeInfo,
+    interner::{Symbol, TypeNodeId},
+    runtime::vm::{ExtClsInfo, ExtFnInfo},
 };
 
 pub trait Plugin {
@@ -25,11 +21,11 @@ pub trait Plugin {
     fn get_ext_closures(&self) -> Vec<ExtClsInfo>;
 }
 
-pub struct InstantPlugin{
-    pub extfns:Vec<ExtFnInfo>,
-    pub extcls:Vec<ExtClsInfo>
+pub struct InstantPlugin {
+    pub extfns: Vec<ExtFnInfo>,
+    pub extcls: Vec<ExtClsInfo>,
 }
-impl Plugin for InstantPlugin{
+impl Plugin for InstantPlugin {
     fn get_ext_functions(&self) -> Vec<ExtFnInfo> {
         self.extfns.clone()
     }
@@ -67,19 +63,17 @@ pub trait UGenPlugin {
 // pub type UGenPluginCollection(Vec<DynUGenPlugin>);
 // impl Plugin for UGenPluginCollection{}
 
-pub fn get_extfun_types(
-    plugins: &[Box<dyn Plugin>],
-) -> impl Iterator<Item = (Symbol, TypeNodeId)> + '_ {
+pub fn get_extfun_types(plugins: &[Box<dyn Plugin>]) -> impl Iterator<Item = ExtFunTypeInfo> + '_ {
     plugins.iter().flat_map(|plugin| {
         plugin
             .get_ext_functions()
-            .iter()
-            .map(|(name, _, ty)| (*name, *ty))
+            .into_iter()
+            .map(|(name, _, ty)| ExtFunTypeInfo { name, ty })
             .chain(
                 plugin
                     .get_ext_closures()
-                    .iter()
-                    .map(|(name, _, ty)| (*name, *ty)),
+                    .into_iter()
+                    .map(|(name, _, ty)| ExtFunTypeInfo { name, ty }),
             )
             .collect::<Vec<_>>()
     })

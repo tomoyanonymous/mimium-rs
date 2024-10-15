@@ -121,10 +121,11 @@ fn run_file(
         let ast = emit_ast_local(content)?;
         println!("{}", ast.pretty_print());
     } else if args.mode.emit_mir {
-        let mir = ctx.compiler.emit_mir(content)?;
+        ctx.prepare_compiler();
+        let mir = ctx.compiler.as_ref().unwrap().emit_mir(content)?;
         println!("{mir}");
     } else {
-        let machine = ctx.prepare_machine(content);
+        let _ = ctx.prepare_machine(content);
 
         if args.mode.emit_bytecode {
             println!("{}", ctx.vm.unwrap().prog);

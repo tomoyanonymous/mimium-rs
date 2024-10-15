@@ -38,7 +38,7 @@ impl FuncProto {
 pub struct Program {
     pub global_fn_table: Vec<(Symbol, FuncProto)>,
     pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
-    pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
+    // pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
     pub global_vals: Vec<RawVal>,
     pub strings: Vec<Symbol>,
     pub file_path: Option<Symbol>,
@@ -88,7 +88,7 @@ impl std::fmt::Display for Program {
                     format!("{s}, {f}")
                 })
         );
-        let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
+        // let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
         let _ = write!(f, "globals:\n{:?}", self.global_vals);
         write!(
             f,

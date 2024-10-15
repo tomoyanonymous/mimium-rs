@@ -25,7 +25,7 @@ fn getnow_test() {
     };
     let inner_insts = vec![
         Instruction::MoveConst(0, 0),     //load constant 0 for closure index
-        Instruction::CallExtCls(0, 0, 1), //call getnow
+        Instruction::CallExtFun(0, 0, 1), //call getnow
         Instruction::Return(0, 1),        // return single value at 0
     ];
     let dsp_f = FuncProto {
@@ -39,7 +39,7 @@ fn getnow_test() {
 
     let prog = Program {
         global_fn_table: fns,
-        ext_cls_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
+        ext_fun_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
         ..Default::default()
     };
 

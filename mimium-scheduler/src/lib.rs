@@ -37,9 +37,10 @@ impl<T: SchedulerInterface + 'static> SystemPlugin for Scheduler<T> {
     }
 
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
+        let fun: fn(&mut Self, &mut Machine) -> ReturnCode = Self::schedule_at;
         let schedule_fn = SysPluginSignature::new(
             "_mimium_schedule_at",
-            Self::schedule_at,
+            fun,
             function!(vec![numeric!(), function!(vec![], unit!())], unit!()),
         );
         vec![schedule_fn]

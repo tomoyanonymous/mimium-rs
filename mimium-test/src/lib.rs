@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
+    ast::builder,
     interner::{Symbol, ToSymbol},
     plugin::Plugin,
     runtime::{self, vm},
@@ -29,12 +30,13 @@ pub fn run_bytecode_test(
 }
 
 pub fn run_bytecode_test_multiple(
-    bytecodes: &vm::Program,
+    bytecodes: vm::Program,
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new(bytecodes.clone(), [].into_iter(), [].into_iter());
-
+    let mut ctx = ExecContext::new([].into_iter(), None);
+    let _ = ctx.prepare_machine_with_bytecode(bytecodes);
+    let mut machine = ctx.vm.unwrap();
     let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
     let mut ret = Vec::with_capacity(times as usize * n);
@@ -79,10 +81,11 @@ pub fn run_source_test(
     stereo: bool,
     path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new([].into_iter(), path);
+    let mut ctx = ExecContext::new([].into_iter(), path);
 
-    let bytecode = ctx.compiler.emit_bytecode(src)?;
-    run_bytecode_test_multiple(&bytecode, times, stereo)
+    ctx.prepare_machine(src);
+    let bytecode = ctx.vm.unwrap().prog;
+    run_bytecode_test_multiple(bytecode, times, stereo)
 }
 
 pub fn run_file_with_plugins(
@@ -149,14 +152,16 @@ pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
-    let bytecode = match ctx.compiler.emit_bytecode(&src) {
-        Ok(res) => res,
-        Err(errs) => {
-            report(&src, file, &errs);
-            panic!("failed to emit bytecode");
-        }
-    };
+    let mut ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
+    ctx.prepare_machine(&src);
+    let bytecode =ctx.vm.expect("failed to emit bytecode").prog;
+    // let bytecode = match ctx.compiler.emit_bytecode(&src) {
+    //     Ok(res) => res,
+    //     Err(errs) => {
+    //         report(&src, file, &errs);
+    //         panic!("failed to emit bytecode");
+    //     }
+    // };
 
     for (sym, proto) in bytecode.global_fn_table {
         let fn_name = sym.as_str();

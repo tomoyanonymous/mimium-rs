@@ -18,7 +18,8 @@ pub mod plugin;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use interner::Symbol;
+use compiler::ExtFunTypeInfo;
+use interner::{Symbol, TypeNodeId};
 use plugin::{to_ext_cls_info, Plugin, SysPluginDyn, SystemPlugin};
 use runtime::vm::{self, ExtClsInfo, Program};
 // use slotmap::SlotMap;
@@ -28,35 +29,54 @@ use runtime::vm::{self, ExtClsInfo, Program};
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
 pub struct ExecContext {
-    pub compiler: compiler::Context,
+    pub compiler: Option<compiler::Context>,
     pub vm: Option<runtime::vm::Machine>,
     pub plugins: Vec<Box<dyn Plugin>>,
     pub sys_plugins: Vec<SysPluginDyn>,
+    path: Option<Symbol>,
     extclsinfos_reserve: Vec<ExtClsInfo>,
+    extfuntypes: Vec<ExtFunTypeInfo>,
 }
 impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
-    pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, file_path: Option<Symbol>) -> Self {
+    pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, path: Option<Symbol>) -> Self {
         let plugins = plugins.collect::<Vec<_>>();
-        let extfuntypes = plugin::get_extfun_types(&plugins);
-        let compiler = compiler::Context::new(extfuntypes, file_path);
+        let extfuntypes = plugin::get_extfun_types(&plugins).collect();
         let sys_plugins = vec![];
         Self {
-            compiler,
+            compiler: None,
             vm: None,
             plugins,
             sys_plugins,
+            path,
             extclsinfos_reserve: vec![],
+            extfuntypes,
         }
     }
+    //todo: make it to builder pattern
     pub fn add_system_plugin<T: SystemPlugin + 'static>(&mut self, plug: T) {
         let plug = Rc::new(RefCell::new(plug));
-        self.extclsinfos_reserve
-            .extend(to_ext_cls_info(plug.clone()));
+        let sysplug_info = to_ext_cls_info(plug.clone());
+        let sysplug_typeinfo = sysplug_info
+            .iter()
+            .cloned()
+            .map(|(name, _, ty)| ExtFunTypeInfo { name, ty });
+        self.extfuntypes.extend(sysplug_typeinfo);
+        self.extclsinfos_reserve.extend(sysplug_info);
         self.sys_plugins.push(SysPluginDyn(plug))
     }
+    pub fn prepare_compiler(&mut self) {
+        self.compiler = Some(compiler::Context::new(
+            self.extfuntypes.clone(),
+            self.path,
+        ));
+    }
     pub fn prepare_machine(&mut self, src: &str) {
-        let prog = self.compiler.emit_bytecode(src).unwrap();
+        if self.compiler.is_none() {
+            self.prepare_compiler();
+        }
+
+        let prog = self.compiler.as_ref().unwrap().emit_bytecode(src).unwrap();
 
         self.prepare_machine_with_bytecode(prog);
     }

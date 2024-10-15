@@ -1,10 +1,9 @@
 use crate::{
     interner::{ToSymbol, TypeNodeId},
     runtime::{
-        vm::{ExtClsInfo, ExtClsType, ExtFnInfo, Machine, ReturnCode},
+        vm::{ExtClsInfo, Machine, ReturnCode},
         Time,
     },
-    ExecContext,
 };
 use std::{any::Any, cell::RefCell, rc::Rc};
 
@@ -12,7 +11,7 @@ pub struct SysPluginSignature {
     name: &'static str,
     /// The function internally implements Fn(&mut T:SystemPlugin,&mut Machine)->ReturnCode
     /// but the type is erased for dynamic dispatching. later the function is downcasted into their own type.
-    fun: Rc<dyn std::any::Any>,
+    fun: Rc<dyn Any>,
     ty: TypeNodeId,
 }
 impl SysPluginSignature {
@@ -55,6 +54,7 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) ->
     ifs.iter()
         .map(|SysPluginSignature { name, fun, ty }| -> ExtClsInfo {
             let plug = dyn_plugin.clone();
+            println!("fntypeid: {:?}", fun.type_id());
             let fun = fun
                 .clone()
                 .downcast::<fn(&mut T, &mut Machine) -> ReturnCode>()

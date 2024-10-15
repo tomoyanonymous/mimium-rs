@@ -173,7 +173,7 @@ fn rust_closure_test() {
     let inner_insts = vec![
         Instruction::MoveConst(0, 0),     //load closure
         Instruction::MoveConst(1, 1),     //load const int 4
-        Instruction::CallExtCls(0, 1, 1), //call closure, 7 should be set at reg 0
+        Instruction::CallExtFun(0, 1, 1), //call closure, 7 should be set at reg 0
         Instruction::Return0,             // return single value at 1
     ];
     let main_f = FuncProto {
@@ -199,8 +199,7 @@ fn rust_closure_test() {
 
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_symbol(), unknownt)],
-        ext_cls_table: vec![("rustclosure".to_symbol(), unknownt)],
+        ext_fun_table: vec![("lib_printi".to_symbol(), unknownt),("rustclosure".to_symbol(), unknownt)],
         ..Default::default()
     };
     let mut machine = Machine::new(

@@ -184,7 +184,10 @@ impl Default for RawValType {
         RawValType::Int
     }
 }
-
+enum ExtFnIdx {
+    Fun(usize),
+    Cls(usize),
+}
 pub struct Machine {
     // program will be modified while its execution, e.g., higher-order external closure creates its wrapper.
     pub prog: Program,
@@ -192,9 +195,9 @@ pub struct Machine {
     base_pointer: u64,
     pub closures: ClosureStorage,
     pub ext_fun_table: Vec<(Symbol, ExtFunType)>,
-    fn_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     pub ext_cls_table: Vec<(Symbol, ExtClsType)>,
-    cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
+    fn_map: HashMap<usize, ExtFnIdx>, //index from fntable index of program to it of machine.
+    // cls_map: HashMap<usize, usize>, //index from fntable index of program to it of machine.
     global_states: StateStorage,
     states_stack: StateStorageStack,
     delaysizes_pos_stack: Vec<usize>,
@@ -326,7 +329,7 @@ impl Machine {
             ext_fun_table: vec![],
             ext_cls_table: vec![],
             fn_map: HashMap::new(),
-            cls_map: HashMap::new(),
+            // cls_map: HashMap::new(),
             global_states: Default::default(),
             states_stack: Default::default(),
             delaysizes_pos_stack: vec![0],
@@ -517,11 +520,11 @@ impl Machine {
     pub fn wrap_extern_cls(&mut self, extcls: ExtClsInfo) -> ClosureIdx {
         let (name, f, t) = extcls;
 
-        self.prog.ext_cls_table.push((name, t));
-        let prog_clsid = self.prog.ext_cls_table.len() - 1;
+        self.prog.ext_fun_table.push((name, t));
+        let prog_clsid = self.prog.ext_fun_table.len() - 1;
         self.ext_cls_table.push((name, f));
         let vm_clsid = self.ext_cls_table.len() - 1;
-        self.cls_map.insert(prog_clsid, vm_clsid);
+        self.fn_map.insert(prog_clsid, ExtFnIdx::Cls(vm_clsid));
         let (bytecodes, nargs, nret) = if let Type::Function(args, ret, _) = t.to_type() {
             let mut wrap_bytecode = Vec::<Instruction>::new();
             // todo: decouple bytecode generator dependency
@@ -537,7 +540,7 @@ impl Machine {
             });
             wrap_bytecode.extend_from_slice(&[
                 Instruction::MoveConst(base, prog_clsid as _),
-                Instruction::CallExtCls(base, nargs, nret as _),
+                Instruction::CallExtFun(base, nargs, nret as _),
                 Instruction::Return(base, nret as _),
             ]);
             (wrap_bytecode, nargs, nret)
@@ -669,27 +672,21 @@ impl Machine {
                 }
                 Instruction::CallExtFun(func, nargs, nret_req) => {
                     let ext_fn_idx = self.get_stack(func as i64) as usize;
-                    let fi = self.fn_map.get(&ext_fn_idx).unwrap();
-                    let f = self.ext_fun_table[*fi].1;
-                    let nret = self.call_function(func, nargs, nret_req, f);
-                    // return
-                    let base = self.base_pointer as usize;
-                    let iret = base + func as usize + 1;
-                    self.stack
-                        .copy_within(iret..(iret + nret as usize), base + func as usize);
-                    self.stack.truncate(base + func as usize + nret as usize);
-                }
-                Instruction::CallExtCls(func, nargs, nret_req) => {
-                    let cls_idx = self
-                        .cls_map
-                        .get(&(self.get_stack(func as i64) as usize))
-                        .expect("closure map not resolved.");
-                    let (_name, cls) = &self.ext_cls_table[*cls_idx];
+                    let fidx = self.fn_map.get(&ext_fn_idx).unwrap();
+                    let nret = match fidx {
+                        ExtFnIdx::Fun(fi) => {
+                            let f = self.ext_fun_table[*fi].1;
+                            self.call_function(func, nargs, nret_req, f)
+                        }
+                        ExtFnIdx::Cls(ci) => {
+                            let (_name, cls) = &self.ext_cls_table[*ci];
+                            let cls = cls.clone();
+                            self.call_function(func, nargs, nret_req, move |machine| {
+                                cls.borrow_mut()(machine)
+                            })
+                        }
+                    };
 
-                    let cls = cls.clone();
-                    let nret = self.call_function(func, nargs, nret_req, move |machine| {
-                        cls.borrow_mut()(machine)
-                    });
                     // return
                     let base = self.base_pointer as usize;
                     let iret = base + func as usize + 1;
@@ -697,6 +694,25 @@ impl Machine {
                         .copy_within(iret..(iret + nret as usize), base + func as usize);
                     self.stack.truncate(base + func as usize + nret as usize);
                 }
+                // Instruction::CallExtCls(func, nargs, nret_req) => {
+                    // unreachable!()
+                    // let cls_idx = self
+                    //     .cls_map
+                    //     .get(&(self.get_stack(func as i64) as usize))
+                    //     .expect("closure map not resolved.");
+                    // let (_name, cls) = &self.ext_cls_table[*cls_idx];
+
+                    // let cls = cls.clone();
+                    // let nret = self.call_function(func, nargs, nret_req, move |machine| {
+                    //     cls.borrow_mut()(machine)
+                    // });
+                    // // return
+                    // let base = self.base_pointer as usize;
+                    // let iret = base + func as usize + 1;
+                    // self.stack
+                    //     .copy_within(iret..(iret + nret as usize), base + func as usize);
+                    // self.stack.truncate(base + func as usize + nret as usize);
+                // }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let vaddr = self.allocate_closure(fn_proto_pos, &mut upv_map);
@@ -907,7 +923,7 @@ impl Machine {
         self.global_vals = self.prog.global_vals.clone();
         self.prog
             .ext_fun_table
-            .iter()
+            .iter_mut()
             .enumerate()
             .for_each(|(i, (name, _ty))| {
                 if let Some((j, _)) = self
@@ -916,26 +932,17 @@ impl Machine {
                     .enumerate()
                     .find(|(_j, (fname, _fn))| name == fname)
                 {
-                    self.fn_map.insert(i, j);
-                } else {
-                    panic!("external function {} cannot be found", name);
-                };
-            });
-        self.prog
-            .ext_cls_table
-            .iter()
-            .enumerate()
-            .for_each(|(i, (name, _ty))| {
-                if let Some((j, _)) = self
+                    let _ = self.fn_map.insert(i, ExtFnIdx::Fun(j));
+                } else if let Some((j, _)) = self
                     .ext_cls_table
                     .iter()
                     .enumerate()
                     .find(|(_j, (fname, _fn))| name == fname)
                 {
-                    self.cls_map.insert(i, j);
+                    let _ = self.fn_map.insert(i, ExtFnIdx::Cls(j));
                 } else {
-                    panic!("external closure {} cannot be found", name);
-                };
+                    panic!("external function {} cannot be found", name);
+                }
             });
     }
     pub fn execute_idx(&mut self, idx: usize) -> ReturnCode {

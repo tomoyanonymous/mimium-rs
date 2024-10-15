@@ -23,7 +23,7 @@ pub enum Instruction {
     CallExtFun(Reg, u8, TypeSize),
     //call rust closure
     // Function Address,Nargs,Nret
-    CallExtCls(Reg, u8, TypeSize),
+    // CallExtCls(Reg, u8, TypeSize),
     // destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
     // register of the closure to be closed. other local closures will be released with this instruction.
@@ -164,9 +164,9 @@ impl std::fmt::Display for Instruction {
             Instruction::CallExtFun(func, nargs, nret_req) => {
                 write!(f, "{:<10} {} {} {}", "callext", func, nargs, nret_req)
             }
-            Instruction::CallExtCls(func, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "callextcls", func, nargs, nret_req)
-            }
+            // Instruction::CallExtCls(func, nargs, nret_req) => {
+            //     write!(f, "{:<10} {} {} {}", "callextcls", func, nargs, nret_req)
+            // }
 
             Instruction::LogI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "logi", dst, lhs, rhs),
             Instruction::PowI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "powi", dst, lhs, rhs),
