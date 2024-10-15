@@ -56,12 +56,15 @@ pub fn run_source_with_plugins(
     with_scheduler: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut driver = LocalBufferDriver::new(times as _);
-    let mut ctx = ExecContext::new(plugins, path.map(|s| s.to_symbol()));
+    let audiodriverplug: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
+    let mut ctx = ExecContext::new(
+        plugins.chain([audiodriverplug].into_iter()),
+        path.map(|s| s.to_symbol()),
+    );
     if with_scheduler {
         ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     }
     ctx.prepare_machine(src);
-
     driver.init(ctx, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
@@ -154,7 +157,7 @@ pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str,
     let (file, src) = load_src(path);
     let mut ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
     ctx.prepare_machine(&src);
-    let bytecode =ctx.vm.expect("failed to emit bytecode").prog;
+    let bytecode = ctx.vm.expect("failed to emit bytecode").prog;
     // let bytecode = match ctx.compiler.emit_bytecode(&src) {
     //     Ok(res) => res,
     //     Err(errs) => {

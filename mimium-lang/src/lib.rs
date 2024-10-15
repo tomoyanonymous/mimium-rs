@@ -53,6 +53,9 @@ impl ExecContext {
             extfuntypes,
         }
     }
+    pub fn add_plugin<T: Plugin + 'static>(&mut self, plug: T) {
+        self.plugins.push(Box::new(plug))
+    }
     //todo: make it to builder pattern
     pub fn add_system_plugin<T: SystemPlugin + 'static>(&mut self, plug: T) {
         let plug = Rc::new(RefCell::new(plug));
@@ -66,10 +69,7 @@ impl ExecContext {
         self.sys_plugins.push(SysPluginDyn(plug))
     }
     pub fn prepare_compiler(&mut self) {
-        self.compiler = Some(compiler::Context::new(
-            self.extfuntypes.clone(),
-            self.path,
-        ));
+        self.compiler = Some(compiler::Context::new(self.extfuntypes.clone(), self.path));
     }
     pub fn prepare_machine(&mut self, src: &str) {
         if self.compiler.is_none() {

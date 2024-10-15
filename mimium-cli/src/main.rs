@@ -144,6 +144,8 @@ fn run_file(
                 _ => panic!("cannot determine the output file format"),
             },
         };
+        let audiodriver_plug = driver.get_as_plugin();
+        ctx.add_plugin(audiodriver_plug);
         driver.init(ctx, None);
         driver.play();
 

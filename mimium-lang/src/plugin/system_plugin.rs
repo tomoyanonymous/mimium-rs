@@ -51,7 +51,7 @@ pub trait SystemPlugin {
 
 pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) -> Vec<ExtClsInfo> {
     let ifs = dyn_plugin.borrow().gen_interfaces();
-    ifs.iter()
+    ifs.into_iter()
         .map(|SysPluginSignature { name, fun, ty }| -> ExtClsInfo {
             let plug = dyn_plugin.clone();
             println!("fntypeid: {:?}", fun.type_id());
@@ -62,7 +62,7 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) ->
             let fun = Rc::new(RefCell::new(move |machine: &mut Machine| -> ReturnCode {
                 fun(&mut plug.borrow_mut(), machine)
             }));
-            let res: ExtClsInfo = (name.to_symbol(), fun, *ty);
+            let res: ExtClsInfo = (name.to_symbol(), fun, ty);
             res
         })
         .collect::<Vec<_>>()
