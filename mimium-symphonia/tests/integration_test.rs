@@ -4,7 +4,7 @@ use mimium_test::*;
 
 fn run_file_with_symphonia(path: &str, times: u64) -> Result<Vec<f64>, ()> {
     let plugins: [Box<dyn Plugin>; 1] = [Box::new(SamplerPlugin::default())];
-    run_file_with_plugins(path, times, plugins.into_iter())
+    run_file_with_plugins(path, times, plugins.into_iter(), false)
 }
 
 #[test]

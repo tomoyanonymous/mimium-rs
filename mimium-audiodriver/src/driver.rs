@@ -2,9 +2,9 @@ use std::borrow::BorrowMut;
 
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
-    plugin::{SysPluginDyn, SystemPlugin},
+    plugin::{InstantPlugin, Plugin, SysPluginDyn, SystemPlugin},
     runtime::{
-        vm::{self, ExtClsType, ExtFunType, FuncProto, ReturnCode},
+        vm::{self, ExtClsInfo, ExtClsType, ExtFunType, FuncProto, ReturnCode},
         Time,
     },
     utils::error::ReportableError,
@@ -62,12 +62,19 @@ impl ReportableError for Error {
 // can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
+    fn get_runtimefn_infos(&self) -> Vec<ExtClsInfo>;
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
     fn get_samplerate(&self) -> SampleRate;
     fn get_current_sample(&self) -> Time;
     fn is_playing(&self) -> bool;
+    fn get_as_plugin(&self) -> InstantPlugin {
+        InstantPlugin {
+            extfns: vec![],
+            extcls: self.get_runtimefn_infos(),
+        }
+    }
 }
 
 pub struct RuntimeData {
@@ -76,16 +83,7 @@ pub struct RuntimeData {
     pub dsp_i: usize,
 }
 impl RuntimeData {
-    /// VM in RuntimeData additionally uses audio-driver specific external closure like `_mimium_getnow` so this constructor accepts it.
-    /// This initilization process maybe changed in the future due to more runtime-specific value will be introduced.
-    pub fn new(
-        mut vm: vm::Machine,
-        sys_plugins: Vec<SysPluginDyn>,
-        ext_clss: &[(Symbol, ExtClsType)],
-    ) -> Self {
-        ext_clss.iter().for_each(|(name, f)| {
-            vm.install_extern_cls(*name, f.clone());
-        });
+    pub fn new(vm: vm::Machine, sys_plugins: Vec<SysPluginDyn>) -> Self {
         //todo:error handling
         let dsp_i = vm.prog.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
         Self {
@@ -112,9 +110,6 @@ impl RuntimeData {
         self.vm.execute_idx(self.dsp_i)
     }
 }
-
-
-
 
 pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
     crate::backends::cpal::native_driver(4096)

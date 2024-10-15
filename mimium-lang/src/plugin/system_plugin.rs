@@ -62,7 +62,7 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) ->
             let fun = Rc::new(RefCell::new(move |machine: &mut Machine| -> ReturnCode {
                 fun(&mut plug.borrow_mut(), machine)
             }));
-            let res: ExtClsInfo = (name.clone().to_symbol(), fun, *ty);
+            let res: ExtClsInfo = (name.to_symbol(), fun, *ty);
             res
         })
         .collect::<Vec<_>>()

@@ -86,9 +86,12 @@ pub struct Context {
     file_path: Option<Symbol>,
 }
 impl Context {
-    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)], file_path: Option<Symbol>) -> Self {
+    pub fn new(
+        builtin_fns: impl Iterator<Item = (Symbol, TypeNodeId)>,
+        file_path: Option<Symbol>,
+    ) -> Self {
         Self {
-            builtin_fns: builtin_fns.to_vec(),
+            builtin_fns: builtin_fns.collect(),
             file_path,
         }
     }

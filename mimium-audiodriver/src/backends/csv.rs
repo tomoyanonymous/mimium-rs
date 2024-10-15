@@ -26,6 +26,9 @@ impl CsvDriver {
 
 impl Driver for CsvDriver {
     type Sample = <LocalBufferDriver as Driver>::Sample;
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        self.driver.get_runtimefn_infos()
+    }
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
         let res = self.driver.init(ctx, sample_rate);

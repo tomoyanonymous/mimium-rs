@@ -25,6 +25,20 @@ pub trait Plugin {
     fn get_ext_closures(&self) -> Vec<ExtClsInfo>;
 }
 
+pub struct InstantPlugin{
+    pub extfns:Vec<ExtFnInfo>,
+    pub extcls:Vec<ExtClsInfo>
+}
+impl Plugin for InstantPlugin{
+    fn get_ext_functions(&self) -> Vec<ExtFnInfo> {
+        self.extfns.clone()
+    }
+
+    fn get_ext_closures(&self) -> Vec<ExtClsInfo> {
+        self.extcls.clone()
+    }
+}
+
 pub trait IOPlugin {
     fn get_ext_functions(&self) -> Vec<ExtFnInfo>;
 }

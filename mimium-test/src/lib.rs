@@ -1,5 +1,5 @@
 extern crate mimium_lang;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf};
 
 use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
@@ -51,9 +51,13 @@ pub fn run_source_with_plugins(
     path: Option<&str>,
     times: u64,
     plugins: impl Iterator<Item = Box<dyn Plugin>>,
+    with_scheduler: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut driver = LocalBufferDriver::new(times as _);
     let mut ctx = ExecContext::new(plugins, path.map(|s| s.to_symbol()));
+    if with_scheduler {
+        ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    }
     ctx.prepare_machine(src);
 
     driver.init(ctx, None);
@@ -65,7 +69,7 @@ pub fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    run_source_with_plugins(src, None, times, [].into_iter())
+    run_source_with_plugins(src, None, times, [].into_iter(), true)
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
@@ -85,9 +89,16 @@ pub fn run_file_with_plugins(
     path: &str,
     times: u64,
     plugins: impl Iterator<Item = Box<dyn Plugin>>,
+    with_scheduler: bool,
 ) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, plugins);
+    let res = run_source_with_plugins(
+        &src,
+        Some(&file.to_string_lossy()),
+        times,
+        plugins,
+        with_scheduler,
+    );
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -97,7 +108,7 @@ pub fn run_file_with_plugins(
     }
 }
 pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_with_plugins(path, times, [].into_iter())
+    run_file_with_plugins(path, times, [].into_iter(), true)
 }
 pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);

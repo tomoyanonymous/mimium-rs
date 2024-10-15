@@ -1,9 +1,6 @@
 use std::{cmp::Reverse, collections::BinaryHeap};
 
-use mimium_lang::runtime::{
-    vm::{ClosureIdx, Machine, ReturnCode},
-    Time,
-};
+use mimium_lang::runtime::{vm::ClosureIdx, Time};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Task {
@@ -79,11 +76,11 @@ impl SchedulerInterface for DummyScheduler {
         Self
     }
 
-    fn schedule_at(&mut self, time: Time, task: ClosureIdx) {
+    fn schedule_at(&mut self, _time: Time, _task: ClosureIdx) {
         // do nothing
     }
 
-    fn pop_task(&mut self, now: Time) -> Option<ClosureIdx> {
+    fn pop_task(&mut self, _now: Time) -> Option<ClosureIdx> {
         // do nothing
         None
     }
@@ -92,8 +89,3 @@ impl SchedulerInterface for DummyScheduler {
         // do nothing
     }
 }
-
-pub(crate) fn mimium_schedule_at(machine: &mut Machine) -> ReturnCode {
-    todo!()
-}
-// pub fn gen_schedule_at() -> (Symbol, ExtFunType) {}

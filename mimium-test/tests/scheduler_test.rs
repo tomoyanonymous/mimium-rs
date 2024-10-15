@@ -1,6 +1,4 @@
-use mimium_audiodriver::{
-    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
-};
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::ExecContext;
 use mimium_test::*;
 
@@ -42,7 +40,8 @@ fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let mut driver = LocalBufferDriver::new(times);
 
     let mut ctx = ExecContext::new([].into_iter(), None);
-    let vm = ctx.prepare_machine(&src);
+    ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    let _ = ctx.prepare_machine(&src);
     driver.init(ctx, None);
     driver
 }

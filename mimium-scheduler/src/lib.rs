@@ -46,6 +46,6 @@ impl<T: SchedulerInterface + 'static> SystemPlugin for Scheduler<T> {
     }
 }
 
-pub fn get_default_scheduler_plugin<T: SchedulerInterface>() -> impl SystemPlugin {
+pub fn get_default_scheduler_plugin() -> impl SystemPlugin {
     Scheduler::<_>(SyncScheduler::new())
 }

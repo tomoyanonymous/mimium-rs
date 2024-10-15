@@ -38,10 +38,8 @@ impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
     pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, file_path: Option<Symbol>) -> Self {
         let plugins = plugins.collect::<Vec<_>>();
-        let extfuntypes = plugin::get_extfun_types(&plugins)
-            .into_iter()
-            .collect::<Vec<_>>();
-        let compiler = compiler::Context::new(&extfuntypes, file_path);
+        let extfuntypes = plugin::get_extfun_types(&plugins);
+        let compiler = compiler::Context::new(extfuntypes, file_path);
         let sys_plugins = vec![];
         Self {
             compiler,

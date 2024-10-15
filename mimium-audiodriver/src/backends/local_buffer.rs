@@ -65,6 +65,11 @@ impl LocalBufferDriver {
 impl Driver for LocalBufferDriver {
     type Sample = f64;
 
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
+        vec![getnow]
+    }
+
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
         let vm = ctx.vm.expect("vm is not prepared yet");
         let dsp_i = vm
@@ -76,9 +81,7 @@ impl Driver for LocalBufferDriver {
         self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
         self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
 
-        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(self.count.clone());
-
-        self.vmdata = Some(RuntimeData::new(vm, ctx.sys_plugins, &[(fname, getnow_fn)]));
+        self.vmdata = Some(RuntimeData::new(vm, ctx.sys_plugins));
 
         true
     }

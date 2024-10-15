@@ -58,8 +58,7 @@ impl NativeAudioData {
     pub fn new(ctx: ExecContext, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
         //todo: split as trait interface method
         let vm = ctx.vm.expect("vm is not prepared yet");
-        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(count.clone());
-        let vmdata = RuntimeData::new(vm, ctx.sys_plugins, &[(fname, getnow_fn)]);
+        let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096];
         Self {
@@ -199,6 +198,10 @@ impl NativeDriver {
 }
 impl Driver for NativeDriver {
     type Sample = f64;
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
+        vec![getnow]
+    }
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
