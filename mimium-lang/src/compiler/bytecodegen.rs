@@ -447,8 +447,10 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(_label, _ty) => {
-                       unreachable!();
+                    mir::Value::ExtFunction(label, _ty) => {
+                        let (dst, argsize, nret) =
+                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
+                        Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }

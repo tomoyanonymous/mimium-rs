@@ -188,7 +188,7 @@ fn rust_closure_test() {
     let global_fn_table = fnames.into_iter().zip(fns).collect::<Vec<_>>();
     // let mut count = 0;
     let cls = Rc::new(RefCell::new(|m: &mut Machine| -> ReturnCode {
-        let v = m.get_top_n(1)[0];
+        let v = m.get_stack(1);
         let i = Machine::get_as::<u64>(v) + 3;
         println!("Call from closure: {}", i);
         //?????

@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_default_context(path: Option<Symbol>) -> ExecContext {
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin::default())];
+    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     ctx

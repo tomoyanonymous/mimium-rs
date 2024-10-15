@@ -150,6 +150,7 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
 
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0));
+        let pos2 = vm::Machine::get_as::<f64>(machine.get_stack(1));
         // this sampler read with boundary checks.
         let val = interpolate_vec(&vec, pos);
         machine.set_stack(0, Machine::to_value(val));
@@ -161,24 +162,17 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-pub struct SamplerPlugin {
-    extfn: ExtFnInfo,
-}
-impl std::default::Default for SamplerPlugin {
-    fn default() -> Self {
+pub struct SamplerPlugin;
+
+impl Plugin for SamplerPlugin {
+    fn get_ext_functions(&self) -> Vec<vm::ExtFnInfo> {
         let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
         let sig = (
             "gen_sampler_mono".to_symbol(),
             gen_sampler_mono as ExtFunType,
             t,
         );
-        Self { extfn: sig }
-    }
-}
-
-impl Plugin for SamplerPlugin {
-    fn get_ext_functions(&self) -> Vec<vm::ExtFnInfo> {
-        vec![self.extfn]
+        vec![sig]
     }
 
     fn get_ext_closures(&self) -> Vec<vm::ExtClsInfo> {

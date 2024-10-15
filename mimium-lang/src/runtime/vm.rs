@@ -521,25 +521,25 @@ impl Machine {
         let (name, f, t) = extcls;
 
         self.prog.ext_fun_table.push((name, t));
-        let prog_clsid = self.prog.ext_fun_table.len() - 1;
+        let prog_funid = self.prog.ext_fun_table.len() - 1;
         self.ext_cls_table.push((name, f));
         let vm_clsid = self.ext_cls_table.len() - 1;
-        self.fn_map.insert(prog_clsid, ExtFnIdx::Cls(vm_clsid));
+        self.fn_map.insert(prog_funid, ExtFnIdx::Cls(vm_clsid));
         let (bytecodes, nargs, nret) = if let Type::Function(args, ret, _) = t.to_type() {
             let mut wrap_bytecode = Vec::<Instruction>::new();
             // todo: decouple bytecode generator dependency
             let asizes = args.into_iter().map(ByteCodeGenerator::word_size_for_type);
             let nargs = asizes.clone().sum();
+            // if there are 2 arguments of float for instance, base pointer should be 2
             let base = nargs;
             let nret = ByteCodeGenerator::word_size_for_type(ret);
             wrap_bytecode.push(Instruction::MoveConst(base as _, 0));
             let _ = asizes.fold(0u8, |acc, size| {
                 //copy arguments for ext closure call
-                wrap_bytecode.push(Instruction::MoveRange(base + acc, acc, size as _));
+                wrap_bytecode.push(Instruction::MoveRange(base + acc + 1 , acc, size as _));
                 acc + size
             });
             wrap_bytecode.extend_from_slice(&[
-                Instruction::MoveConst(base, prog_clsid as _),
                 Instruction::CallExtFun(base, nargs, nret as _),
                 Instruction::Return(base, nret as _),
             ]);
@@ -551,7 +551,7 @@ impl Machine {
             nparam: nargs as _,
             nret: nret as _,
             bytecodes,
-            constants: vec![prog_clsid as _],
+            constants: vec![prog_funid as _],
             ..Default::default()
         };
         self.prog.global_fn_table.push((name, newfunc));
@@ -695,23 +695,23 @@ impl Machine {
                     self.stack.truncate(base + func as usize + nret as usize);
                 }
                 // Instruction::CallExtCls(func, nargs, nret_req) => {
-                    // unreachable!()
-                    // let cls_idx = self
-                    //     .cls_map
-                    //     .get(&(self.get_stack(func as i64) as usize))
-                    //     .expect("closure map not resolved.");
-                    // let (_name, cls) = &self.ext_cls_table[*cls_idx];
+                // unreachable!()
+                // let cls_idx = self
+                //     .cls_map
+                //     .get(&(self.get_stack(func as i64) as usize))
+                //     .expect("closure map not resolved.");
+                // let (_name, cls) = &self.ext_cls_table[*cls_idx];
 
-                    // let cls = cls.clone();
-                    // let nret = self.call_function(func, nargs, nret_req, move |machine| {
-                    //     cls.borrow_mut()(machine)
-                    // });
-                    // // return
-                    // let base = self.base_pointer as usize;
-                    // let iret = base + func as usize + 1;
-                    // self.stack
-                    //     .copy_within(iret..(iret + nret as usize), base + func as usize);
-                    // self.stack.truncate(base + func as usize + nret as usize);
+                // let cls = cls.clone();
+                // let nret = self.call_function(func, nargs, nret_req, move |machine| {
+                //     cls.borrow_mut()(machine)
+                // });
+                // // return
+                // let base = self.base_pointer as usize;
+                // let iret = base + func as usize + 1;
+                // self.stack
+                //     .copy_within(iret..(iret + nret as usize), base + func as usize);
+                // self.stack.truncate(base + func as usize + nret as usize);
                 // }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
