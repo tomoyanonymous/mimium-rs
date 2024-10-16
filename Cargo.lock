@@ -593,10 +593,8 @@ dependencies = [
 name = "mimium-scheduler"
 version = "2.0.0-alpha-1"
 dependencies = [
- "log",
  "mimium-lang",
  "mimium-test",
- "symphonia",
 ]
 
 [[package]]
