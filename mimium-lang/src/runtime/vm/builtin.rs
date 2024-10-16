@@ -1,6 +1,6 @@
 use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::types::{PType, Type};
-use crate::{function, integer, numeric, unit};
+use crate::{function, numeric};
 
 use super::{ExtFnInfo, Machine, ReturnCode};
 

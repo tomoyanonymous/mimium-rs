@@ -418,7 +418,7 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(label, ty) => {
+                    mir::Value::ExtFunction(label, _ty) => {
                         //todo: use btreemap
                         let (dst, argsize, nret) =
                             self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);

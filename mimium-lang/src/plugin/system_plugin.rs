@@ -36,21 +36,6 @@ pub trait SystemPlugin {
     fn on_init(&mut self, machine: &mut Machine) -> ReturnCode;
     fn on_sample(&mut self, time: Time, machine: &mut Machine) -> ReturnCode;
     fn gen_interfaces(&self) -> Vec<SysPluginSignature>;
-    // fn get_plugin_instance_dyn(&self, id: usize, machine: &mut Machine) -> Rc<RefCell<Self>> {
-    //     todo!()
-    // }
-    // fn get_extclsinfos(&mut self, id: usize, machine: &mut Machine) -> Vec<ExtClsInfo> {
-    //     let plug = machine.get_plugin_instance_mut(id).clone();
-    //     self.gen_interfaces()
-    //         .iter()
-    //         .map(|SysPluginSignature { name, fun, ty }| {
-    //             let fun: ExtClsType = Rc::new(RefCell::new(|machine: &mut Machine| {
-    //                 fun(&mut plug.borrow_mut(), machine)
-    //             }));
-    //             (name.to_symbol(), fun, *ty)
-    //         })
-    //         .collect::<Vec<_>>()
-    // }
 }
 #[derive(Clone)]
 pub struct DynSystemPlugin(pub Rc<UnsafeCell<dyn SystemPlugin>>);
@@ -64,7 +49,6 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(
         .into_iter()
         .map(|SysPluginSignature { name, fun, ty }| -> ExtClsInfo {
             let plug = dyn_plugin.clone();
-            println!("fntypeid: {:?}", fun.type_id());
             let fun = fun
                 .clone()
                 .downcast::<fn(&mut T, &mut Machine) -> ReturnCode>()

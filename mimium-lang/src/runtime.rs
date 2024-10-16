@@ -1,5 +1,3 @@
-use crate::compiler;
-use crate::interner::ToSymbol;
 use crate::utils::{error::ReportableError, metadata::Span};
 
 // pub mod scheduler;

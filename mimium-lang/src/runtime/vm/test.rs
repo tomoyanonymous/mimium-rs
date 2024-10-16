@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     function,
+    interner::ToSymbol,
     mir::OpenUpValue,
     numeric,
     types::{PType, Type},
@@ -199,7 +200,10 @@ fn rust_closure_test() {
 
     let prog = Program {
         global_fn_table,
-        ext_fun_table: vec![("lib_printi".to_symbol(), unknownt),("rustclosure".to_symbol(), unknownt)],
+        ext_fun_table: vec![
+            ("lib_printi".to_symbol(), unknownt),
+            ("rustclosure".to_symbol(), unknownt),
+        ],
         ..Default::default()
     };
     let mut machine = Machine::new(

@@ -3,7 +3,6 @@ use std::{collections::HashMap, path::PathBuf};
 
 use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
-    ast::builder,
     interner::{Symbol, ToSymbol},
     plugin::Plugin,
     runtime::{self, vm},

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use mimium_lang::interner::ToSymbol;
 use mimium_lang::plugin::Plugin;
-use mimium_lang::runtime::vm::{self, ExtFnInfo, ExtFunType, Machine, ReturnCode};
+use mimium_lang::runtime::vm::{self, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
 use mimium_lang::{function, numeric, string_t};
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
@@ -150,7 +150,6 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
 
     let res = move |machine: &mut Machine| -> ReturnCode {
         let pos = vm::Machine::get_as::<f64>(machine.get_stack(0));
-        let pos2 = vm::Machine::get_as::<f64>(machine.get_stack(1));
         // this sampler read with boundary checks.
         let val = interpolate_vec(&vec, pos);
         machine.set_stack(0, Machine::to_value(val));

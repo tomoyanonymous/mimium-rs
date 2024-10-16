@@ -14,8 +14,7 @@ pub use program::{FuncProto, Program};
 
 use crate::{
     compiler::bytecodegen::ByteCodeGenerator,
-    interner::{Symbol, ToSymbol, TypeNodeId},
-    plugin::SystemPlugin,
+    interner::{Symbol, TypeNodeId},
     types::{Type, TypeSize},
 };
 pub type RawVal = u64;
@@ -536,7 +535,7 @@ impl Machine {
             wrap_bytecode.push(Instruction::MoveConst(base as _, 0));
             let _ = asizes.fold(0u8, |acc, size| {
                 //copy arguments for ext closure call
-                wrap_bytecode.push(Instruction::MoveRange(base + acc + 1 , acc, size as _));
+                wrap_bytecode.push(Instruction::MoveRange(base + acc + 1, acc, size as _));
                 acc + size
             });
             wrap_bytecode.extend_from_slice(&[
@@ -566,9 +565,6 @@ impl Machine {
         cls.is_closed = true;
         let idx = self.closures.insert(cls);
         ClosureIdx(idx)
-    }
-    pub fn get_plugin_instance_mut(&mut self, id: usize) -> Rc<RefCell<dyn SystemPlugin>> {
-        todo!()
     }
     fn close_upvalues(&mut self, src: Reg) {
         let clsidx = Self::get_as::<ClosureIdx>(self.get_stack(src as _));
@@ -694,25 +690,6 @@ impl Machine {
                         .copy_within(iret..(iret + nret as usize), base + func as usize);
                     self.stack.truncate(base + func as usize + nret as usize);
                 }
-                // Instruction::CallExtCls(func, nargs, nret_req) => {
-                // unreachable!()
-                // let cls_idx = self
-                //     .cls_map
-                //     .get(&(self.get_stack(func as i64) as usize))
-                //     .expect("closure map not resolved.");
-                // let (_name, cls) = &self.ext_cls_table[*cls_idx];
-
-                // let cls = cls.clone();
-                // let nret = self.call_function(func, nargs, nret_req, move |machine| {
-                //     cls.borrow_mut()(machine)
-                // });
-                // // return
-                // let base = self.base_pointer as usize;
-                // let iret = base + func as usize + 1;
-                // self.stack
-                //     .copy_within(iret..(iret + nret as usize), base + func as usize);
-                // self.stack.truncate(base + func as usize + nret as usize);
-                // }
                 Instruction::Closure(dst, fn_index) => {
                     let fn_proto_pos = self.get_stack(fn_index as i64) as usize;
                     let vaddr = self.allocate_closure(fn_proto_pos, &mut upv_map);
