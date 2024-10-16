@@ -248,16 +248,16 @@ impl ByteCodeGenerator {
                 self.program.ext_fun_table.len() - 1
             }) as ConstPos
     }
-    fn get_or_insert_extclsid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
-        self.program
-            .ext_cls_table
-            .iter()
-            .position(|(name, _ty)| *name == label)
-            .unwrap_or_else(|| {
-                self.program.ext_cls_table.push((label, ty));
-                self.program.ext_cls_table.len() - 1
-            }) as ConstPos
-    }
+    // fn get_or_insert_extclsid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
+    //     self.program
+    //         .ext_cls_table
+    //         .iter()
+    //         .position(|(name, _ty)| *name == label)
+    //         .unwrap_or_else(|| {
+    //             self.program.ext_cls_table.push((label, ty));
+    //             self.program.ext_cls_table.len() - 1
+    //         }) as ConstPos
+    // }
     fn prepare_extfun_or_cls(
         &mut self,
         funcproto: &mut vm::FuncProto,
@@ -287,18 +287,18 @@ impl ByteCodeGenerator {
         let idx = self.get_or_insert_extfunid(label, ty);
         self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
     }
-    fn prepare_extcls(
-        &mut self,
-        funcproto: &mut vm::FuncProto,
-        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
-        dst: Arc<mir::Value>,
-        args: &[(Arc<mir::Value>, TypeNodeId)],
-        label: Symbol,
-        ty: TypeNodeId,
-    ) -> (Reg, Reg, TypeSize) {
-        let idx = self.get_or_insert_extclsid(label, ty);
-        self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
-    }
+    // fn prepare_extcls(
+    //     &mut self,
+    //     funcproto: &mut vm::FuncProto,
+    //     bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+    //     dst: Arc<mir::Value>,
+    //     args: &[(Arc<mir::Value>, TypeNodeId)],
+    //     label: Symbol,
+    //     ty: TypeNodeId,
+    // ) -> (Reg, Reg, TypeSize) {
+    //     let idx = self.get_or_insert_extclsid(label, ty);
+    //     self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
+    // }
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
@@ -418,7 +418,7 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(label, ty) => {
+                    mir::Value::ExtFunction(label, _ty) => {
                         //todo: use btreemap
                         let (dst, argsize, nret) =
                             self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
@@ -447,10 +447,10 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(label, ty) => {
+                    mir::Value::ExtFunction(label, _ty) => {
                         let (dst, argsize, nret) =
-                            self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
-                        Some(VmInstruction::CallExtCls(dst, argsize, nret))
+                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
+                        Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }

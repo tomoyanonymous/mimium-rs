@@ -3,9 +3,13 @@ use std::sync::{
     Arc,
 };
 
-use mimium_lang::{interner::ToSymbol, runtime::scheduler, runtime::vm};
+use mimium_lang::{
+    interner::ToSymbol,
+    runtime::{vm, Time},
+    ExecContext,
+};
 
-use crate::driver::{Driver, RuntimeData, SampleRate, Time};
+use crate::driver::{Driver, RuntimeData, SampleRate};
 
 /// Execute the program n times and write the result values to `localbuffer`.
 pub struct LocalBufferDriver {
@@ -61,7 +65,13 @@ impl LocalBufferDriver {
 impl Driver for LocalBufferDriver {
     type Sample = f64;
 
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
+        vec![getnow]
+    }
+
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+        let vm = ctx.vm.expect("vm is not prepared yet");
         let dsp_i = vm
             .prog
             .get_fun_index(&"dsp".to_symbol())
@@ -71,9 +81,7 @@ impl Driver for LocalBufferDriver {
         self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
         self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
 
-        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(self.count.clone());
-
-        self.vmdata = Some(RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]));
+        self.vmdata = Some(RuntimeData::new(vm, ctx.sys_plugins));
 
         true
     }

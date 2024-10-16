@@ -1,12 +1,12 @@
-use crate::compiler;
-use crate::interner::ToSymbol;
 use crate::utils::{error::ReportableError, metadata::Span};
 
-pub mod scheduler;
+// pub mod scheduler;
 // pub mod hir_interpreter;
 pub mod builtin_fn;
 
 pub mod vm;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Time(pub u64);
 
 #[derive(Debug)]
 pub enum ErrorKind {

@@ -18,13 +18,14 @@ pub type VReg = u64;
 pub enum Value {
     Global(VPtr),
     Argument(usize, Arc<Argument>), //index,
-    // holds SSA index(position in infinite registers)
+    /// holds SSA index(position in infinite registers)
     Register(VReg),
     State(VPtr),
     // idx of the function in the program
     Function(usize),
+    /// native function (Rust function item or closure)
     ExtFunction(Symbol, TypeNodeId),
-    //internal state
+    /// internal state
     None,
 }
 
@@ -197,5 +198,5 @@ impl Function {
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
     pub functions: Vec<Function>,
-    pub file_path: Option<Symbol>
+    pub file_path: Option<Symbol>,
 }

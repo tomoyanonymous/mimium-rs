@@ -573,6 +573,7 @@ dependencies = [
  "log",
  "mimium-audiodriver",
  "mimium-lang",
+ "mimium-scheduler",
  "mimium-symphonia",
 ]
 
@@ -586,6 +587,14 @@ dependencies = [
  "log",
  "slotmap",
  "string-interner",
+]
+
+[[package]]
+name = "mimium-scheduler"
+version = "2.0.0-alpha-1"
+dependencies = [
+ "mimium-lang",
+ "mimium-test",
 ]
 
 [[package]]
@@ -605,6 +614,7 @@ dependencies = [
  "log",
  "mimium-audiodriver",
  "mimium-lang",
+ "mimium-scheduler",
 ]
 
 [[package]]

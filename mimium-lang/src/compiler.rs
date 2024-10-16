@@ -80,21 +80,38 @@ pub fn emit_ast(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> 
     let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
     Ok(recursecheck::convert_recurse(ast))
 }
+#[derive(Clone, Copy)]
+pub struct ExtFunTypeInfo {
+    pub name: Symbol,
+    pub ty: TypeNodeId,
+}
 
 pub struct Context {
-    builtin_fns: Vec<(Symbol, TypeNodeId)>,
+    ext_fns: Vec<ExtFunTypeInfo>,
     file_path: Option<Symbol>,
 }
 impl Context {
-    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)], file_path: Option<Symbol>) -> Self {
+    pub fn new(
+        ext_fns: impl IntoIterator<Item = ExtFunTypeInfo>,
+        file_path: Option<Symbol>,
+    ) -> Self {
         Self {
-            builtin_fns: builtin_fns.to_vec(),
+            ext_fns: ext_fns.into_iter().collect(),
+
             file_path,
         }
     }
+    fn get_ext_typeinfos(&self) -> Vec<(Symbol, TypeNodeId)> {
+        self.ext_fns
+            .clone()
+            .into_iter()
+            .map(|ExtFunTypeInfo { name, ty }| (name, ty))
+            .collect()
+    }
     pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
         let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-        mirgen::compile(ast, &self.builtin_fns, self.file_path).map_err(|e| {
+
+        mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path).map_err(|e| {
             let bres = e as Box<dyn ReportableError>;
             vec![bres]
         })

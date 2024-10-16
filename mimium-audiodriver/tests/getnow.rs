@@ -1,14 +1,15 @@
 use mimium_audiodriver::{
     backends::local_buffer::LocalBufferDriver,
     driver::{Driver, SampleRate},
-    runtime_fn,
 };
 use mimium_lang::{
     function,
     interner::ToSymbol as _,
     numeric,
-    runtime::vm::{self, FuncProto, Instruction, Program},
+    plugin::Plugin,
+    runtime::vm::{FuncProto, Instruction, Program},
     types::{PType, Type},
+    ExecContext,
 };
 
 #[test]
@@ -24,7 +25,7 @@ fn getnow_test() {
     };
     let inner_insts = vec![
         Instruction::MoveConst(0, 0),     //load constant 0 for closure index
-        Instruction::CallExtCls(0, 0, 1), //call getnow
+        Instruction::CallExtFun(0, 0, 1), //call getnow
         Instruction::Return(0, 1),        // return single value at 0
     ];
     let dsp_f = FuncProto {
@@ -38,22 +39,16 @@ fn getnow_test() {
 
     let prog = Program {
         global_fn_table: fns,
-        ext_cls_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
+        ext_fun_table: vec![("_mimium_getnow".to_symbol(), function!(vec![], numeric!()))],
         ..Default::default()
     };
 
     let times = 10;
     let mut driver = LocalBufferDriver::new(times);
-    let (fname, getnowfn, _type) = runtime_fn::gen_getnowfn(driver.count.clone());
-    driver.init(
-        vm::Machine::new(
-            None,
-            prog,
-            &[],
-            &[(fname, getnowfn, function!(vec![], numeric!()))],
-        ),
-        Some(SampleRate(48000)),
-    );
+    let p: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
+    let mut ctx = ExecContext::new([p].into_iter(), None);
+    ctx.prepare_machine_with_bytecode(prog);
+    driver.init(ctx, Some(SampleRate(48000)));
     driver.play();
 
     let res = driver.get_generated_samples();

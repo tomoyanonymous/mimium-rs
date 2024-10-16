@@ -1,7 +1,6 @@
-use crate::interner::TypeNodeId;
-use crate::runtime::scheduler;
+use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::types::{PType, Type};
-use crate::{function, integer, numeric, unit};
+use crate::{function, numeric};
 
 use super::{ExtFnInfo, Machine, ReturnCode};
 
@@ -21,19 +20,22 @@ fn probelnf(machine: &mut Machine) -> ReturnCode {
     1
 }
 
-pub fn get_builtin_fns() -> [ExtFnInfo; 3] {
+pub fn get_builtin_fns() -> [ExtFnInfo; 2] {
     [
-        ("probe", probef, function!(vec![numeric!()], numeric!())),
-        ("probeln", probelnf, function!(vec![numeric!()], numeric!())),
         (
-            "_mimium_schedule_at",
-            scheduler::mimium_schedule_at,
-            function!(vec![numeric!(), function!(vec![], unit!())], unit!()),
+            "probe".to_symbol(),
+            probef,
+            function!(vec![numeric!()], numeric!()),
+        ),
+        (
+            "probeln".to_symbol(),
+            probelnf,
+            function!(vec![numeric!()], numeric!()),
         ),
     ]
 }
 
-pub fn get_builtin_fn_types() -> Vec<(&'static str, TypeNodeId)> {
+pub fn get_builtin_fn_types() -> Vec<(Symbol, TypeNodeId)> {
     get_builtin_fns()
         .iter()
         .map(|(name, _f, t)| (*name, *t))

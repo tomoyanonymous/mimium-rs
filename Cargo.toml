@@ -5,6 +5,7 @@ members = [
     "mimium-audiodriver",
     "mimium-cli",
     "mimium-test",
+    "mimium-scheduler",
     "mimium-symphonia",
 ]
 

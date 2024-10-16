@@ -1,15 +1,11 @@
 extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
-use mimium_audiodriver::{
-    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
-};
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
 use mimium_lang::{
     interner::{Symbol, ToSymbol},
-    runtime::{
-        self,
-        vm::{self, ExtClsInfo, ExtFnInfo},
-    },
+    plugin::Plugin,
+    runtime::{self, vm},
     utils::{
         error::{report, ReportableError},
         fileloader,
@@ -17,10 +13,10 @@ use mimium_lang::{
     ExecContext,
 };
 
-pub fn run_bytecode_test<'a>(
-    machine: &'a mut vm::Machine,
+pub fn run_bytecode_test(
+    machine: &mut vm::Machine,
     n: usize,
-) -> Result<&'a [f64], Vec<Box<dyn ReportableError>>> {
+) -> Result<&[f64], Vec<Box<dyn ReportableError>>> {
     let retcode = machine.execute_entry(&"dsp".to_symbol());
     if retcode >= 0 {
         Ok(vm::Machine::get_as_array::<f64>(machine.get_top_n(n)))
@@ -33,12 +29,13 @@ pub fn run_bytecode_test<'a>(
 }
 
 pub fn run_bytecode_test_multiple(
-    bytecodes: &vm::Program,
+    bytecodes: vm::Program,
     times: u64,
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut machine = vm::Machine::new(None, bytecodes.clone(), &[], &[]);
-
+    let mut ctx = ExecContext::new([].into_iter(), None);
+    let _ = ctx.prepare_machine_with_bytecode(bytecodes);
+    let mut machine = ctx.vm.unwrap();
     let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
     let mut ret = Vec::with_capacity(times as usize * n);
@@ -54,17 +51,20 @@ pub fn run_source_with_plugins(
     src: &str,
     path: Option<&str>,
     times: u64,
-    extfuns: &[ExtFnInfo],
-    extcls: &[ExtClsInfo],
+    plugins: impl Iterator<Item = Box<dyn Plugin>>,
+    with_scheduler: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let mut clss = extcls.to_vec().clone();
     let mut driver = LocalBufferDriver::new(times as _);
-    let getnowfn = gen_getnowfn(driver.count.clone());
-    clss.push(getnowfn);
-    let mut ctx = ExecContext::new(extfuns, &clss, path.map(|s| s.to_symbol()));
-    let vm = ctx.prepare_machine(src);
-
-    driver.init(vm, None);
+    let audiodriverplug: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
+    let mut ctx = ExecContext::new(
+        plugins.chain([audiodriverplug].into_iter()),
+        path.map(|s| s.to_symbol()),
+    );
+    if with_scheduler {
+        ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    }
+    ctx.prepare_machine(src);
+    driver.init(ctx, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
 }
@@ -73,7 +73,7 @@ pub fn run_source_with_scheduler(
     src: &str,
     times: u64,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    run_source_with_plugins(src, None, times, &[], &[])
+    run_source_with_plugins(src, None, times, [].into_iter(), true)
 }
 
 // if stereo, this returns values in flattened form [L1, R1, L2, R2, ...]
@@ -83,20 +83,27 @@ pub fn run_source_test(
     stereo: bool,
     path: Option<Symbol>,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
-    let ctx = ExecContext::new(&[], &[], path);
+    let mut ctx = ExecContext::new([].into_iter(), path);
 
-    let bytecode = ctx.compiler.emit_bytecode(src)?;
-    run_bytecode_test_multiple(&bytecode, times, stereo)
+    ctx.prepare_machine(src);
+    let bytecode = ctx.vm.unwrap().prog;
+    run_bytecode_test_multiple(bytecode, times, stereo)
 }
 
 pub fn run_file_with_plugins(
     path: &str,
     times: u64,
-    extfuns: &[ExtFnInfo],
-    extcls: &[ExtClsInfo],
+    plugins: impl Iterator<Item = Box<dyn Plugin>>,
+    with_scheduler: bool,
 ) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
-    let res = run_source_with_plugins(&src, Some(&file.to_string_lossy()), times, extfuns, extcls);
+    let res = run_source_with_plugins(
+        &src,
+        Some(&file.to_string_lossy()),
+        times,
+        plugins,
+        with_scheduler,
+    );
     match res {
         Ok(res) => Ok(res),
         Err(errs) => {
@@ -106,7 +113,7 @@ pub fn run_file_with_plugins(
     }
 }
 pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
-    run_file_with_plugins(path, times, &[], &[])
+    run_file_with_plugins(path, times, [].into_iter(), true)
 }
 pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
     let (file, src) = load_src(path);
@@ -147,14 +154,16 @@ pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
 pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str, ans: T) {
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
-    let ctx = ExecContext::new(&[], &[], Some(file.to_str().unwrap().to_symbol()));
-    let bytecode = match ctx.compiler.emit_bytecode(&src) {
-        Ok(res) => res,
-        Err(errs) => {
-            report(&src, file, &errs);
-            panic!("failed to emit bytecode");
-        }
-    };
+    let mut ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
+    ctx.prepare_machine(&src);
+    let bytecode = ctx.vm.expect("failed to emit bytecode").prog;
+    // let bytecode = match ctx.compiler.emit_bytecode(&src) {
+    //     Ok(res) => res,
+    //     Err(errs) => {
+    //         report(&src, file, &errs);
+    //         panic!("failed to emit bytecode");
+    //     }
+    // };
 
     for (sym, proto) in bytecode.global_fn_table {
         let fn_name = sym.as_str();
