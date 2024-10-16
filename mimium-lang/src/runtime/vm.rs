@@ -607,9 +607,11 @@ impl Machine {
             }
         }
     }
+    fn get_fnproto(&self, func_i: usize) -> &FuncProto {
+        &self.prog.global_fn_table[func_i].1
+    }
     /// Execute function, return retcode.
     pub fn execute(&mut self, func_i: usize, cls_i: Option<ClosureIdx>) -> ReturnCode {
-        let (_fname, func) = self.prog.global_fn_table[func_i].clone();
         let mut local_closures: Vec<ClosureIdx> = vec![];
         let mut upv_map = LocalUpValueMap::default();
         let mut pcounter = 0;
@@ -638,12 +640,12 @@ impl Machine {
             //     log::trace!("{line}");
             // }
             let mut increment = 1;
-            match func.bytecodes[pcounter] {
+            match self.get_fnproto(func_i).bytecodes[pcounter] {
                 Instruction::Move(dst, src) => {
                     self.set_stack(dst as i64, self.get_stack(src as i64));
                 }
                 Instruction::MoveConst(dst, pos) => {
-                    self.set_stack(dst as i64, func.constants[pos as usize]);
+                    self.set_stack(dst as i64, self.get_fnproto(func_i).constants[pos as usize]);
                 }
                 Instruction::MoveRange(dst, src, n) => {
                     let (range, _slice) = self.get_stack_range(src as _, n);
@@ -865,8 +867,12 @@ impl Machine {
                     let delaysize_i =
                         unsafe { self.delaysizes_pos_stack.last().unwrap_unchecked() };
 
-                    let size_in_samples = unsafe { func.delay_sizes.get_unchecked(*delaysize_i) };
-                    let mut ringbuf = self.get_current_state().get_as_ringbuffer(*size_in_samples);
+                    let size_in_samples = unsafe {
+                        *self.get_fnproto(func_i)
+                            .delay_sizes
+                            .get_unchecked(*delaysize_i)
+                    };
+                    let mut ringbuf = self.get_current_state().get_as_ringbuffer(size_in_samples);
 
                     let res = ringbuf.process(i, t);
                     self.set_stack(dst as i64, res);
