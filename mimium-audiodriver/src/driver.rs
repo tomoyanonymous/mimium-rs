@@ -92,6 +92,7 @@ impl RuntimeData {
     }
     pub fn run_main(&mut self) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+            //todo: encapsulate unsafety within SystemPlugin functionality
             let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_init(&mut self.vm);
         });
@@ -102,6 +103,7 @@ impl RuntimeData {
     }
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+            //todo: encapsulate unsafety within SystemPlugin functionality
             let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_sample(time, &mut self.vm);
         });
