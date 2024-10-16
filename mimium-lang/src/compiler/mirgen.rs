@@ -726,20 +726,43 @@ impl Context {
             }
             Expr::If(cond, then, else_) => {
                 let (c, _) = self.eval_expr(*cond)?;
-                let bbidx = self.get_ctxdata().current_bb;
-                let _ = self.push_inst(Instruction::JmpIf(
-                    c,
-                    (bbidx + 1) as u64,
-                    (bbidx + 2) as u64,
-                ));
+                let cond_bidx = self.get_ctxdata().current_bb;
+
+                // This is just a placeholder. At this point, the locations of
+                // the block are not determined yet. These 0s will be
+                // overwritten later.
+                let _ = self.push_inst(Instruction::JmpIf(c, 0, 0, 0));
+
                 //insert then block
+                let then_bidx = cond_bidx + 1;
                 let (t, _) = self.eval_block(Some(*then))?;
                 //jmp to ret is inserted in bytecodegen
                 //insert else block
+                let else_bidx = self.get_ctxdata().current_bb + 1;
                 let (e, _) = self.eval_block(*else_)?;
                 //insert return block
                 self.add_new_basicblock();
                 let res = self.push_inst(Instruction::Phi(t, e));
+                let phi_bidx = self.get_ctxdata().current_bb;
+
+                // overwrite JmpIf
+                let jmp_if = self
+                    .get_current_fn()
+                    .body
+                    .get_mut(cond_bidx)
+                    .expect("no basic block found")
+                    .0
+                    .last_mut()
+                    .expect("the block contains no inst?");
+                match &mut jmp_if.1 {
+                    Instruction::JmpIf(_, then_dst, else_dst, phi_dst) => {
+                        *then_dst = then_bidx as _;
+                        *else_dst = else_bidx as _;
+                        *phi_dst = phi_bidx as _;
+                    }
+                    _ => panic!("the last block should be Jmp"),
+                }
+
                 Ok((res, ty))
             }
             Expr::Bracket(_) => todo!(),
