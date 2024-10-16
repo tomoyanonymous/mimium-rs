@@ -5,7 +5,11 @@ use crate::{
         Time,
     },
 };
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{
+    any::Any,
+    cell::{RefCell, UnsafeCell},
+    rc::Rc,
+};
 
 pub struct SysPluginSignature {
     name: &'static str,
@@ -48,10 +52,16 @@ pub trait SystemPlugin {
     //         .collect::<Vec<_>>()
     // }
 }
+#[derive(Clone)]
+pub struct DynSystemPlugin(pub Rc<UnsafeCell<dyn SystemPlugin>>);
 
-pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) -> Vec<ExtClsInfo> {
-    let ifs = dyn_plugin.borrow().gen_interfaces();
-    ifs.into_iter()
+pub fn to_ext_cls_info<T: SystemPlugin + 'static>(
+    sysplugin: T,
+) -> (DynSystemPlugin, Vec<ExtClsInfo>) {
+    let ifs = sysplugin.gen_interfaces();
+    let dyn_plugin = DynSystemPlugin(Rc::new(UnsafeCell::new(sysplugin)));
+    let ifs_res = ifs
+        .into_iter()
         .map(|SysPluginSignature { name, fun, ty }| -> ExtClsInfo {
             let plug = dyn_plugin.clone();
             println!("fntypeid: {:?}", fun.type_id());
@@ -60,17 +70,18 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(dyn_plugin: Rc<RefCell<T>>) ->
                 .downcast::<fn(&mut T, &mut Machine) -> ReturnCode>()
                 .expect("invalid conversion applied in the system plugin resolution.");
             let fun = Rc::new(RefCell::new(move |machine: &mut Machine| -> ReturnCode {
-                fun(&mut plug.borrow_mut(), machine)
+                // breaking double borrow rule at here!!! 
+                // Also here I do dirty downcasting because here the type of plugin is ensured as T.
+                unsafe {
+                    let p = (plug.0.get() as *mut T).as_mut().unwrap();
+                    fun(p, machine)
+                }
             }));
             let res: ExtClsInfo = (name.to_symbol(), fun, ty);
             res
         })
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+    (dyn_plugin, ifs_res)
 }
-
-pub struct SysPluginDyn(pub Rc<RefCell<dyn SystemPlugin>>);
-
-
-
 
 // impl<T: Sized> SysPluginSignature<T> {}

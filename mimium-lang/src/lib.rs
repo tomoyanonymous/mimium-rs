@@ -15,12 +15,10 @@ pub mod compiler;
 pub mod runtime;
 
 pub mod plugin;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use compiler::ExtFunTypeInfo;
-use interner::{Symbol, TypeNodeId};
-use plugin::{to_ext_cls_info, Plugin, SysPluginDyn, SystemPlugin};
+use interner::Symbol;
+use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
 use runtime::vm::{self, ExtClsInfo, Program};
 // use slotmap::SlotMap;
 
@@ -32,7 +30,7 @@ pub struct ExecContext {
     pub compiler: Option<compiler::Context>,
     pub vm: Option<runtime::vm::Machine>,
     pub plugins: Vec<Box<dyn Plugin>>,
-    pub sys_plugins: Vec<SysPluginDyn>,
+    pub sys_plugins: Vec<DynSystemPlugin>,
     path: Option<Symbol>,
     extclsinfos_reserve: Vec<ExtClsInfo>,
     extfuntypes: Vec<ExtFunTypeInfo>,
@@ -58,15 +56,14 @@ impl ExecContext {
     }
     //todo: make it to builder pattern
     pub fn add_system_plugin<T: SystemPlugin + 'static>(&mut self, plug: T) {
-        let plug = Rc::new(RefCell::new(plug));
-        let sysplug_info = to_ext_cls_info(plug.clone());
+        let (plugin_dyn, sysplug_info) = to_ext_cls_info(plug);
         let sysplug_typeinfo = sysplug_info
             .iter()
             .cloned()
             .map(|(name, _, ty)| ExtFunTypeInfo { name, ty });
         self.extfuntypes.extend(sysplug_typeinfo);
         self.extclsinfos_reserve.extend(sysplug_info);
-        self.sys_plugins.push(SysPluginDyn(plug))
+        self.sys_plugins.push(plugin_dyn)
     }
     pub fn prepare_compiler(&mut self) {
         self.compiler = Some(compiler::Context::new(self.extfuntypes.clone(), self.path));

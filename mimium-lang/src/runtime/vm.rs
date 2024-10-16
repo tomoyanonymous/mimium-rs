@@ -682,7 +682,7 @@ impl Machine {
                             let (_name, cls) = &self.ext_cls_table[*ci];
                             let cls = cls.clone();
                             self.call_function(func, nargs, nret_req, move |machine| {
-                                cls.borrow_mut()(machine)
+                                cls.borrow()(machine)
                             })
                         }
                     };

@@ -1,10 +1,8 @@
-use std::borrow::BorrowMut;
-
 use mimium_lang::{
-    interner::{Symbol, ToSymbol},
-    plugin::{InstantPlugin, Plugin, SysPluginDyn, SystemPlugin},
+    interner::ToSymbol,
+    plugin::{DynSystemPlugin, InstantPlugin},
     runtime::{
-        vm::{self, ExtClsInfo, ExtClsType, ExtFunType, FuncProto, ReturnCode},
+        vm::{self, ExtClsInfo, FuncProto, ReturnCode},
         Time,
     },
     utils::error::ReportableError,
@@ -79,11 +77,11 @@ pub trait Driver {
 
 pub struct RuntimeData {
     pub vm: vm::Machine,
-    pub sys_plugins: Vec<SysPluginDyn>,
+    pub sys_plugins: Vec<DynSystemPlugin>,
     pub dsp_i: usize,
 }
 impl RuntimeData {
-    pub fn new(vm: vm::Machine, sys_plugins: Vec<SysPluginDyn>) -> Self {
+    pub fn new(vm: vm::Machine, sys_plugins: Vec<DynSystemPlugin>) -> Self {
         //todo:error handling
         let dsp_i = vm.prog.get_fun_index(&"dsp".to_symbol()).unwrap_or(0);
         Self {
@@ -93,8 +91,8 @@ impl RuntimeData {
         }
     }
     pub fn run_main(&mut self) -> ReturnCode {
-        self.sys_plugins.iter().for_each(|plug: &SysPluginDyn| {
-            let mut p = (&*plug.0).borrow_mut();
+        self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+            let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_init(&mut self.vm);
         });
         self.vm.execute_main()
@@ -103,8 +101,8 @@ impl RuntimeData {
         &self.vm.prog.global_fn_table[self.dsp_i].1
     }
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
-        self.sys_plugins.iter().for_each(|plug: &SysPluginDyn| {
-            let mut p = (&*plug.0).borrow_mut();
+        self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+            let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_sample(time, &mut self.vm);
         });
         self.vm.execute_idx(self.dsp_i)
