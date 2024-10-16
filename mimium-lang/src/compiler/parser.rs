@@ -7,11 +7,12 @@ use crate::utils::metadata::*;
 use chumsky::{prelude::*, Parser};
 // use chumsky::Parser;
 mod token;
+use resolve_include::resolve_include;
 use token::{Comment, Op, Token};
 mod error;
 mod lexer;
+mod resolve_include;
 mod statement;
-
 use statement::{into_then_expr, Statement};
 
 #[cfg(test)]
@@ -452,12 +453,24 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         .map(|stmts| into_then_expr(&stmts));
     stmts.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
 }
-
+fn preprocess_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+    just(Token::Include)
+        .ignore_then(
+            select! {Token::Str(s) => s}
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+        )
+        .try_map(|filename, span| {
+            resolve_include(&filename).map_err(|_e| {
+                Simple::<Token>::custom(span, format!("failed to resolve include for {filename}"))
+            })
+        })
+}
 fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let ignored = comment_parser()
         .or(just(Token::LineBreak).ignored())
         .or(just(Token::SemiColon).ignored());
     func_parser()
+        .or(preprocess_parser())
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
