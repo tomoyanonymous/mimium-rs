@@ -137,9 +137,14 @@ fn main() {
 }
 "#,
     );
-    let file: PathBuf = [crate_root.as_str(), "tests/mmm", path].iter().collect();
-    println!("{}", file.to_str().unwrap());
-    let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
+    let file = [crate_root.as_str(), "tests/mmm", path]
+        .iter()
+        .collect::<PathBuf>()
+        .canonicalize()
+        .unwrap();
+    let file_str = file.to_str().unwrap();
+    println!("{}", file_str);
+    let src = fileloader::load(file_str).unwrap();
     (file, src)
 }
 

@@ -80,7 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     match &args.file {
         Some(file) => {
-            let (content, fullpath) = fileloader::load(file.clone())?;
+            let fullpath = fileloader::get_canonical_path(".", &file)?;
+            let content = fileloader::load(fullpath.to_str().unwrap())?;
             match run_file(&args, &content, &fullpath) {
                 Ok(_) => {}
                 Err(e) => {
