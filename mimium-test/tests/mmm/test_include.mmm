@@ -1,0 +1,4 @@
+include("test_include_target.mmm")
+fn dsp(){
+    hoge()
+}

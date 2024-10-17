@@ -17,8 +17,30 @@ pub(super) enum Statement {
     Single(ExprNodeId),
 }
 
-// A helper function to convert vector of statements to nested expression
+pub fn stmt_from_expr_top(expr:ExprNodeId)->Vec<Statement>{
+    let mut res=vec![];
+    stmt_from_expr(expr,&mut res);
+    res
+}
+ fn stmt_from_expr(expr: ExprNodeId, target: &mut Vec<Statement>) {
+    match expr.to_expr() {
+        Expr::Let(pat, e, then_opt) => {
+            target.push(Statement::Let(pat, e));
+            if let Some(then) = then_opt {
+                stmt_from_expr(then, target);
+            }
+        }
+        Expr::LetRec(id, e, then_opt) => {
+            target.push(Statement::LetRec(id, e));
+            if let Some(then) = then_opt {
+                stmt_from_expr(then, target);
+            }
+        }
+        _ => target.push(Statement::Single(expr)),
+    }
+}
 
+// A helper function to convert vector of statements to nested expression
 pub(super) fn into_then_expr(stmts: &[(Statement, Span)]) -> Option<ExprNodeId> {
     let get_span = |spana: Span, spanb: Option<ExprNodeId>| match spanb {
         Some(b) => {

@@ -15,7 +15,7 @@ mod error;
 mod lexer;
 mod resolve_include;
 mod statement;
-use statement::{into_then_expr, Statement};
+use statement::{into_then_expr, stmt_from_expr_top, Statement};
 
 #[cfg(test)]
 mod test;
@@ -392,7 +392,9 @@ fn gen_unknown_function_type(
     )
     .into_id_with_span(span.clone())
 }
-fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+fn func_parser(
+    current_file: Option<PathBuf>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let exprgroup = exprgroup_parser();
     let lvar = lvar_parser_typed();
     let blockstart = just(Token::BlockBegin)
@@ -449,33 +451,44 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
     let global_stmt = statement_parser(exprgroup.clone());
     let stmt = function_s.or(macro_s).or(global_stmt);
     let stmts = stmt
+        .map(|s: (Statement, Span)| vec![s])
+        .or(
+            preprocess_parser(current_file.unwrap_or_default()).map_with_span(|e, s| {
+                stmt_from_expr_top(e)
+                    .into_iter()
+                    .map(|st| (st, s.clone()))
+                    .collect()
+            }),
+        )
         .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
         .allow_leading()
         .allow_trailing()
-        .map(|stmts| into_then_expr(&stmts));
+        .flatten()
+        .map(|stmt| into_then_expr(&stmt));
     stmts.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
 }
 fn preprocess_parser(
     current_file: PathBuf,
 ) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     just(Token::Include)
-    .ignore_then(
-        select! {Token::Str(s) => s}
-        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
-    )
-    .try_map(move |filename, span: Span| {
+        .ignore_then(
+            select! {Token::Str(s) => s}
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+        )
+        .try_map(move |filename, span: Span| {
             let cfile = current_file.to_str().unwrap();
             resolve_include(cfile, &filename, span.clone()).map_err(|_e| {
                 Simple::<Token>::custom(span, format!("failed to resolve include for {filename}"))
             })
         })
 }
-fn parser(current_file: Option<PathBuf>) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+fn parser(
+    current_file: Option<PathBuf>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let ignored = comment_parser()
         .or(just(Token::LineBreak).ignored())
         .or(just(Token::SemiColon).ignored());
-    func_parser()
-        .or(preprocess_parser(current_file.unwrap_or_default()))
+    func_parser(current_file)
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
@@ -505,8 +518,8 @@ pub fn parse(
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
     if let Some(t) = tokens {
-        let (ast, parse_errs) =
-            parser(current_file).parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+        let (ast, parse_errs) = parser(current_file)
+            .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) => Ok(ast),
             None => {
