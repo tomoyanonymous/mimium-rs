@@ -14,6 +14,23 @@ pub trait ReportableError: std::error::Error {
     }
 }
 
+#[derive(Debug)]
+pub struct ReportableErrorDyn {
+    pub message: String,
+    pub span: std::ops::Range<usize>,
+}
+impl std::fmt::Display for ReportableErrorDyn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for ReportableErrorDyn {}
+impl ReportableError for ReportableErrorDyn {
+    fn get_span(&self) -> std::ops::Range<usize> {
+        self.span.clone()
+    }
+}
+
 pub fn report<T>(src: &String, srcpath: T, errs: &Vec<Box<dyn ReportableError>>)
 where
     T: AsRef<path::Path>,

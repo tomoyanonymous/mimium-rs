@@ -59,8 +59,8 @@ pub struct Mode {
     pub emit_bytecode: bool,
 }
 
-fn emit_ast_local(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast1 = emit_ast(src)?;
+fn emit_ast_local(src: &str, filepath: &Path) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+    let ast1 = emit_ast(src, Some(filepath.to_str().unwrap().to_symbol()))?;
 
     convert_pronoun::convert_pronoun(ast1).map_err(|e| {
         let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
@@ -117,7 +117,7 @@ fn run_file(
     let path_sym = fullpath.to_string_lossy().to_symbol();
     let mut ctx = get_default_context(Some(path_sym));
     if args.mode.emit_ast {
-        let ast = emit_ast_local(content)?;
+        let ast = emit_ast_local(content, fullpath)?;
         println!("{}", ast.pretty_print());
     } else if args.mode.emit_mir {
         ctx.prepare_compiler();

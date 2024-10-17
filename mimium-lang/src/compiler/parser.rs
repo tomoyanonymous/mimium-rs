@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::ast::*;
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
@@ -453,24 +455,27 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         .map(|stmts| into_then_expr(&stmts));
     stmts.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
 }
-fn preprocess_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+fn preprocess_parser(
+    current_file: PathBuf,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     just(Token::Include)
-        .ignore_then(
-            select! {Token::Str(s) => s}
-                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
-        )
-        .try_map(|filename, span| {
-            resolve_include(&filename).map_err(|_e| {
+    .ignore_then(
+        select! {Token::Str(s) => s}
+        .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+    )
+    .try_map(move |filename, span: Span| {
+            let cfile = current_file.to_str().unwrap();
+            resolve_include(cfile, &filename, span.clone()).map_err(|_e| {
                 Simple::<Token>::custom(span, format!("failed to resolve include for {filename}"))
             })
         })
 }
-fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+fn parser(current_file: Option<PathBuf>) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let ignored = comment_parser()
         .or(just(Token::LineBreak).ignored())
         .or(just(Token::SemiColon).ignored());
     func_parser()
-        .or(preprocess_parser())
+        .or(preprocess_parser(current_file.unwrap_or_default()))
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
@@ -487,7 +492,10 @@ pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
     );
     res.into_id(span.clone())
 }
-pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+pub fn parse(
+    src: &str,
+    current_file: Option<PathBuf>,
+) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
@@ -498,7 +506,7 @@ pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
 
     if let Some(t) = tokens {
         let (ast, parse_errs) =
-            parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+            parser(current_file).parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) => Ok(ast),
             None => {

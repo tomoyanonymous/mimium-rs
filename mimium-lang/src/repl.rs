@@ -82,7 +82,7 @@ fn repl(data: &mut ReplAppData) -> ! {
                             Err(e) => error::report(&src, PathBuf::new(), &e),
                         }
                     }
-                    ReplMode::ShowAST => match compiler::emit_ast(&src) {
+                    ReplMode::ShowAST => match compiler::emit_ast(&src, None) {
                         Ok(ast) => {
                             println!("{}", ast.pretty_print());
                         }
