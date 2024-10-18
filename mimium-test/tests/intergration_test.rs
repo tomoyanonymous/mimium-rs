@@ -303,6 +303,19 @@ fn fb_mem3_state_size() {
 }
 
 #[test]
+fn delay() {
+    let res = run_file_test_mono("delay.mmm", 10).unwrap();
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn delay2() {
+    let res = run_file_test_mono("delay2.mmm", 10).unwrap();
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn include_file() {
     let res = run_file_test_mono("test_include.mmm", 10).unwrap();
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
