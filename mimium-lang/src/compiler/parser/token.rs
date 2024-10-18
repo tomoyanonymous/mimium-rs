@@ -85,6 +85,8 @@ pub enum Token {
     Type,
     Alias,
 
+    Include,
+
     LineBreak,
 
     Comment(Comment),
@@ -182,6 +184,7 @@ impl fmt::Display for Token {
             Token::Return => write!(f, "return"),
             Token::Type => write!(f, "type"),
             Token::Alias => write!(f, "newtype"),
+            Token::Include => write!(f, "include"),
             Token::LineBreak => write!(f, "linebreak"),
             Token::Comment(_) => write!(f, "comment"),
             Token::EndOfInput => write!(f, "endofinput"),

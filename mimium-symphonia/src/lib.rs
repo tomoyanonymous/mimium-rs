@@ -5,6 +5,7 @@ use mimium_lang::interner::ToSymbol;
 use mimium_lang::plugin::Plugin;
 use mimium_lang::runtime::vm::{self, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
+use mimium_lang::utils::fileloader;
 use mimium_lang::{function, numeric, string_t};
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{CodecParameters, Decoder, DecoderOptions, CODEC_TYPE_NULL};
@@ -121,28 +122,18 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
     //return higher order closure
 
     let relpath = machine.prog.strings[vm::Machine::get_as::<usize>(machine.get_stack(0))];
-    let relpath2 = std::path::Path::new(relpath.as_str());
-    let filepath = machine
+
+    let mmmfilepath = machine
         .prog
         .file_path
         .map_or_else(|| "".to_string(), |s| s.to_string());
-    let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
-    println!("{}", mmm_dirpath.to_str().unwrap());
-    let abspath = [mmm_dirpath, relpath2]
-        .into_iter()
-        .collect::<std::path::PathBuf>()
-        .canonicalize()
+    let abspath = fileloader::get_canonical_path(&mmmfilepath, relpath.as_str())
         .inspect_err(|e| {
-            panic!(
-                "canonicalize error: {} {}/{}",
-                e,
-                mmm_dirpath.to_string_lossy(),
-                relpath2.to_string_lossy()
-            );
+            panic!("{}", e);
         })
         .unwrap();
 
-    let vec = load_wavfile_to_vec(&abspath.to_string_lossy())
+    let vec = load_wavfile_to_vec(abspath.to_str().unwrap())
         .inspect_err(|e| {
             panic!("gen_sampler_mono error: {}", e);
         })

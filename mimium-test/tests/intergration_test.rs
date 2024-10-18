@@ -301,3 +301,10 @@ fn fb_mem3_state_size() {
         [("counter", 1), ("mem_by_hand", 4), ("dsp", 5)],
     );
 }
+
+#[test]
+fn include_file() {
+    let res = run_file_test_mono("test_include.mmm", 10).unwrap();
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+    assert_eq!(res, ans);
+}

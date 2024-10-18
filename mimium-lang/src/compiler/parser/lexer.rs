@@ -85,6 +85,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "int" => Token::IntegerType,
         "string" => Token::StringType,
         "struct" => Token::StructType,
+        "include" => Token::Include,
         "_" => Token::PlaceHolder,
         _ => Token::Ident(ident.to_symbol()),
     });
