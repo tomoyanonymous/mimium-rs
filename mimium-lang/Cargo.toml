@@ -10,7 +10,7 @@ edition = "2021"
 
 [dependencies]
 
-chumsky = "0.9"
+chumsky = { version = "0.9", default-features = false, features = ["std"] }
 ariadne = "0.4"
 log = "0.4.22"
 string-interner = "0.17.0"

@@ -40,11 +40,15 @@ impl From<env::JoinPathsError> for Error {
 pub fn get_canonical_path(current_file_or_dir: &str, relpath: &str) -> Result<PathBuf, Error> {
     let parent_dir = get_parent_dir(current_file_or_dir)?;
     let relpath2 = std::path::PathBuf::from(relpath);
-    [parent_dir, relpath2]
+    let abspath = [parent_dir, relpath2]
         .into_iter()
-        .collect::<std::path::PathBuf>()
-        .canonicalize()
-        .map_err(Error::IoError)
+        .collect::<std::path::PathBuf>();
+    if cfg!(target_arch = "wasm32") {
+        //canonicalize is platform-dependent and always returns Err on wasm32
+        Ok(abspath)
+    } else {
+        abspath.canonicalize().map_err(Error::IoError)
+    }
 }
 
 fn get_parent_dir(current_file: &str) -> Result<PathBuf, Error> {
@@ -52,15 +56,16 @@ fn get_parent_dir(current_file: &str) -> Result<PathBuf, Error> {
     if current_filepath.is_dir() {
         Ok(current_filepath.into())
     } else {
+        #[cfg(not(target_arch = "wasm32"))]
         let cwd = env::current_dir()?;
-        Ok(current_filepath
-            .parent()
-            .map_or_else(|| PathBuf::from(cwd), PathBuf::from))
+        #[cfg(target_arch = "wasm32")]
+        let cwd = std::path::PathBuf::new();
+        Ok(current_filepath.parent().map_or_else(|| cwd, PathBuf::from))
     }
 }
 
 pub fn load(canonical_path: &str) -> Result<String, Error> {
-    debug_assert!(std::path::Path::new(canonical_path).is_absolute());
+    // debug_assert!(std::path::Path::new(canonical_path).is_absolute());
     let content = std::fs::read(canonical_path)
         .map_err(|e| Error::FileNotFound(e, PathBuf::from(canonical_path)))?;
 
