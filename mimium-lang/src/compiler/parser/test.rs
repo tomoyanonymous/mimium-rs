@@ -1,7 +1,6 @@
 use super::*;
 use crate::pattern::TypedId;
-use crate::utils::miniprint::MiniPrint;
-use crate::{function, letrec, utils};
+use crate::utils;
 use std::path::PathBuf;
 
 macro_rules! test_string {
@@ -435,7 +434,7 @@ fn test_stmt_without_return() {
 #[should_panic]
 fn test_fail() {
     let src = "let 100 == hoge\n fuga";
-    match parse(&src.to_string(),None) {
+    match parse(&src.to_string(), None) {
         Err(errs) => {
             panic!("{}", utils::error::dump_to_string(&errs))
         }

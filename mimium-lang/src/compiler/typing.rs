@@ -2,7 +2,6 @@ use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
 use crate::interner::{ExprKey, ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
-use crate::runtime::vm::builtin;
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, integer, numeric, unit};

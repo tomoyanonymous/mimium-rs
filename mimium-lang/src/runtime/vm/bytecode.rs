@@ -5,16 +5,17 @@ pub type ConstPos = u16;
 pub type GlobalPos = u8;
 pub type Offset = i16;
 
+/// Instructions for bytecode. Currently, each instructon has the 64 bit size(Tag, up to 3 bytes arguments.)
 #[derive(Debug, Clone, Copy, PartialEq)]
-// #[repr(C)]
 pub enum Instruction {
-    // Destination / Source
+    /// Move Single Value, Destination, Source
     Move(Reg, Reg),
+    /// Load Single Value from Constants. Destination, Source
     MoveConst(Reg, ConstPos),
-    // Move the range of registers (e.g. tuple)
+    // Move the range of registers (e.g. tuple) Destination, Source, Wordsize
     MoveRange(Reg, Reg, TypeSize),
-    // call internal function
-    // Function Address,Nargs,Word Size of Return Value
+    /// Call to internal function
+    /// Function Address,Nargs,Word Size of Return Value
     Call(Reg, u8, TypeSize),
     //call internal closure
     CallCls(Reg, u8, TypeSize),
@@ -24,36 +25,37 @@ pub enum Instruction {
     /// The distincion may also be resolved statically at linking time.
     /// Function Address,Nargs,Nret
     CallExtFun(Reg, u8, TypeSize),
-    // destination, index of inner function prototype in global function table.
+    /// Create new closure. Destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
-    // register of the closure to be closed. other local closures will be released with this instruction.
+    /// register of the closure to be closed. other local closures will be released with this instruction.
     Close(Reg),
-    //destination,source, size
+    /// destination,source, size
     GetUpValue(Reg, Reg, TypeSize),
     SetUpValue(Reg, Reg, TypeSize),
 
-    //destination,source
+    /// destination,source
     GetGlobal(Reg, GlobalPos, TypeSize),
     SetGlobal(GlobalPos, Reg, TypeSize),
-    //call internal state over time, destination,source
+    /// Call internal state over time, destination,source
     GetState(Reg, TypeSize),
     SetState(Reg, TypeSize),
     ShiftStatePos(Offset),
 
-    // Close(), // currently not implemented as it is not required unless loop/break is used
+    /// Return from current function without return value.
     Return0,
-    // value start position, Nrets
+    /// value start position, Nrets
     Return(Reg, TypeSize),
     //dst,src,time,idx
     Delay(Reg, Reg, Reg),
     Mem(Reg, Reg),
 
-    //jump label
+    /// jump to instruction over the offset.
     Jmp(Offset),
+    /// jump to instruction over the offset if the value in the first argument was negative.
     JmpIfNeg(Reg, Offset),
 
-    // Primitive Operations.
-    // Destination, Src1, Src2
+    /// Primitive Operations.
+    /// Destination, Src1, Src2
     AddF(Reg, Reg, Reg),
     SubF(Reg, Reg, Reg),
     MulF(Reg, Reg, Reg),

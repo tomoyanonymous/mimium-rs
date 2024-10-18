@@ -776,7 +776,7 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
     res
 }
 fn optimize(program: vm::Program) -> vm::Program {
-    // remove_redundunt_mov(program)
+    // remove_redundunt_mov(program);
     program
 }
 pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {

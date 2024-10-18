@@ -2,6 +2,8 @@ use std::ptr::slice_from_raw_parts_mut;
 
 use super::RawVal;
 
+/// A minimal implementation of synchronous ringbuffer for a single thread code.
+/// Because this Ringbuffer is constructed by re-interpreting the portion of linear memory array temporary, it has limited lifetime.
 #[repr(C)]
 pub(super) struct Ringbuffer<'a> {
     read_idx: &'a mut u64,

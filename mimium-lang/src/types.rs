@@ -155,8 +155,8 @@ impl Type {
                 format!("({args})->{}", r.to_type().to_string_for_error())
             }
             Type::Ref(x) => format!("&{}", x.to_type().to_string_for_error()),
-            Type::Code(c) => "<...code...>".to_string(),
-            Type::Intermediate(id) => "?".to_string(),
+            Type::Code(_c) => "<...code...>".to_string(),
+            Type::Intermediate(_id) => "?".to_string(),
             // if no special treatment is needed, forward to the Display implementation
             x => x.to_string(),
         }

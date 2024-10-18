@@ -1,5 +1,4 @@
 use super::{parse, Span};
-use crate::compiler::mirgen::convert_pronoun::convert_pronoun;
 use crate::interner::ExprNodeId;
 use crate::utils::error::{ReportableError, ReportableErrorDyn};
 use crate::utils::fileloader;
