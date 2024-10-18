@@ -85,6 +85,8 @@ impl Context {
         };
         match max.to_expr() {
             Expr::Literal(Literal::Float(max)) => {
+                //need to evaluate args first before calculate state offset because the argument for time contains stateful function call.
+                let args = self.eval_args(&[*src, *time])?;
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_sizes.push(StateSize {
@@ -98,7 +100,6 @@ impl Context {
                         .0
                         .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
                 }
-                let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
                 Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
