@@ -39,8 +39,41 @@
                     "kind": "bin"
                 }
             },
-            "args": ["mimium-cli/examples/sinewave.mmm"],
+            "args": [
+                "mimium-cli/examples/sinewave.mmm"
+            ],
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug wasi executable",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=mimium-cli",
+                    "--package=mimium-cli",
+                    "--target=wasm32-wasip2"
+                ],
+                "filter": {
+                    "name": "mimium-cli",
+                    "kind": "bin"
+                }
+            },
+            "program": "~/.wasmtime/bin/wasmtime",
+            "args": [
+                "run",
+                "--dir",
+                ".",
+                "-D",
+                "debug-info",
+                "target/wasm32-wasip2/debug/mimium-cli.wasm",
+                "mimium-cli/examples/sinewave.mmm"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "_NO_DEBUG_HEAP": "1"
+            }
         },
         {
             "type": "lldb",
@@ -57,14 +90,14 @@
                     "kind": "bin"
                 }
             },
-            "args": ["tests/mmm/mir_counter.mmm"],
+            "args": [
+                "tests/mmm/mir_counter.mmm"
+            ],
             "cwd": "${workspaceFolder}"
         },
-
         {
             "type": "lldb",
             "request": "launch",
-            
             "name": "Debug unit tests in executable 'mimium-rs'",
             "cargo": {
                 "args": [
