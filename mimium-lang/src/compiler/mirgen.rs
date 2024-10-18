@@ -75,7 +75,7 @@ impl Context {
     }
     fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
         let rt = match f.as_ref() {
-            Value::ExtFunction(name, rt) if *name != "delay".to_symbol() => rt,
+            Value::ExtFunction(name, ft) if *name == "delay".to_symbol() => ft,
             _ => return Ok(None),
         };
 
@@ -83,9 +83,8 @@ impl Context {
             [max, src, time] => (max, src, time),
             _ => return Ok(None),
         };
-
-        match (rt.to_type(), max.to_expr()) {
-            (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
+        match max.to_expr() {
+            Expr::Literal(Literal::Float(max)) => {
                 let max_time = max.parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_sizes.push(StateSize {
