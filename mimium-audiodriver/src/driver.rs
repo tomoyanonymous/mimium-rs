@@ -93,7 +93,7 @@ impl RuntimeData {
     pub fn run_main(&mut self) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
             //todo: encapsulate unsafety within SystemPlugin functionality
-            let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+            let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_init(&mut self.vm);
         });
         self.vm.execute_main()
@@ -104,7 +104,7 @@ impl RuntimeData {
     pub fn run_dsp(&mut self, time: Time) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
             //todo: encapsulate unsafety within SystemPlugin functionality
-            let  p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+            let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_sample(time, &mut self.vm);
         });
         self.vm.execute_idx(self.dsp_i)
@@ -112,5 +112,5 @@ impl RuntimeData {
 }
 
 pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
-    crate::backends::cpal::native_driver(4096)
+    crate::backends::cpal::native_driver(4096 * 2)
 }

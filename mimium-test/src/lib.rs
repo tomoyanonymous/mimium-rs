@@ -85,7 +85,7 @@ pub fn run_source_test(
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut ctx = ExecContext::new([].into_iter(), path);
 
-    ctx.prepare_machine(src);
+    ctx.prepare_machine(src)?;
     let bytecode = ctx.vm.unwrap().prog;
     run_bytecode_test_multiple(bytecode, times, stereo)
 }

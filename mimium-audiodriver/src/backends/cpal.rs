@@ -60,7 +60,7 @@ impl NativeAudioData {
         let vm = ctx.vm.expect("vm is not prepared yet");
         let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
-        let localbuffer: Vec<f64> = vec![0.0f64; 4096];
+        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * dsp_ochannels];
         Self {
             vmdata,
             dsp_ochannels,
@@ -70,8 +70,10 @@ impl NativeAudioData {
         }
     }
     pub fn process(&mut self, dst: &mut [f32], h_ochannels: usize) {
-        // let sample_size = dst.len() / h_ochannels;
-        let local = &mut self.localbuffer.as_mut_slice()[..dst.len()];
+        // let len = dst.len().min(self.localbuffer.len());
+        let len = dst.len();
+
+        let local = &mut self.localbuffer.as_mut_slice()[..len];
         self.buffer.pop_slice(local);
         for (o, _s) in dst
             .chunks_mut(h_ochannels)
@@ -84,14 +86,17 @@ impl NativeAudioData {
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
             self.count.fetch_add(1, Ordering::Relaxed);
             match (h_ochannels, self.dsp_ochannels) {
-                (i1, i2) if i1 == i2 => {
-                    for i in 0..i1 {
-                        o[i] = res[i] as f32;
-                    }
-                }
                 (2, 1) => {
                     o[0] = res[0] as f32;
                     o[1] = res[0] as f32;
+                }
+                (hout, dspout) if hout >= dspout => {
+                    for i in 0..dspout {
+                        o[i] = res[i] as f32;
+                    }
+                    for i in dspout..hout {
+                        o[i] = 0.;
+                    }
                 }
                 (1, 2) => {
                     o[0] = res[0] as f32;
@@ -155,16 +160,14 @@ impl NativeDriver {
             .unwrap()
             .next()
             .expect("no supported config");
-        if let Some(SampleRate(sr)) = sample_rate {
-            config_builder
-                .with_sample_rate(cpal::SampleRate(sr))
-                .config()
-        } else {
-            device
-                .default_input_config()
-                .expect("no default input configs")
-                .config()
-        }
+        sample_rate
+            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.0)))
+            .unwrap_or_else(|| {
+                device
+                    .default_input_config()
+                    .expect("no default input configs")
+            })
+            .config()
     }
     fn init_oconfig(device: &cpal::Device, sample_rate: Option<SampleRate>) -> StreamConfig {
         let config_builder = device
@@ -172,16 +175,14 @@ impl NativeDriver {
             .unwrap()
             .next()
             .expect("no supported config");
-        if let Some(SampleRate(sr)) = sample_rate {
-            config_builder
-                .with_sample_rate(cpal::SampleRate(sr))
-                .config()
-        } else {
-            device
-                .default_output_config()
-                .expect("no default output configs")
-                .config()
-        }
+        sample_rate
+            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.0)))
+            .unwrap_or_else(|| {
+                device
+                    .default_output_config()
+                    .expect("no default output configs")
+            })
+            .config()
     }
     fn set_streams(
         &mut self,
@@ -242,9 +243,10 @@ impl Driver for NativeDriver {
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(
-                "output device {}buffer size:{:?}",
+                "output device {}buffer size:{:?} channels: {}",
                 odevice.name().unwrap_or_default(),
-                oconfig.buffer_size
+                oconfig.buffer_size,
+                oconfig.channels
             );
             self.hardware_ochannels = oconfig.channels as usize;
             let h_ochannels = self.hardware_ochannels;
