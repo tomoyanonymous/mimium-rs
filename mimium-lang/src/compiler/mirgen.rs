@@ -272,10 +272,7 @@ impl Context {
 
         self.data.push(ContextData {
             func_i: c_idx,
-            current_bb: 0,
-            next_state_offset: None,
-            cur_state_pos: vec![],
-            push_sum: vec![],
+            ..Default::default()
         });
         self.data_i += 1;
         //do action

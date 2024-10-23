@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 // pub mod wcalculus;
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
-use mimium_audiodriver::driver::load_default_runtime;
+use mimium_audiodriver::driver::{load_default_runtime, SampleRate};
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
 use mimium_lang::plugin::Plugin;
@@ -124,7 +124,7 @@ fn run_file(
         let mir = ctx.compiler.as_ref().unwrap().emit_mir(content)?;
         println!("{mir}");
     } else {
-        let _ = ctx.prepare_machine(content);
+        ctx.prepare_machine(content)?;
 
         if args.mode.emit_bytecode {
             println!("{}", ctx.vm.unwrap().prog);
@@ -145,7 +145,7 @@ fn run_file(
         };
         let audiodriver_plug = driver.get_as_plugin();
         ctx.add_plugin(audiodriver_plug);
-        driver.init(ctx, None);
+        driver.init(ctx, Some(SampleRate(48000)));
         driver.play();
 
         //wait until input something

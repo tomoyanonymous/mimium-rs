@@ -63,7 +63,7 @@ pub fn run_source_with_plugins(
     if with_scheduler {
         ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     }
-    ctx.prepare_machine(src);
+    ctx.prepare_machine(src).unwrap();
     driver.init(ctx, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
@@ -160,7 +160,7 @@ pub fn test_state_sizes<T: IntoIterator<Item = (&'static str, u64)>>(path: &str,
     let state_sizes: HashMap<&str, u64> = HashMap::from_iter(ans);
     let (file, src) = load_src(path);
     let mut ctx = ExecContext::new([].into_iter(), Some(file.to_str().unwrap().to_symbol()));
-    ctx.prepare_machine(&src);
+    ctx.prepare_machine(&src).unwrap();
     let bytecode = ctx.vm.expect("failed to emit bytecode").prog;
     // let bytecode = match ctx.compiler.emit_bytecode(&src) {
     //     Ok(res) => res,

@@ -20,9 +20,7 @@ use compiler::ExtFunTypeInfo;
 use interner::Symbol;
 use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
 use runtime::vm::{self, ExtClsInfo, Program};
-// use slotmap::SlotMap;
-
-// slotmap::new_key_type! {}struct PluginInstanceId;
+use utils::error::ReportableError;
 
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
@@ -68,23 +66,24 @@ impl ExecContext {
     pub fn prepare_compiler(&mut self) {
         self.compiler = Some(compiler::Context::new(self.extfuntypes.clone(), self.path));
     }
-    pub fn prepare_machine(&mut self, src: &str) {
+    pub fn prepare_machine(&mut self, src: &str) -> Result<(), Vec<Box<dyn ReportableError>>> {
         if self.compiler.is_none() {
             self.prepare_compiler();
         }
 
-        let prog = self.compiler.as_ref().unwrap().emit_bytecode(src).unwrap();
-
+        let prog = self.compiler.as_ref().unwrap().emit_bytecode(src)?;
         self.prepare_machine_with_bytecode(prog);
+        Ok(())
     }
     pub fn prepare_machine_with_bytecode(&mut self, prog: Program) {
         self.extclsinfos_reserve
             .extend(plugin::get_extclsinfos(&self.plugins));
-        self.vm = Some(vm::Machine::new(
+        let vm = vm::Machine::new(
             prog,
             plugin::get_extfuninfos(&self.plugins),
             self.extclsinfos_reserve.clone().into_iter(),
-        ));
+        );
+        self.vm = Some(vm);
     }
 }
 
