@@ -1,0 +1,9 @@
+fn mix(gain,a,b){
+    gain*a + (1.0-gain)*b
+}
+fn switch(gate,a,b){
+    let gain = if (gate>0.0) 1.0 else 0.0
+    mix(gain,a,b)
+}
+
+
