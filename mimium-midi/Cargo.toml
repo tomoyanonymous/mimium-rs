@@ -10,6 +10,7 @@ build = "build.rs"
 
 
 [dependencies]
+log = "0.4.22"
 midir = "0.10.0"
 
 mimium-lang = { path = "../mimium-lang" }
