@@ -96,7 +96,13 @@ impl RuntimeData {
             let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
             let _ = p.on_init(&mut self.vm);
         });
-        self.vm.execute_main()
+        let res = self.vm.execute_main();
+        self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+            //todo: encapsulate unsafety within SystemPlugin functionality
+            let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+            let _ = p.after_main(&mut self.vm);
+        });
+        res
     }
     pub fn get_dsp_fn(&self) -> &FuncProto {
         &self.vm.prog.global_fn_table[self.dsp_i].1
