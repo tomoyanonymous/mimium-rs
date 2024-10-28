@@ -8,7 +8,7 @@ fn gen_noise(seed){
 }
 
 fn noise(){
-    gen_noise(12345.0)
+    gen_noise(1.0)
 }
 
 fn dsp(){
