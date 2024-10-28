@@ -1,3 +1,7 @@
+use std::cell::LazyCell;
+
+use crate::interner::{Symbol, ToSymbol};
+
 // unary
 pub(crate) const NEG: &'static str = "neg";
 pub(crate) const TOFLOAT: &'static str = "tofloat";
@@ -31,8 +35,15 @@ pub(crate) const LOG: &'static str = "log";
 // other operations
 pub(crate) const DELAY: &'static str = "delay";
 pub(crate) const MEM: &'static str = "mem";
-
-pub(crate) const BUILTIN_SYMS: [&str; 26] = [
-    NEG,TOFLOAT,ADD, SUB, MULT, DIV, EQ, NE, LE, LT, GE, GT, MODULO, EXP, AND, OR, SIN, COS, TAN, ATAN, ATAN2,
-    SQRT, ABS, LOG, DELAY, MEM,
+const BUILTIN_SYMS_UNSORTED: [&str; 26] = [
+    NEG, TOFLOAT, ADD, SUB, MULT, DIV, EQ, NE, LE, LT, GE, GT, MODULO, EXP, AND, OR, SIN, COS, TAN,
+    ATAN, ATAN2, SQRT, ABS, LOG, DELAY, MEM,
 ];
+thread_local!(pub (crate) static BUILTIN_SYMS: LazyCell<Vec<Symbol>> = LazyCell::new(|| {
+    let mut v = BUILTIN_SYMS_UNSORTED
+        .iter()
+        .map(|s| s.to_symbol())
+        .collect::<Vec<_>>();
+    v.sort();
+    v
+}));

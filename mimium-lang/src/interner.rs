@@ -82,7 +82,7 @@ where
     SESSION_GLOBALS.with_borrow_mut(f)
 }
 
-#[derive(Default, Copy, Clone, PartialEq, Debug, Hash, Eq)]
+#[derive(Default, Copy, Clone, PartialEq, Debug, Hash, Eq, PartialOrd, Ord)]
 pub struct Symbol(pub usize); //Symbol Trait is implemented on usize
 
 pub trait ToSymbol {

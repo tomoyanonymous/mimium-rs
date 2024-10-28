@@ -311,7 +311,7 @@ fn validate_reserved_pat(id: &TypedPattern, span: Span) -> Result<(), Simple<Tok
 }
 
 fn validate_reserved_ident(id: Symbol, span: Span) -> Result<(), Simple<Token>> {
-    if intrinsics::BUILTIN_SYMS.contains(&id.as_str()) {
+    if intrinsics::BUILTIN_SYMS.with(|syms| syms.binary_search(&id).is_ok()) {
         Err(Simple::custom(
             span,
             "Builtin functions cannot be re-defined.",
