@@ -17,6 +17,8 @@ mod resolve_include;
 mod statement;
 use statement::{into_then_expr, stmt_from_expr_top, Statement};
 
+use super::intrinsics;
+
 #[cfg(test)]
 mod test;
 
@@ -301,17 +303,45 @@ fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
 //         .labelled("assign");
 //     let_stmt.or(assign)
 // }
+fn validate_reserved_pat(id: &TypedPattern, span: Span) -> Result<(), Simple<Token>> {
+    match &id.pat {
+        Pattern::Single(symbol) => validate_reserved_ident(*symbol, span),
+        _ => Ok(()),
+    }
+}
+
+fn validate_reserved_ident(id: Symbol, span: Span) -> Result<(), Simple<Token>> {
+    if intrinsics::BUILTIN_SYMS.with(|syms| syms.binary_search(&id).is_ok()) {
+        Err(Simple::custom(
+            span,
+            "Builtin functions cannot be re-defined.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn statement_parser(
     expr: ExprParser<'_>,
 ) -> impl Parser<Token, (Statement, Span), Error = Simple<Token>> + Clone + '_ {
     let let_ = just(Token::Let)
-        .ignore_then(pattern_parser().clone())
+        .ignore_then(pattern_parser().clone().validate(|pat, span, emit| {
+            if let Err(e) = validate_reserved_pat(&pat, span.clone()) {
+                emit(e);
+            }
+            pat
+        }))
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Let(ident, body), span))
         .labelled("let");
     let letrec = just(Token::LetRec)
-        .ignore_then(lvar_parser_typed())
+        .ignore_then(lvar_parser_typed().validate(|ident, span, emit| {
+            if let Err(e) = validate_reserved_ident(ident.id, span.clone()) {
+                emit(e);
+            }
+            ident
+        }))
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
@@ -410,7 +440,12 @@ fn func_parser(
         .labelled("fnparams");
 
     let function_s = just(Token::Function)
-        .ignore_then(lvar.clone())
+        .ignore_then(lvar.clone().validate(|ident, span, emit| {
+            if let Err(e) = validate_reserved_ident(ident.id, span) {
+                emit(e);
+            }
+            ident
+        }))
         .then(fnparams.clone())
         .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
         .then(block_parser(exprgroup.clone()).map(|e| match e.to_expr() {
@@ -521,8 +556,8 @@ pub fn parse(
         let (ast, parse_errs) = parser(current_file)
             .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
-            Some(ast) => Ok(ast),
-            None => {
+            Some(ast) if parse_errs.is_empty() => Ok(ast),
+            _ => {
                 parse_errs
                     .iter()
                     .for_each(|e| errs.push(Box::new(error::ParseError::<Token>(e.clone()))));

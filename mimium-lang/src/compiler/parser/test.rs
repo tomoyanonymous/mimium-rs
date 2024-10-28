@@ -441,3 +441,18 @@ fn test_fail() {
         _ => {}
     };
 }
+
+#[test]
+fn test_err_builtin_redefine() {
+    let src = r"fn div(){
+    0.0
+}
+100.0";
+    let res = &parse(&src.to_string(), None).expect_err("should be error");
+    assert_eq!(res.len(), 1);
+
+    let err_ans: Box<dyn ReportableError> = Box::new(error::ParseError::<Token>(
+        Simple::custom(3..6, "Builtin functions cannot be re-defined.").with_label("function decl"),
+    ));
+    assert_eq!(res[0].to_string(), err_ans.to_string())
+}
