@@ -1,0 +1,18 @@
+[package]
+name = "mimium-midi"
+version = "2.0.0-alpha-1"
+license = "MPL 2.0"
+edition = "2021"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# [lib]
+
+
+[dependencies]
+midir = "0.10.0"
+
+mimium-lang = { path = "../mimium-lang" }
+
+[dev-dependencies]
+mimium-test = { path = "../mimium-test" }
