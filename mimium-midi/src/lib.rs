@@ -36,17 +36,20 @@ pub struct MidiPlugin {
     port_name: Option<String>,
     note_callbacks: Option<NoteCallBacks>,
 }
-
-impl MidiPlugin {
-    pub fn try_new() -> Option<Self> {
-        let midiin = MidiInput::new("mimium midi plugin").ok();
-        midiin.map(|input| Self {
-            input: Some(input),
+impl Default for MidiPlugin {
+    fn default() -> Self {
+        let midiin = MidiInput::new("mimium midi plugin")
+            .inspect_err(|e| log::warn!("{e}"))
+            .ok();
+        Self {
+            input: midiin,
             port: OnceCell::new(),
             port_name: None,
             note_callbacks: Some(Default::default()),
-        })
+        }
     }
+}
+impl MidiPlugin {
     fn add_note_callback(&mut self, chan: u8, cb: NoteCallBack) {
         if chan < 15 {
             let _ = self.note_callbacks.as_mut().map(|v| {
@@ -99,6 +102,7 @@ impl SystemPlugin for MidiPlugin {
             });
             matchedports.next()
         } else {
+            log::info!("trying to connect default MIDI input device...");
             ports.iter_mut().next()
         };
         let _ = port_opt.map(|p| {
