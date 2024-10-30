@@ -1,0 +1,8 @@
+midi_in_connect("device_name")
+
+    let note = (note,vel) 
+let note_manager = midi_in_bind_note(|chan,note,vel| {
+    |x| {
+
+    }
+})
