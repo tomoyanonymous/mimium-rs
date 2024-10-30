@@ -6,7 +6,7 @@ use mimium_lang::{
     numeric,
     plugin::{SysPluginSignature, SystemPlugin},
     runtime::{vm, Time},
-    string_t,
+    string_t, tuple,
     types::{PType, Type},
     unit,
 };
@@ -155,13 +155,16 @@ impl SystemPlugin for MidiPlugin {
     }
 
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
-        let ty = function!(vec![numeric!()], function!(vec![], numeric!()));
-
-        let bindnote =
-            SysPluginSignature::new("bind_midi_note_mono", Self::bind_midi_note_mono, ty);
+        let ty = function!(
+            vec![numeric!()],
+            function!(vec![], tuple!(numeric!(), numeric!()))
+        );
+        let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::bind_midi_note_mono;
+        let bindnote = SysPluginSignature::new("bind_midi_note_mono", fun, ty);
         let ty = function!(vec![string_t!()], unit!());
+        let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::set_midi_port;
 
-        let setport = SysPluginSignature::new("set_midi_port", Self::set_midi_port, ty);
-        vec![bindnote, setport]
+        let setport = SysPluginSignature::new("set_midi_port", fun, ty);
+        vec![setport, bindnote]
     }
 }
