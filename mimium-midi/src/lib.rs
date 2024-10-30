@@ -6,59 +6,69 @@ use mimium_lang::{
     numeric,
     plugin::{SysPluginSignature, SystemPlugin},
     runtime::{vm, Time},
+    types::{PType, Type},
 };
 use std::{
     cell::{OnceCell, RefCell},
     rc::Rc,
-    sync::Arc,
+    sync::{atomic::Ordering, Arc},
 };
+use wmidi::MidiMessage;
 
-type NoteCallBack = Box<dyn Fn(f64, f64) -> ()>;
+type NoteCallBack = Arc<dyn Fn(f64, f64) + Send + Sync>;
 
 #[derive(Default)]
 struct NoteCallBacks(pub [Vec<NoteCallBack>; 16]);
-
+impl NoteCallBacks {
+    pub fn invoke_note_callback(&self, chan: u8, note: u8, vel: u8) {
+        if chan < 15 {
+            self.0[chan as usize]
+                .iter()
+                .for_each(|cb| cb(note as f64, vel as f64));
+        };
+    }
+}
 pub struct MidiPlugin {
-    input: MidiInput,
+    input: Option<MidiInput>,
     port: OnceCell<MidiInputPort>,
     port_name: Option<String>,
-    note_callbacks: NoteCallBacks,
+    note_callbacks: Option<NoteCallBacks>,
 }
 
 impl MidiPlugin {
     pub fn try_new() -> Option<Self> {
         let midiin = MidiInput::new("mimium midi plugin").ok();
         midiin.map(|input| Self {
-            input,
+            input: Some(input),
             port: OnceCell::new(),
             port_name: None,
-            note_callbacks: Default::default(),
+            note_callbacks: Some(Default::default()),
         })
     }
     fn add_note_callback(&mut self, chan: u8, cb: NoteCallBack) {
         if chan < 15 {
-            self.note_callbacks.0[chan as usize].push(cb);
+            let _ = self.note_callbacks.as_mut().map(|v| {
+                v.0[chan as usize].push(cb);
+            });
         }
     }
-    fn invoke_note_callback(&self, chan: u8, note: u8, vel: u8) {
-        if chan < 15 {
-            self.note_callbacks.0[chan as usize]
-                .iter()
-                .for_each(|cb| cb(note as f64, vel as f64));
-        }
-    }
+
     pub fn bind_midi_note_mono(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
         let ch = vm::Machine::get_as::<f64>(vm.get_stack(0));
-        let cell = Arc::new((AtomicF64::new(), AtomicF64::new()));
-        self.add_note_callback(ch, |note, vel| {
-            let (note_c, vel_c) = cell.clone();
-            note_c.write(note);
-            vel_c.write(vel);
-        });
-        let cls = |vm: &mut vm::Machine| -> vm::ReturnCode {
-            let (note_c, vel_c) = cell.clone();
-            vm.set_stack(0, vm::Machine::to_value(note_c));
-            vm.set_stack(1, vm::Machine::to_value(vel_c));
+        let cell = Arc::new((AtomicF64::new(0.0), AtomicF64::new(0.0)));
+        let cell_c = cell.clone();
+        self.add_note_callback(
+            ch as u8,
+            Arc::new(move |note, vel| {
+                cell_c.0.store(note, Ordering::Relaxed);
+                cell_c.1.store(vel, Ordering::Relaxed);
+            }),
+        );
+        let cls = move |vm: &mut vm::Machine| -> vm::ReturnCode {
+            let note = cell.0.load(Ordering::Relaxed);
+            let vel = cell.1.load(Ordering::Relaxed);
+            vm.set_stack(0, vm::Machine::to_value(note));
+            vm.set_stack(1, vm::Machine::to_value(vel));
             2
         };
         let ty = function!(vec![], numeric!());
@@ -69,35 +79,68 @@ impl MidiPlugin {
 }
 
 impl SystemPlugin for MidiPlugin {
-    fn after_main(&mut self, machine: &mut vm::Machine) -> vm::ReturnCode {
-        let mut ports = self.input.ports();
+    fn after_main(&mut self, _machine: &mut vm::Machine) -> vm::ReturnCode {
+        let mut ports = self.input.as_ref().unwrap().ports();
         let port_opt = if let Some(pname) = &self.port_name {
             let mut matchedports = ports.iter_mut().filter(|port| {
-                let name = self.input.port_name(port).unwrap_or_default();
+                let name = self
+                    .input
+                    .as_ref()
+                    .unwrap()
+                    .port_name(port)
+                    .unwrap_or_default();
                 &name == pname
             });
             matchedports.next()
         } else {
             ports.iter_mut().next()
         };
-        port_opt.map(|p| {
-            let name = self.input.port_name(p).unwrap_or_default();
+        let _ = port_opt.map(|p| {
+            let name = self
+                .input
+                .as_ref()
+                .unwrap()
+                .port_name(p)
+                .unwrap_or_default();
             log::debug!("Midi Input: Connected to {name}");
-            // self.input.connect(
-            //     p,
-            //     &name,
-            //     |stamp, message, machine: &mut vm::Machine| {
-            //         todo!();
-            //     },
-            //     machine,
-            // );
-            self.port.set(p.clone());
+            let res = self.input.take().unwrap().connect(
+                p,
+                &name,
+                |_stamp, message, cbs: &mut NoteCallBacks| {
+                    let msg = MidiMessage::from_bytes(message);
+                    if let Ok(m) = msg {
+                        match m {
+                            MidiMessage::NoteOff(channel, note, _vel) => {
+                                cbs.invoke_note_callback(channel.index(), u8::from(note), 0);
+                            }
+                            MidiMessage::NoteOn(channel, note, vel) => {
+                                cbs.invoke_note_callback(
+                                    channel.index(),
+                                    u8::from(note),
+                                    vel.into(),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                self.note_callbacks.take().unwrap(),
+            );
+            match res {
+                Ok(_c) => {
+                    //todo:close handling
+                }
+                Err(e) => {
+                    println!("{}", e)
+                }
+            }
+            let _ = self.port.set(p.clone());
         });
 
         0
     }
 
-    fn on_sample(&mut self, time: Time, machine: &mut vm::Machine) -> vm::ReturnCode {
+    fn on_sample(&mut self, _time: Time, _machine: &mut vm::Machine) -> vm::ReturnCode {
         0
     }
 

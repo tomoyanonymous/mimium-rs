@@ -10,10 +10,12 @@ build = "build.rs"
 
 
 [dependencies]
+atomic_float = "1.1.0"
 log = "0.4.22"
 midir = "0.10.0"
 
 mimium-lang = { path = "../mimium-lang" }
+wmidi = "4.0.10"
 
 [dev-dependencies]
 mimium-test = { path = "../mimium-test" }
