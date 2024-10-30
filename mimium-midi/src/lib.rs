@@ -6,7 +6,9 @@ use mimium_lang::{
     numeric,
     plugin::{SysPluginSignature, SystemPlugin},
     runtime::{vm, Time},
+    string_t,
     types::{PType, Type},
+    unit,
 };
 use std::{
     cell::{OnceCell, RefCell},
@@ -52,7 +54,11 @@ impl MidiPlugin {
             });
         }
     }
-
+    pub fn set_midi_port(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
+        let ch = vm::Machine::get_as::<&str>(vm.get_stack(0));
+        self.port_name = Some(ch.to_string());
+        0
+    }
     pub fn bind_midi_note_mono(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
         let ch = vm::Machine::get_as::<f64>(vm.get_stack(0));
         let cell = Arc::new((AtomicF64::new(0.0), AtomicF64::new(0.0)));
@@ -149,6 +155,9 @@ impl SystemPlugin for MidiPlugin {
 
         let bindnote =
             SysPluginSignature::new("bind_midi_note_mono", Self::bind_midi_note_mono, ty);
-        vec![bindnote]
+        let ty = function!(vec![string_t!()], unit!());
+
+        let setport = SysPluginSignature::new("set_midi_port", Self::set_midi_port, ty);
+        vec![bindnote, setport]
     }
 }

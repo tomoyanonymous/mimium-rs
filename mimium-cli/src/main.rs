@@ -13,6 +13,7 @@ use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
 use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
+use mimium_midi;
 use mimium_symphonia::{self, SamplerPlugin};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -105,6 +106,9 @@ fn get_default_context(path: Option<Symbol>) -> ExecContext {
     let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    let _ = mimium_midi::MidiPlugin::try_new().map(|p| {
+        ctx.add_system_plugin(p);
+    });
     ctx
 }
 
