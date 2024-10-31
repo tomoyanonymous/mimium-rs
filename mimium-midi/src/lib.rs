@@ -64,9 +64,14 @@ impl MidiPlugin {
         self.port_name = Some(ch.to_string());
         0
     }
+    /// This function is exposed to mimium as "bind_midi_note_mono".
+    /// Arguments: channel:float, default_note:freq, default:velocity
     pub fn bind_midi_note_mono(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
         let ch = vm::Machine::get_as::<f64>(vm.get_stack(0));
-        let cell = Arc::new((AtomicF64::new(0.0), AtomicF64::new(0.0)));
+        let default_note = vm::Machine::get_as::<f64>(vm.get_stack(1));
+        let default_vel = vm::Machine::get_as::<f64>(vm.get_stack(2));
+
+        let cell = Arc::new((AtomicF64::new(default_note), AtomicF64::new(default_vel)));
         let cell_c = cell.clone();
         self.add_note_callback(
             ch as u8,
@@ -167,7 +172,7 @@ impl SystemPlugin for MidiPlugin {
 
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
         let ty = function!(
-            vec![numeric!()],
+            vec![numeric!(),numeric!(),numeric!()],
             function!(vec![], tuple!(numeric!(), numeric!()))
         );
         let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::bind_midi_note_mono;
