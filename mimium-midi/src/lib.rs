@@ -60,8 +60,10 @@ impl MidiPlugin {
         }
     }
     pub fn set_midi_port(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
-        let ch = vm::Machine::get_as::<&str>(vm.get_stack(0));
-        self.port_name = Some(ch.to_string());
+        let idx = vm.get_stack(0);
+        let pname = vm.prog.strings[idx as usize];
+
+        self.port_name = Some(pname.to_string());
         0
     }
     /// This function is exposed to mimium as "bind_midi_note_mono".
@@ -94,9 +96,9 @@ impl MidiPlugin {
     }
 }
 
-impl Drop for MidiPlugin{
+impl Drop for MidiPlugin {
     fn drop(&mut self) {
-        if let Some(c) = self.connection.take(){
+        if let Some(c) = self.connection.take() {
             c.close();
         }
     }
@@ -104,29 +106,22 @@ impl Drop for MidiPlugin{
 
 impl SystemPlugin for MidiPlugin {
     fn after_main(&mut self, _machine: &mut vm::Machine) -> vm::ReturnCode {
-        let mut ports = self.input.as_ref().unwrap().ports();
-        let port_opt = if let Some(pname) = &self.port_name {
-            let mut matchedports = ports.iter_mut().filter(|port| {
-                let name = self
-                    .input
-                    .as_ref()
-                    .unwrap()
-                    .port_name(port)
-                    .unwrap_or_default();
+        let input = self.input.as_ref().unwrap();
+        let ports = input.ports();
+
+        let port_opt = match (&self.port_name, ports.is_empty()) {
+            (Some(pname), false) => ports.iter().find(|port| {
+                let name = input.port_name(port).unwrap_or_default();
                 &name == pname
-            });
-            matchedports.next()
-        } else {
-            log::info!("trying to connect default MIDI input device...");
-            ports.iter_mut().next()
+            }),
+            (None, false) => {
+                log::info!("trying to connect default MIDI input device...");
+                ports.iter().next()
+            }
+            (_, true) => None,
         };
         if let Some(p) = port_opt {
-            let name = self
-                .input
-                .as_ref()
-                .unwrap()
-                .port_name(p)
-                .unwrap_or_default();
+            let name = input.port_name(p).unwrap_or_default();
             log::debug!("Midi Input: Connected to {name}");
             let res = self.input.take().unwrap().connect(
                 p,
@@ -152,9 +147,7 @@ impl SystemPlugin for MidiPlugin {
                 self.note_callbacks.take().unwrap(),
             );
             match res {
-                Ok(c) => {
-                    self.connection = Some(c)
-                }
+                Ok(c) => self.connection = Some(c),
                 Err(e) => {
                     log::error!("{}", e)
                 }
@@ -172,7 +165,7 @@ impl SystemPlugin for MidiPlugin {
 
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
         let ty = function!(
-            vec![numeric!(),numeric!(),numeric!()],
+            vec![numeric!(), numeric!(), numeric!()],
             function!(vec![], tuple!(numeric!(), numeric!()))
         );
         let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::bind_midi_note_mono;

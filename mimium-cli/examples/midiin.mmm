@@ -1,3 +1,4 @@
+let _ = set_midi_port("from Max 2")
 let pi = 3.14159265359
 let sr = 44100.0
 fn phasor(freq){
@@ -9,7 +10,6 @@ fn osc(freq){
 fn midi_to_hz(note){
     440.0*  (2.0 ^((note-69.0)/12.0))
 }
-
 let boundval = bind_midi_note_mono(0.0,69.0,127.0);
 
 fn dsp(){
