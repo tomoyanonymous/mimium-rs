@@ -1,6 +1,6 @@
-let _ = set_midi_port("from Max 2")
 let pi = 3.14159265359
 let sr = 44100.0
+let _ = set_midi_port("from Max 2")
 fn phasor(freq){
   (self + freq/sr)%1.0
 }
