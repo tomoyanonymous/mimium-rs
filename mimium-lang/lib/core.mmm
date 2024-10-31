@@ -9,7 +9,7 @@ fn switch(gate,a,b){
 }
 
 fn midi_to_hz(note){
-    440.0*pow(2.0, (note-69.0)/12.0)
+    440.0*(2.0^ ((note-69.0)/12.0) )
 }
 
 fn hz_to_midi(freq){
