@@ -1,5 +1,5 @@
 //! ## mimium MIDI Plugin
-//! 
+//!
 //! MIDI plugin currently implements a functionality for binding midi note signal to a tuple of float value.
 //! Processing for raw MIDI events like midi plugin in VST cannot be realized for now.
 
@@ -61,10 +61,11 @@ impl Default for MidiPlugin {
 }
 impl MidiPlugin {
     fn add_note_callback(&mut self, chan: u8, cb: NoteCallBack) {
-        if chan < 15 {
-            let _ = self.note_callbacks.as_mut().map(|v| {
+        match self.note_callbacks.as_mut() {
+            Some(v) if chan < 15 => {
                 v.0[chan as usize].push(cb);
-            });
+            }
+            _ => {}
         }
     }
     /// This function is exposed to mimium as "set_midi_port(port:string)".

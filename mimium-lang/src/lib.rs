@@ -19,7 +19,11 @@ pub mod plugin;
 use compiler::ExtFunTypeInfo;
 use interner::Symbol;
 use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
-use runtime::vm::{self, ExtClsInfo, Program};
+use runtime::vm::{
+    self,
+    builtin::{get_builtin_fn_types, get_builtin_fns},
+    ExtClsInfo, Program,
+};
 use utils::error::ReportableError;
 
 /// A set of compiler and external functions (plugins).
@@ -37,7 +41,10 @@ impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
     pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, path: Option<Symbol>) -> Self {
         let plugins = plugins.collect::<Vec<_>>();
-        let extfuntypes = plugin::get_extfun_types(&plugins).collect();
+        let extfuntypes = plugin::get_extfun_types(&plugins)
+            .chain(get_builtin_fn_types().into_iter())
+            .collect::<Vec<_>>();
+
         let sys_plugins = vec![];
         Self {
             compiler: None,
@@ -78,9 +85,11 @@ impl ExecContext {
     pub fn prepare_machine_with_bytecode(&mut self, prog: Program) {
         self.extclsinfos_reserve
             .extend(plugin::get_extclsinfos(&self.plugins));
+        let extfninfos =
+            plugin::get_extfuninfos(&self.plugins).chain(get_builtin_fns().into_iter());
         let vm = vm::Machine::new(
             prog,
-            plugin::get_extfuninfos(&self.plugins),
+            extfninfos,
             self.extclsinfos_reserve.clone().into_iter(),
         );
         self.vm = Some(vm);
