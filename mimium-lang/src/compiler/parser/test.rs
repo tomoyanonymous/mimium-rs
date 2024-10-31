@@ -132,7 +132,7 @@ fn test_at() {
     test_string!("foo@1.0", ans1);
 
     let time = Expr::Apply(
-        Expr::Var("exp".to_symbol()).into_id(7..8),
+        Expr::Var("pow".to_symbol()).into_id(7..8),
         vec![
             Expr::Literal(Literal::Float("1.0".to_string())).into_id(4..7),
             Expr::Literal(Literal::Float("2.0".to_string())).into_id(8..11),
