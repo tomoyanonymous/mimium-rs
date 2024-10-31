@@ -119,7 +119,7 @@ impl InferContext {
             intrinsics::MULT,
             intrinsics::DIV,
             intrinsics::MODULO,
-            intrinsics::EXP,
+            intrinsics::POW,
             intrinsics::GT,
             intrinsics::LT,
             intrinsics::GE,
@@ -276,7 +276,7 @@ impl InferContext {
                 .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
                 .try_collect()
         };
-        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
+        log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
@@ -585,7 +585,7 @@ impl InferContext {
                     self.infer_type(e)
                 })?;
                 let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
-                log::debug!("then: {}, else: {}", thent.to_type(), elset.to_type());
+                log::trace!("then: {}, else: {}", thent.to_type(), elset.to_type());
                 Self::unify_types(thent, elset, else_span)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {

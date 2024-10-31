@@ -18,7 +18,7 @@ pub(crate) const LT: &'static str = "lt";
 pub(crate) const GE: &'static str = "ge";
 pub(crate) const GT: &'static str = "gt";
 pub(crate) const MODULO: &'static str = "modulo";
-pub(crate) const EXP: &'static str = "exp";
+pub(crate) const POW: &'static str = "pow";
 pub(crate) const AND: &'static str = "and";
 pub(crate) const OR: &'static str = "or";
 
@@ -36,7 +36,7 @@ pub(crate) const LOG: &'static str = "log";
 pub(crate) const DELAY: &'static str = "delay";
 pub(crate) const MEM: &'static str = "mem";
 const BUILTIN_SYMS_UNSORTED: [&str; 26] = [
-    NEG, TOFLOAT, ADD, SUB, MULT, DIV, EQ, NE, LE, LT, GE, GT, MODULO, EXP, AND, OR, SIN, COS, TAN,
+    NEG, TOFLOAT, ADD, SUB, MULT, DIV, EQ, NE, LE, LT, GE, GT, MODULO, POW, AND, OR, SIN, COS, TAN,
     ATAN, ATAN2, SQRT, ABS, LOG, DELAY, MEM,
 ];
 thread_local!(pub (crate) static BUILTIN_SYMS: LazyCell<Vec<Symbol>> = LazyCell::new(|| {
