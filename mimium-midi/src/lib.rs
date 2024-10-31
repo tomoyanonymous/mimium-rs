@@ -1,5 +1,5 @@
 use atomic_float::AtomicF64;
-use midir::{MidiInput, MidiInputPort};
+use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use mimium_lang::{
     function,
     interner::ToSymbol,
@@ -35,6 +35,7 @@ pub struct MidiPlugin {
     port: OnceCell<MidiInputPort>,
     port_name: Option<String>,
     note_callbacks: Option<NoteCallBacks>,
+    connection: Option<MidiInputConnection<NoteCallBacks>>,
 }
 impl Default for MidiPlugin {
     fn default() -> Self {
@@ -46,6 +47,7 @@ impl Default for MidiPlugin {
             port: OnceCell::new(),
             port_name: None,
             note_callbacks: Some(Default::default()),
+            connection: None,
         }
     }
 }
@@ -80,10 +82,18 @@ impl MidiPlugin {
             vm.set_stack(1, vm::Machine::to_value(vel));
             2
         };
-        let ty = function!(vec![], numeric!());
+        let ty = function!(vec![], tuple!(numeric!(), numeric!()));
         let rcls = vm.wrap_extern_cls(("get_midi_val".to_symbol(), Rc::new(RefCell::new(cls)), ty));
         vm.set_stack(0, vm::Machine::to_value(rcls));
         1
+    }
+}
+
+impl Drop for MidiPlugin{
+    fn drop(&mut self) {
+        if let Some(c) = self.connection.take(){
+            c.close();
+        }
     }
 }
 
@@ -105,7 +115,7 @@ impl SystemPlugin for MidiPlugin {
             log::info!("trying to connect default MIDI input device...");
             ports.iter_mut().next()
         };
-        let _ = port_opt.map(|p| {
+        if let Some(p) = port_opt {
             let name = self
                 .input
                 .as_ref()
@@ -137,16 +147,17 @@ impl SystemPlugin for MidiPlugin {
                 self.note_callbacks.take().unwrap(),
             );
             match res {
-                Ok(_c) => {
-                    //todo:close handling
+                Ok(c) => {
+                    self.connection = Some(c)
                 }
                 Err(e) => {
-                    println!("{}", e)
+                    log::error!("{}", e)
                 }
             }
             let _ = self.port.set(p.clone());
-        });
-
+        } else {
+            log::warn!("No MIDI devices found.")
+        }
         0
     }
 
