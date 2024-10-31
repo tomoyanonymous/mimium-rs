@@ -1,3 +1,8 @@
+//! ## mimium MIDI Plugin
+//! 
+//! MIDI plugin currently implements a functionality for binding midi note signal to a tuple of float value.
+//! Processing for raw MIDI events like midi plugin in VST cannot be realized for now.
+
 use atomic_float::AtomicF64;
 use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use mimium_lang::{
@@ -21,6 +26,7 @@ type NoteCallBack = Arc<dyn Fn(f64, f64) + Send + Sync>;
 
 #[derive(Default)]
 struct NoteCallBacks(pub [Vec<NoteCallBack>; 16]);
+
 impl NoteCallBacks {
     pub fn invoke_note_callback(&self, chan: u8, note: u8, vel: u8) {
         if chan < 15 {
@@ -30,6 +36,8 @@ impl NoteCallBacks {
         };
     }
 }
+
+/// Main module for Midi Plugin.
 pub struct MidiPlugin {
     input: Option<MidiInput>,
     port: OnceCell<MidiInputPort>,
@@ -59,6 +67,8 @@ impl MidiPlugin {
             });
         }
     }
+    /// This function is exposed to mimium as "set_midi_port(port:string)".
+    /// Until this function is called, MIDI plugin tries to the default device.
     pub fn set_midi_port(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
         let idx = vm.get_stack(0);
         let pname = vm.prog.strings[idx as usize];
@@ -67,7 +77,9 @@ impl MidiPlugin {
         0
     }
     /// This function is exposed to mimium as "bind_midi_note_mono".
-    /// Arguments: channel:float, default_note:freq, default:velocity
+    /// Arguments: channel:float[0-15], default_note:float[0-127], default:velocity[0-127]
+    /// Return value: Closure(()->(float,float))
+    /// If none of the midi device are connected, the returned closure just returns default value continuously.
     pub fn bind_midi_note_mono(&mut self, vm: &mut vm::Machine) -> vm::ReturnCode {
         let ch = vm::Machine::get_as::<f64>(vm.get_stack(0));
         let default_note = vm::Machine::get_as::<f64>(vm.get_stack(1));
@@ -122,7 +134,7 @@ impl SystemPlugin for MidiPlugin {
         };
         if let Some(p) = port_opt {
             let name = input.port_name(p).unwrap_or_default();
-            log::debug!("Midi Input: Connected to {name}");
+            log::info!("Midi Input: Connected to {name}");
             let res = self.input.take().unwrap().connect(
                 p,
                 &name,
@@ -156,10 +168,6 @@ impl SystemPlugin for MidiPlugin {
         } else {
             log::warn!("No MIDI devices found.")
         }
-        0
-    }
-
-    fn on_sample(&mut self, _time: Time, _machine: &mut vm::Machine) -> vm::ReturnCode {
         0
     }
 

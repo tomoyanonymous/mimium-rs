@@ -39,7 +39,9 @@ pub trait SystemPlugin {
     fn after_main(&mut self, _machine: &mut Machine) -> ReturnCode{
         0
     }
-    fn on_sample(&mut self, time: Time, machine: &mut Machine) -> ReturnCode;
+    fn on_sample(&mut self, _time: Time, _machine: &mut Machine) -> ReturnCode{
+        0
+    }
     fn gen_interfaces(&self) -> Vec<SysPluginSignature>;
 }
 #[derive(Clone)]
