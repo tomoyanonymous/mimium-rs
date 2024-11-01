@@ -1,0 +1,20 @@
+let pi = 3.14159265359
+let sr = 48000.0
+fn phasor(freq){
+  (self + freq/sr)%1.0
+}
+fn osc(freq){
+  sin(phasor(freq)*pi*2.0)
+}
+fn amosc(freq,rate){
+  osc(freq + osc(rate)*4000.0)
+}
+
+let probel = make_probe("left")
+let prober = make_probe("right")
+
+fn dsp(){
+    let l = probel(amosc(880,0.5))
+    let r = prober(amosc(660,0.3))
+    (l,r)
+}

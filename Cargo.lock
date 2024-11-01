@@ -1318,6 +1318,7 @@ dependencies = [
  "clap",
  "colog",
  "mimium-audiodriver",
+ "mimium-guitools",
  "mimium-lang",
  "mimium-midi",
  "mimium-scheduler",

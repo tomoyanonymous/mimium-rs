@@ -18,4 +18,5 @@ mimium-audiodriver = { path = "../mimium-audiodriver" }
 mimium-midi = { path = "../mimium-midi" }
 mimium-symphonia = { path = "../mimium-symphonia" }
 mimium-scheduler = { path = "../mimium-scheduler" }
+mimium-guitools = { path = "../mimium-guitools" }
 colog = "1.3.0"

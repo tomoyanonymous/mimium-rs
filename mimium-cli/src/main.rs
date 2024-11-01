@@ -5,8 +5,10 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::{load_default_runtime, SampleRate};
+use mimium_guitools::GuiToolPlugin;
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
+use mimium_lang::log;
 use mimium_lang::plugin::Plugin;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
@@ -15,7 +17,6 @@ use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
 use mimium_midi;
 use mimium_symphonia::{self, SamplerPlugin};
-use mimium_lang::log;
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -108,6 +109,9 @@ fn get_default_context(path: Option<Symbol>) -> ExecContext {
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     ctx.add_system_plugin(mimium_midi::MidiPlugin::default());
+    #[cfg(not(target_arch = "wasm32"))]
+    ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
+
     ctx
 }
 

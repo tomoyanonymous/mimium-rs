@@ -13,7 +13,7 @@ impl PlotUi {
     pub fn new(label: &str, buf: HeapCons<f64>) -> Self {
         let local_buf = (0..512)
             .into_iter()
-            .map(|t| (6.28 * (t as f64 / 512.0)).sin())
+            .map(|_| 0.0)
             .collect();
         Self {
             label:label.to_string(),
