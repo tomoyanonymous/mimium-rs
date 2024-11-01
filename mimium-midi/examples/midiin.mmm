@@ -1,8 +1,91 @@
-midi_in_connect("device_name")
+let pi = 3.14159265359
+let sr = 48000.0
+let _ = set_midi_port("from Max 1")
+fn sec2samp(sec){
+    sec*48000.0
+}
+fn countup(active){
+    let r  =(self+1.0);
+    let rr = if (active) r else 0.0
+    rr
+}
+fn countupn(time,active){
+    let res = countup(active)
+    let r = if(res<time) res else 0.0
+    r
+}
+fn hold(time,active){
+    countupn(time,active)>0.0
+}
+fn get_gain(gate){
+    if (gate>0.1) gate else self
+}
+fn adsr(attack,decay,sustain,release,input){
+    let s = self
+    let atsig = min(1.0,(s + 1.0/sec2samp(attack)))
+    let decsig = max(sustain,(s-1.0/sec2samp(decay)))
+    let releasesig =max(0.0,(s-1.0/sec2samp(release)))
+    let at_or_dec = hold(sec2samp(attack),input>0.1)
+    let at_dec_sus_sig = if (at_or_dec>0.1) atsig else decsig
+    let res = if (input>0.1) at_dec_sus_sig else releasesig
+    res
+}
+fn phasor(freq){
+  (self + freq/sr)%1.0
+}
+fn osc(freq){
+  sin(phasor(freq)*pi*2.0)
+}
+fn midi_to_hz(note){
+    440.0*  (2.0 ^((note-69.0)/12.0))
+}
+let ch0  = bind_midi_note_mono( 0.0,69.0,0.0);
+let ch1  = bind_midi_note_mono( 1.0,69.0,0.0);
+let ch2  = bind_midi_note_mono( 2.0,69.0,0.0);
+let ch3  = bind_midi_note_mono( 3.0,69.0,0.0);
+let ch4  = bind_midi_note_mono( 4.0,69.0,0.0);
+let ch5  = bind_midi_note_mono( 5.0,69.0,0.0);
+let ch6  = bind_midi_note_mono( 6.0,69.0,0.0);
+let ch7  = bind_midi_note_mono( 7.0,69.0,0.0);
+let ch8  = bind_midi_note_mono( 8.0,69.0,0.0);
+let ch9  = bind_midi_note_mono( 9.0,69.0,0.0);
+let ch10 = bind_midi_note_mono(10.0,69.0,0.0);
+let ch11 = bind_midi_note_mono(11.0,69.0,0.0);
+let ch12 = bind_midi_note_mono(12.0,69.0,0.0);
+let ch13 = bind_midi_note_mono(13.0,69.0,0.0);
+let ch14 = bind_midi_note_mono(14.0,69.0,0.0);
+let ch15 = bind_midi_note_mono(15.0,69.0,0.0);
 
-    let note = (note,vel) 
-let note_manager = midi_in_bind_note(|chan,note,vel| {
-    |x| {
+fn myadsr(gate){
+    adsr(0.01,0.1,1.0,2.0,gate) *get_gain(gate)
 
-    }
-})
+}
+fn synth(midiv){
+    let (note,vel) = midiv
+    let sig = note |> midi_to_hz |> osc 
+    let gain = vel /127.0;
+    sig * ( gain |> myadsr )
+}
+
+
+fn dsp(){
+    let r_r =  (ch0() |> synth) + 
+                (ch1() |> synth) + 
+                 (ch2() |> synth) + 
+                  (ch3() |> synth) +
+                 (ch4() |> synth) + 
+                (ch5() |> synth) + 
+                 (ch6() |> synth) + 
+                  (ch7() |> synth)+
+                (ch8() |> synth) + 
+                 (ch9() |> synth) + 
+                  (ch10() |> synth) +
+                 (ch11() |> synth) + 
+                (ch12() |> synth) + 
+                 (ch13() |> synth) + 
+                  (ch14() |> synth)+
+                (ch15() |> synth)
+
+    let r = r_r/16.0
+    (r,r)
+}
