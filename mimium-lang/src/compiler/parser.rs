@@ -59,9 +59,11 @@ fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
 }
 fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     select! {
-        Token::Int(x) => Literal::Int(x),
-        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
-        Token::Str(s) => Literal::String(s),
+        //Currently Integer literals are treated as float until the integer type is introduced in type system.
+        // Token::Int(x) => Literal::Int(x),
+        Token::Int(x)=>Literal::Float(x.to_string().to_symbol()),
+        Token::Float(x) =>Literal::Float(x.to_symbol()),
+        Token::Str(s) => Literal::String(s.to_symbol()),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
         Token::PlaceHolder => Literal::PlaceHolder,

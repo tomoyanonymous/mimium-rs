@@ -30,7 +30,7 @@ fn test_let() {
             pat: Pattern::Single("goge".to_symbol()),
             ty: Type::Unknown.into_id_with_span(4..8),
         },
-        Expr::Literal(Literal::Int(36)).into_id(11..13),
+        Expr::Literal(Literal::Float("36".to_symbol())).into_id(11..13),
         Some(Expr::Var("goge".to_symbol()).into_id(15..19)),
     )
     .into_id(0..19);
@@ -47,8 +47,8 @@ fn test_lettuple() {
             ty: Type::Unknown.into_id_with_span(4..9),
         },
         Expr::Tuple(vec![
-            Expr::Literal(Literal::Int(36)).into_id(13..15),
-            Expr::Literal(Literal::Int(89)).into_id(16..18),
+            Expr::Literal(Literal::Float("36".to_symbol())).into_id(13..15),
+            Expr::Literal(Literal::Float("89".to_symbol())).into_id(16..18),
         ])
         .into_id(12..19),
         Some(Expr::Var("hoge".to_symbol()).into_id(21..25)),
@@ -59,7 +59,7 @@ fn test_lettuple() {
 #[test]
 fn test_if() {
     let ans = Expr::If(
-        Expr::Literal(Literal::Int(100)).into_id(4..7),
+        Expr::Literal(Literal::Float("100".to_symbol())).into_id(4..7),
         Expr::Var("hoge".to_symbol()).into_id(9..13),
         Some(Expr::Var("fuga".to_symbol()).into_id(19..23)),
     )
@@ -69,7 +69,7 @@ fn test_if() {
 #[test]
 fn test_if_noelse() {
     let ans = Expr::If(
-        Expr::Literal(Literal::Int(100)).into_id(4..7),
+        Expr::Literal(Literal::Float("100".to_symbol())).into_id(4..7),
         Expr::Var("hoge".to_symbol()).into_id(9..13),
         None,
     )
@@ -79,12 +79,12 @@ fn test_if_noelse() {
 
 #[test]
 fn test_int() {
-    let ans = Expr::Literal(Literal::Int(3466)).into_id(0..4);
+    let ans = Expr::Literal(Literal::Float("3466".to_symbol())).into_id(0..4);
     test_string!("3466", ans);
 }
 #[test]
 fn test_string() {
-    let ans = Expr::Literal(Literal::String("teststr".to_string())).into_id(0..9);
+    let ans = Expr::Literal(Literal::String("teststr".to_symbol())).into_id(0..9);
     test_string!("\"teststr\"", ans);
 }
 #[test]
@@ -95,7 +95,7 @@ fn test_block() {
                 pat: Pattern::Single("hoge".to_symbol()),
                 ty: Type::Unknown.into_id_with_span(5..9),
             },
-            Expr::Literal(Literal::Int(100)).into_id(12..15),
+            Expr::Literal(Literal::Float("100".to_symbol())).into_id(12..15),
             Some(Expr::Var("hoge".to_symbol()).into_id(16..20)),
         )
         .into_id(1..20),
@@ -112,8 +112,8 @@ fn test_add() {
     let ans = Expr::Apply(
         Expr::Var("add".to_symbol()).into_id(6..7),
         vec![
-            Expr::Literal(Literal::Float("3466.0".to_string())).into_id(0..6),
-            Expr::Literal(Literal::Float("2000.0".to_string())).into_id(7..13),
+            Expr::Literal(Literal::Float("3466.0".to_symbol())).into_id(0..6),
+            Expr::Literal(Literal::Float("2000.0".to_symbol())).into_id(7..13),
         ],
     )
     .into_id(0..13);
@@ -124,7 +124,7 @@ fn test_at() {
     let ans1 = Expr::Apply(
         Expr::Var("_mimium_schedule_at".to_symbol()).into_id(3..4),
         vec![
-            Expr::Literal(Literal::Float("1.0".to_string())).into_id(4..7),
+            Expr::Literal(Literal::Float("1.0".to_symbol())).into_id(4..7),
             Expr::Var("foo".to_symbol()).into_id(0..3),
         ],
     )
@@ -134,8 +134,8 @@ fn test_at() {
     let time = Expr::Apply(
         Expr::Var("pow".to_symbol()).into_id(7..8),
         vec![
-            Expr::Literal(Literal::Float("1.0".to_string())).into_id(4..7),
-            Expr::Literal(Literal::Float("2.0".to_string())).into_id(8..11),
+            Expr::Literal(Literal::Float("1.0".to_symbol())).into_id(4..7),
+            Expr::Literal(Literal::Float("2.0".to_symbol())).into_id(8..11),
         ],
     )
     .into_id(4..11);
@@ -182,7 +182,7 @@ fn test_assign2() {
             Expr::Var("fuga".to_symbol()).into_id(7..11),
         )
         .into_id(0..11),
-        Some(Expr::Literal(Literal::Float("100.0".to_string())).into_id(13..18)),
+        Some(Expr::Literal(Literal::Float("100.0".to_symbol())).into_id(13..18)),
     )
     .into_id(0..18);
     test_string!("hoge = fuga\n 100.0", ans);
@@ -351,8 +351,8 @@ fn test_macrodef() {
 #[test]
 fn test_tuple() {
     let tuple_items = vec![
-        Expr::Literal(Literal::Float("1.0".to_string())).into_id(1..4),
-        Expr::Literal(Literal::Float("2.0".to_string())).into_id(6..9),
+        Expr::Literal(Literal::Float("1.0".to_symbol())).into_id(1..4),
+        Expr::Literal(Literal::Float("2.0".to_symbol())).into_id(6..9),
     ];
 
     let ans = Expr::Tuple(tuple_items.clone()).into_id(0..10);
@@ -398,7 +398,7 @@ fn test_stmt_without_return() {
                     Expr::Var("add".to_symbol()).into_id(33..34),
                     vec![
                         Expr::Var("input".to_symbol()).into_id(28..33),
-                        Expr::Literal(Literal::Int(1)).into_id(34..35),
+                        Expr::Literal(Literal::Float("1".to_symbol())).into_id(34..35),
                     ],
                 )
                 .into_id(28..35),

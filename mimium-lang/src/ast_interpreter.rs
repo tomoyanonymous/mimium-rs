@@ -106,9 +106,9 @@ const EXTERN_SYMS: [&str; 28] = [
 
 fn eval_literal(e: &ast::Literal) -> Value {
     match e {
-        ast::Literal::String(s) => Value::String(s.clone()),
+        ast::Literal::String(s) => Value::String(s.to_string()),
         ast::Literal::Int(i) => Value::Primitive(PValue::Integer(i.clone())),
-        ast::Literal::Float(f) => Value::Primitive(PValue::Numeric(f.parse().unwrap())),
+        ast::Literal::Float(f) => Value::Primitive(PValue::Numeric(f.as_str().parse().unwrap())),
         ast::Literal::SelfLit => {
             panic!("self literal should not be shown in evaluation stage.")
         }
