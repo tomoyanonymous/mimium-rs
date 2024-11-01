@@ -7,7 +7,7 @@ members = [
     "mimium-test",
     "mimium-scheduler",
     "mimium-symphonia",
-    "mimium-midi",
+    "mimium-midi", "mimium-guitools",
 ]
 
 resolver = "2"

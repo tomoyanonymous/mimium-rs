@@ -10,7 +10,7 @@ use mimium_lang::{
     interner::ToSymbol,
     numeric,
     plugin::{SysPluginSignature, SystemPlugin},
-    runtime::{vm, Time},
+    runtime::vm,
     string_t, tuple,
     types::{PType, Type},
     unit,
