@@ -10,7 +10,7 @@ use std::{
     cell::{RefCell, UnsafeCell},
     rc::Rc,
 };
-
+pub type SystemPluginFnType<T> = fn(&mut T, &mut Machine) -> ReturnCode;
 pub struct SysPluginSignature {
     name: &'static str,
     /// The function internally implements Fn(&mut T:SystemPlugin,&mut Machine)->ReturnCode
