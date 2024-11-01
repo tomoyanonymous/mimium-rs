@@ -1,10 +1,10 @@
 use crate::plot_ui::{self, PlotUi};
 use eframe;
-use egui::{Response, Widget};
-use egui_plot::PlotResponse;
-use mimium_lang::plugin::Plugin;
-use ringbuf::{Cons, HeapCons};
+use egui::Widget;
 
+use ringbuf::HeapCons;
+
+#[derive(Default)]
 pub struct PlotApp {
     plot: Vec<plot_ui::PlotUi>,
 }

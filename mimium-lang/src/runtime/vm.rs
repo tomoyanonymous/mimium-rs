@@ -21,7 +21,7 @@ pub type RawVal = u64;
 pub type ReturnCode = i64;
 
 pub type ExtFunType = fn(&mut Machine) -> ReturnCode;
-pub type ExtClsType = Rc<RefCell<dyn Fn(&mut Machine) -> ReturnCode>>;
+pub type ExtClsType = Rc<RefCell<dyn FnMut(&mut Machine) -> ReturnCode>>;
 pub type ExtFnInfo = (Symbol, ExtFunType, TypeNodeId);
 pub type ExtClsInfo = (Symbol, ExtClsType, TypeNodeId);
 
@@ -680,7 +680,7 @@ impl Machine {
                             let (_name, cls) = &self.ext_cls_table[*ci];
                             let cls = cls.clone();
                             self.call_function(func, nargs, nret_req, move |machine| {
-                                cls.borrow()(machine)
+                                cls.borrow_mut()(machine)
                             })
                         }
                     };

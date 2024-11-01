@@ -19,8 +19,8 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "mimium guitools",
         native_options,
-        Box::new(|cc| Ok(Box::new(PlotApp::new_test()))),
+        Box::new(|_cc| Ok(Box::new(PlotApp::new_test()))),
     )
 }

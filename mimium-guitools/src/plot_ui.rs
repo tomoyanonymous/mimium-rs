@@ -7,6 +7,7 @@ pub(crate) struct PlotUi {
     show_grid: bool,
     buf: HeapCons<f64>,
     local_buf: Vec<f64>,
+    update_index:usize,
 }
 impl PlotUi {
     pub fn new(label: &str, buf: HeapCons<f64>) -> Self {
@@ -20,6 +21,7 @@ impl PlotUi {
             show_grid: true,
             buf,
             local_buf,
+            update_index:0
         }
     }
     pub fn new_test(label: &str) -> Self {
@@ -33,9 +35,15 @@ impl PlotUi {
             show_grid: true,
             buf: HeapCons::new(HeapRb::new(10).into()),
             local_buf,
+            update_index:0
         }
     }
-    fn draw_line(&self) -> Line {
+    fn draw_line(&mut self) -> Line {
+        while let Some(s) = self.buf.try_pop(){
+            self.local_buf[self.update_index] = s;
+            self.update_index= (self.update_index+1)%self.local_buf.len();
+        }
+
         Line::new(PlotPoints::from_parametric_callback(
             |t| (t, self.local_buf[t as usize]),
             0.0..512.0,
