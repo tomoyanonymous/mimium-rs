@@ -8,6 +8,7 @@ use mimium_lang::runtime::{vm, Time};
 use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
+use mimium_lang::log;
 const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
     sr: SampleRate,

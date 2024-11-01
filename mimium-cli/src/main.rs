@@ -15,6 +15,7 @@ use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
 use mimium_midi;
 use mimium_symphonia::{self, SamplerPlugin};
+use mimium_lang::log;
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {

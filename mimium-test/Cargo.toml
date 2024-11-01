@@ -14,4 +14,3 @@ build = "build.rs"
 mimium-lang = { path = "../mimium-lang" }
 mimium-scheduler = {path = "../mimium-scheduler"}
 mimium-audiodriver = { path = "../mimium-audiodriver" }
-log = "0.4.22"

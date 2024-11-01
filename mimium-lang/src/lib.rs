@@ -25,6 +25,7 @@ use runtime::vm::{
     ExtClsInfo, Program,
 };
 use utils::error::ReportableError;
+pub use log;
 
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].

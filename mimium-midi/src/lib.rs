@@ -14,6 +14,7 @@ use mimium_lang::{
     string_t, tuple,
     types::{PType, Type},
     unit,
+    log
 };
 use std::{
     cell::{OnceCell, RefCell},

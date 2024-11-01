@@ -1306,7 +1306,6 @@ name = "mimium-audiodriver"
 version = "2.0.0-alpha-1"
 dependencies = [
  "cpal",
- "log",
  "mimium-lang",
  "num-traits",
  "ringbuf",
@@ -1318,7 +1317,6 @@ version = "2.0.0-alpha-1"
 dependencies = [
  "clap",
  "colog",
- "log",
  "mimium-audiodriver",
  "mimium-lang",
  "mimium-midi",
@@ -1354,7 +1352,6 @@ name = "mimium-midi"
 version = "2.0.0-alpha-1"
 dependencies = [
  "atomic_float",
- "log",
  "midir",
  "mimium-lang",
  "mimium-test",
@@ -1373,7 +1370,6 @@ dependencies = [
 name = "mimium-symphonia"
 version = "2.0.0-alpha-1"
 dependencies = [
- "log",
  "mimium-lang",
  "mimium-test",
  "symphonia",
@@ -1383,7 +1379,6 @@ dependencies = [
 name = "mimium-test"
 version = "2.0.0-alpha-1"
 dependencies = [
- "log",
  "mimium-audiodriver",
  "mimium-lang",
  "mimium-scheduler",

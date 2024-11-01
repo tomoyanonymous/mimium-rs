@@ -12,7 +12,6 @@ repository = "https://github.com/tomoyanonymous/mimium-rs/"
 [dependencies]
 
 clap = { version = "4.5.7", features = ["derive"] }
-log = "0.4.22"
 
 mimium-lang = { path = "../mimium-lang" }
 mimium-audiodriver = { path = "../mimium-audiodriver" }
