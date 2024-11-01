@@ -8,7 +8,6 @@ use mimium_lang::{
     runtime::vm::{ExtClsInfo, Machine, ReturnCode},
     string_t,
     types::{PType, Type},
-    unit,
 };
 use plot_window::PlotApp;
 use ringbuf::{
@@ -63,22 +62,31 @@ impl GuiToolPlugin {
     }
 }
 
+// thread_local!(
+//     static GUI_GLOBAL: RefCell<GuiToolPlugin> = RefCell::new(GuiToolPlugin::default());
+// );
+
 impl SystemPlugin for GuiToolPlugin {
     fn after_main(&mut self, _machine: &mut Machine) -> ReturnCode {
-        let native_options = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([400.0, 300.0])
-                .with_min_inner_size([300.0, 220.0]), // .with_icon(
-            //     // NOTE: Adding an icon is optional
-            //     eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-            //         .expect("Failed to load icon"),)
-            ..Default::default()
-        };
-        let _ = eframe::run_native(
-            "mimium guitools",
-            native_options,
-            Box::new(|_cc| Ok(Box::new(self.window.take().unwrap()))),
-        );
+        let window = self.window.take().unwrap();
+        std::thread::spawn(move || {
+            let native_options = eframe::NativeOptions {
+                viewport: egui::ViewportBuilder::default()
+                    .with_inner_size([400.0, 300.0])
+                    .with_min_inner_size([300.0, 220.0]), // .with_icon(
+                //     // NOTE: Adding an icon is optional
+                //     eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
+                //         .expect("Failed to load icon"),)
+                ..Default::default()
+            };
+            let _ = eframe::run_native(
+                "mimium guitools",
+                native_options,
+                Box::new(|_cc| Ok(Box::new(window))),
+            )
+            .inspect_err(|e| log::error!("{e}"));
+        });
+
         0
     }
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
