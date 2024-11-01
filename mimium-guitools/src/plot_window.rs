@@ -9,12 +9,17 @@ use ringbuf::HeapCons;
 pub struct PlotApp {
     plot: Vec<plot_ui::PlotUi>,
     hue: f32,
+    autoscale: bool,
 }
 
 impl PlotApp {
     pub fn new_test() -> Self {
         let plot = vec![PlotUi::new_test("test")];
-        Self { plot, hue: 0.0 }
+        Self {
+            plot,
+            hue: 0.0,
+            autoscale: false,
+        }
     }
     const HUE_MARGIN: f32 = 1.0 / 8.0 + 0.3;
     pub fn add_plot(&mut self, label: &str, buf: HeapCons<f64>) {
@@ -41,6 +46,7 @@ impl eframe::App for PlotApp {
                     format!("{GITHUB} mimium-rs on GitHub"),
                     "https://github.com/tomoyanonymous/mimium-rs",
                 );
+                ui.checkbox(&mut self.autoscale, "Auto Scale")
             });
         });
 
@@ -49,6 +55,7 @@ impl eframe::App for PlotApp {
                 .legend(Legend::default())
                 .show_axes(true)
                 .show_grid(true)
+                .auto_bounds([true,self.autoscale].into())
                 .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
 
             plot.show(ui, |plot_ui| {
