@@ -321,3 +321,13 @@ fn include_file() {
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
+
+#[test]
+fn if_state() {
+    let res = run_file_test_stereo("if_state.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0, 0.0, 6.0, 0.0, 7.0, 0.0, 8.0, 0.0,
+        9.0, 0.0,
+    ];
+    assert_eq!(res, ans);
+}

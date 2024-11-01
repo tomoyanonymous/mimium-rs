@@ -655,6 +655,7 @@ impl Context {
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
+                let insert_bb = self.get_ctxdata().current_bb;
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
@@ -671,7 +672,7 @@ impl Context {
                 ) {
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
-                        let block = &mut self.get_current_basicblock().0;
+                        let block = &mut self.get_current_fn().body.get_mut(insert_bb).unwrap().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
