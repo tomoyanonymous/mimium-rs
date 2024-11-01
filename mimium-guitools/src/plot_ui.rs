@@ -1,5 +1,5 @@
-use egui::{Color32, Stroke};
-use egui_plot::{CoordinatesFormatter, Corner, Legend, Line, LineStyle, Plot, PlotPoints};
+use egui::Color32;
+use egui_plot::{Line, LineStyle, PlotPoints};
 use ringbuf::{traits::Consumer, HeapCons, HeapRb};
 pub(crate) struct PlotUi {
     label: String,

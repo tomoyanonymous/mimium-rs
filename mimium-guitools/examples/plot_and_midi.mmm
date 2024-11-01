@@ -1,5 +1,6 @@
 let pi = 3.14159265359
 let sr = 48000.0
+let _ = set_midi_port("from Max 1")
 fn sec2samp(sec){
     sec*48000.0
 }
@@ -43,7 +44,8 @@ fn midi_to_hz(note){
 fn myadsr(gate){
     adsr(0.01,0.1,1.0,2.0,gate) *get_gain(gate)
 }
-fn synth(note,vel){
+fn synth(midiv){
+    let (note,vel) = midiv
     let sig = note |> midi_to_hz |> osc 
     let gain = vel /127.0;
     sig *  gain
@@ -52,12 +54,9 @@ fn synth(note,vel){
 let ch0  = bind_midi_note_mono( 0.0,69.0,0.0);
 
 let probe = make_probe("sig")
-let probem = make_probe("midi")
 
 
 fn dsp(){
-    let (note,vel) = ch0()
-    let vel = probem(vel)
-    let l = probe(synth(note,vel))
+    let l = probe(ch0() |> synth)
     (l,l)
 }

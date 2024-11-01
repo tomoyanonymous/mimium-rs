@@ -91,6 +91,9 @@ impl RuntimeData {
             dsp_i,
         }
     }
+
+    /// warn: Currently duplicated with ExecContext::run_main.
+    /// only LocalBufferDriver uses this function.
     pub fn run_main(&mut self) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
             //todo: encapsulate unsafety within SystemPlugin functionality

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::{load_default_runtime, SampleRate};
-use mimium_guitools::GuiToolPlugin;
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
 use mimium_lang::log;
@@ -152,7 +151,7 @@ fn run_file(
         };
         let audiodriver_plug = driver.get_as_plugin();
         ctx.add_plugin(audiodriver_plug);
-        let _res = ctx.vm.as_mut().unwrap().execute_main();
+        let _res = ctx.run_main();
         let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
             //wait until input something
             let mut dummy = String::new();

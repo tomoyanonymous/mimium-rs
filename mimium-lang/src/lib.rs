@@ -23,7 +23,7 @@ use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
 use runtime::vm::{
     self,
     builtin::{get_builtin_fn_types, get_builtin_fns},
-    ExtClsInfo, Program,
+    ExtClsInfo, Program, ReturnCode,
 };
 use utils::error::ReportableError;
 
@@ -105,6 +105,24 @@ impl ExecContext {
             log::warn!("more than 2 main loops in system plugins found")
         }
         res
+    }
+    pub fn run_main(&mut self) -> ReturnCode {
+        if let Some(mut vm) = self.vm.as_mut() {
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.on_init(&mut vm);
+            });
+            let res = vm.execute_main();
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.after_main(vm);
+            });
+            res
+        } else {
+            0
+        }
     }
 }
 
