@@ -107,7 +107,7 @@ impl Op {
             Op::GreaterThan => intrinsics::GT,
             Op::GreaterEqual => intrinsics::GE,
             Op::Modulo => intrinsics::MODULO,
-            Op::Exponent => intrinsics::EXP,
+            Op::Exponent => intrinsics::POW,
             Op::And => intrinsics::AND,
             Op::Or => intrinsics::OR,
             Op::At => "_mimium_schedule_at",

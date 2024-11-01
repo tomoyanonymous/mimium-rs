@@ -1,0 +1,8 @@
+fn countup(active){
+    let r  =(self+1.0);
+    let rr = if (active) r else 0.0
+    rr
+}
+fn dsp(){
+    (countup(1.0),countup(0.0))
+}

@@ -332,9 +332,10 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::String(s) => {
                 let pos = self.program.add_new_str(*s);
+                let cpos = funcproto.add_new_constant(pos as u64);
                 Some(VmInstruction::MoveConst(
                     self.get_destination(dst, 1),
-                    pos as ConstPos,
+                    cpos as ConstPos,
                 ))
             }
             mir::Instruction::Alloc(t) => {

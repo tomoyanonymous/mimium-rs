@@ -126,7 +126,7 @@ impl Context {
             intrinsics::SUB => Some(Instruction::SubF(a0, a1)),
             intrinsics::MULT => Some(Instruction::MulF(a0, a1)),
             intrinsics::DIV => Some(Instruction::DivF(a0, a1)),
-            intrinsics::EXP => Some(Instruction::PowF(a0, a1)),
+            intrinsics::POW => Some(Instruction::PowF(a0, a1)),
             intrinsics::MODULO => Some(Instruction::ModF(a0, a1)),
             intrinsics::LOG => Some(Instruction::LogF(a0, a1)),
             intrinsics::GT => Some(Instruction::Gt(a0, a1)),
@@ -320,7 +320,7 @@ impl Context {
         t: TypeNodeId,
         span: &Span,
     ) -> Result<VPtr, CompileError> {
-        log::debug!("rv t:{} {}", name.to_string(), t.to_type());
+        log::trace!("rv t:{} {}", name.to_string(), t.to_type());
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i) => {
@@ -650,18 +650,18 @@ impl Context {
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
-                    log::debug!(
+                    log::trace!(
                         "{}",
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
+                let insert_bb = self.get_ctxdata().current_bb;
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
                     self.get_current_basicblock().0.len()
                 };
                 let (bodyv, t) = self.eval_expr(*body)?;
-                log::debug!("let body: {}", t.to_type());
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
@@ -672,7 +672,7 @@ impl Context {
                 ) {
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
-                        let block = &mut self.get_current_basicblock().0;
+                        let block = &mut self.get_current_fn().body.get_mut(insert_bb).unwrap().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
