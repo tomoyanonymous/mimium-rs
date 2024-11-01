@@ -17,7 +17,7 @@ macro_rules! dummy_span {
 #[macro_export]
 macro_rules! number {
     ($n:literal) => {
-        Expr::Literal(Literal::Float($n.to_string())).into_id(0..0)
+        Expr::Literal(Literal::Float(crate::ast::builder::str_to_symbol($n))).into_id(0..0)
     };
 }
 

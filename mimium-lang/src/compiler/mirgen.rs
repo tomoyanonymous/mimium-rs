@@ -87,7 +87,7 @@ impl Context {
             Expr::Literal(Literal::Float(max)) => {
                 //need to evaluate args first before calculate state offset because the argument for time contains stateful function call.
                 let args = self.eval_args(&[*src, *time])?;
-                let max_time = max.parse::<f64>().unwrap();
+                let max_time = max.as_str().parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_sizes.push(StateSize {
                     size: shift_size,
@@ -299,10 +299,10 @@ impl Context {
 
     pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
         let v = match lit {
-            Literal::String(s) => self.push_inst(Instruction::String((&s).to_symbol())),
+            Literal::String(s) => self.push_inst(Instruction::String(*s)),
             Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
             Literal::Float(f) => self.push_inst(Instruction::Float(
-                f.parse::<f64>().expect("illegal float format"),
+                f.as_str().parse::<f64>().expect("illegal float format"),
             )),
             Literal::Now => {
                 let ftype = numeric!();

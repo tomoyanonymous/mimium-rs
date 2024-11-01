@@ -9,9 +9,9 @@ pub type Time = i64;
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub enum Literal {
-    String(String),
+    String(Symbol),
     Int(i64),
-    Float(String),
+    Float(Symbol),
     SelfLit,
     Now,
     PlaceHolder,
