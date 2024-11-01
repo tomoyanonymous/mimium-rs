@@ -36,11 +36,11 @@ impl GuiToolPlugin {
 
     /// This method is exposed as "make_probe(label:String)->(float)->float".
     pub fn make_probe(&mut self, vm: &mut Machine) -> ReturnCode {
-        if let Some(app) = &mut self.window {
+        if let Some(app) = self.window.as_mut() {
             let idx = vm.get_stack(0);
             let probename = vm.prog.strings[idx as usize].as_str();
 
-            let (mut prod, cons) = HeapRb::<f64>::new(512).split();
+            let (mut prod, cons) = HeapRb::<f64>::new(4096).split();
             app.add_plot(probename, cons);
             let cb = move |vm: &mut Machine| -> ReturnCode {
                 let v = Machine::get_as::<f64>(vm.get_stack(0));
@@ -61,33 +61,27 @@ impl GuiToolPlugin {
         1
     }
 }
-
-// thread_local!(
-//     static GUI_GLOBAL: RefCell<GuiToolPlugin> = RefCell::new(GuiToolPlugin::default());
-// );
-
 impl SystemPlugin for GuiToolPlugin {
-    fn after_main(&mut self, _machine: &mut Machine) -> ReturnCode {
-        let window = self.window.take().unwrap();
-        std::thread::spawn(move || {
-            let native_options = eframe::NativeOptions {
-                viewport: egui::ViewportBuilder::default()
-                    .with_inner_size([400.0, 300.0])
-                    .with_min_inner_size([300.0, 220.0]), // .with_icon(
-                //     // NOTE: Adding an icon is optional
-                //     eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-                //         .expect("Failed to load icon"),)
-                ..Default::default()
-            };
-            let _ = eframe::run_native(
-                "mimium guitools",
-                native_options,
-                Box::new(|_cc| Ok(Box::new(window))),
-            )
-            .inspect_err(|e| log::error!("{e}"));
-        });
-
-        0
+    fn try_get_main_loop(&mut self) -> Option<Box<dyn FnOnce()>> {
+        self.window.take().map(|window| -> Box<dyn FnOnce()> {
+            Box::new(move || {
+                let native_options = eframe::NativeOptions {
+                    viewport: egui::ViewportBuilder::default()
+                        .with_inner_size([400.0, 300.0])
+                        .with_min_inner_size([300.0, 220.0]), // .with_icon(
+                    //     // NOTE: Adding an icon is optional
+                    //     eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
+                    //         .expect("Failed to load icon"),)
+                    ..Default::default()
+                };
+                let _ = eframe::run_native(
+                    "mimium guitools",
+                    native_options,
+                    Box::new(|_cc| Ok(Box::new(window))),
+                )
+                .inspect_err(|e| log::error!("{e}"));
+            })
+        })
     }
     fn gen_interfaces(&self) -> Vec<SysPluginSignature> {
         let ty = function!(vec![string_t!()], Self::get_closure_type());

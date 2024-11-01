@@ -18,6 +18,7 @@ pub mod plugin;
 
 use compiler::ExtFunTypeInfo;
 use interner::Symbol;
+pub use log;
 use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
 use runtime::vm::{
     self,
@@ -25,7 +26,6 @@ use runtime::vm::{
     ExtClsInfo, Program,
 };
 use utils::error::ReportableError;
-pub use log;
 
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
@@ -94,6 +94,17 @@ impl ExecContext {
             self.extclsinfos_reserve.clone().into_iter(),
         );
         self.vm = Some(vm);
+    }
+    pub fn try_get_main_loop(&mut self) -> Option<Box<dyn FnOnce()>> {
+        let mut mainloops = self.sys_plugins.iter_mut().filter_map(|p| {
+            let p = unsafe { p.0.get().as_mut().unwrap_unchecked() };
+            p.try_get_main_loop()
+        });
+        let res = mainloops.next();
+        if mainloops.next().is_some() {
+            log::warn!("more than 2 main loops in system plugins found")
+        }
+        res
     }
 }
 

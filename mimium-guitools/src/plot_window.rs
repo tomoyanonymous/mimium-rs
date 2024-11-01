@@ -1,26 +1,35 @@
 use crate::plot_ui::{self, PlotUi};
 use eframe;
-use egui::Widget;
 
+use egui::Color32;
+use egui_plot::{CoordinatesFormatter, Corner, Legend, Plot};
 use ringbuf::HeapCons;
 
 #[derive(Default)]
 pub struct PlotApp {
     plot: Vec<plot_ui::PlotUi>,
+    hue: f32,
 }
 
 impl PlotApp {
     pub fn new_test() -> Self {
         let plot = vec![PlotUi::new_test("test")];
-        Self { plot }
+        Self { plot, hue: 0.0 }
     }
+    const HUE_MARGIN: f32 = 1.0 / 8.0 + 0.3;
     pub fn add_plot(&mut self, label: &str, buf: HeapCons<f64>) {
-        self.plot.push(PlotUi::new(label, buf))
+        let [r, g, b] = egui::ecolor::Hsva::new(self.hue, 0.7, 0.7, 1.0).to_srgb();
+        self.hue += Self::HUE_MARGIN;
+        self.plot.push(PlotUi::new(
+            label,
+            buf,
+            Color32::from_rgba_premultiplied(r, g, b, 200),
+        ))
     }
 }
 
 impl eframe::App for PlotApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
 
@@ -36,13 +45,20 @@ impl eframe::App for PlotApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal_centered(|ui| {
-                for plot in self.plot.iter_mut() {
-                    ui.vertical_centered_justified(|ui| {
-                        plot.ui(ui);
-                    });
-                }
-            })
+            let plot = Plot::new("lines_demo")
+                .legend(Legend::default())
+                .show_axes(true)
+                .show_grid(true)
+                .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
+
+            plot.show(ui, |plot_ui| {
+                self.plot.iter_mut().for_each(|line| {
+                    let (_req_repaint, line) = line.draw_line();
+                    plot_ui.line(line);
+                })
+            });
+
+            ui.ctx().request_repaint();
         });
     }
 }

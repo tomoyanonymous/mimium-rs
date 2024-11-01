@@ -152,13 +152,16 @@ fn run_file(
         };
         let audiodriver_plug = driver.get_as_plugin();
         ctx.add_plugin(audiodriver_plug);
+        let _res = ctx.vm.as_mut().unwrap().execute_main();
+        let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
+            //wait until input something
+            let mut dummy = String::new();
+            eprintln!("Press Enter to exit");
+            let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        }));
         driver.init(ctx, Some(SampleRate(48000)));
         driver.play();
-
-        //wait until input something
-        let mut dummy = String::new();
-        eprintln!("Press Enter to exit");
-        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        mainloop()
     }
 
     Ok(())

@@ -240,7 +240,6 @@ impl Driver for NativeDriver {
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
             let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
-            processor.vmdata.run_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(
