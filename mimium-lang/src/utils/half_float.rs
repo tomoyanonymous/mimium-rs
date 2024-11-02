@@ -1,6 +1,7 @@
 use half::f16;
 use std::fmt::Display;
 /// Half-Precision floating point type that can be converted from 64bit float with truncation checking.
+pub const ALLOWED_ERROR: f64 = 0.00001;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct HFloat(f16);
@@ -26,19 +27,25 @@ impl TryFrom<f64> for HFloat {
     type Error = ();
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
-        // 64bit :1bit sign, 11bit exponent, 52bit fraction
-        // 16bit :1bit sign,  5bit exponent, 11bit fraction
-        let exp_bitmask: u64 =
-            0b01111110_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
-        let frac_bitmask: u64 =
-            0b00000000_00001111_11111111_11111111_11111111_11111111_11111000_00000000;
-        let v_u64 = value.to_bits();
-        let exp_residue = (v_u64 & exp_bitmask);
-        let frac_residue = (v_u64 & frac_bitmask);
-        if exp_residue == 0 && frac_residue == 0 {
+        let hv = f16::from_f64(value);
+        let error = (hv.to_f64() - value).abs();
+        if error < ALLOWED_ERROR {
             Ok(Self(f16::from_f64(value)))
         } else {
             Err(())
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn safecast() {
+        let f64v: f64 = 2.0;
+        let hv = HFloat::try_from(f64v);
+        assert!(hv.is_ok());
+        assert!((hv.unwrap().0.to_f64() -  f64v).abs() < ALLOWED_ERROR)
     }
 }
