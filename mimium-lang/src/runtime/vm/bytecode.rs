@@ -4,6 +4,7 @@ pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u8;
 pub type Offset = i16;
+use half::f16;
 
 /// Instructions for bytecode. Currently, each instructon has the 64 bit size(Tag, up to 3 bytes arguments.)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -12,6 +13,8 @@ pub enum Instruction {
     Move(Reg, Reg),
     /// Load Single Value from Constants. Destination, Source
     MoveConst(Reg, ConstPos),
+    /// Load Immediate float from half precision. Destination, Value
+    MoveImmF(Reg,f16),
     // Move the range of registers (e.g. tuple) Destination, Source, Wordsize
     MoveRange(Reg, Reg, TypeSize),
     /// Call to internal function
@@ -107,6 +110,7 @@ impl std::fmt::Display for Instruction {
             Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
+            Instruction::MoveImmF(dst,v)=> write!(f, "{:<10} {} {}", "movimmF", dst, v),
             Instruction::MoveRange(dst, src, n) => {
                 write!(
                     f,
