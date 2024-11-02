@@ -1,10 +1,9 @@
-use crate::types::TypeSize;
+use crate::{types::TypeSize, utils::half_float::HFloat};
 
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u8;
 pub type Offset = i16;
-use half::f16;
 
 /// Instructions for bytecode. Currently, each instructon has the 64 bit size(Tag, up to 3 bytes arguments.)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -14,7 +13,7 @@ pub enum Instruction {
     /// Load Single Value from Constants. Destination, Source
     MoveConst(Reg, ConstPos),
     /// Load Immediate float from half precision. Destination, Value
-    MoveImmF(Reg,f16),
+    MoveImmF(Reg,HFloat),
     // Move the range of registers (e.g. tuple) Destination, Source, Wordsize
     MoveRange(Reg, Reg, TypeSize),
     /// Call to internal function

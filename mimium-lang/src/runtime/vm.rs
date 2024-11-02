@@ -648,7 +648,7 @@ impl Machine {
                     self.set_stack(dst as i64, self.get_fnproto(func_i).constants[pos as usize]);
                 }
                 Instruction::MoveImmF(dst, v) => {
-                    self.set_stack(dst as i64, Self::to_value(v.to_f64()));
+                    self.set_stack(dst as i64, Self::to_value(Into::<f64>::into(v)));
                 }
                 Instruction::MoveRange(dst, src, n) => {
                     let (range, _slice) = self.get_stack_range(src as _, n);
