@@ -18,11 +18,12 @@ pub mod plugin;
 
 use compiler::ExtFunTypeInfo;
 use interner::Symbol;
+pub use log;
 use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
 use runtime::vm::{
     self,
     builtin::{get_builtin_fn_types, get_builtin_fns},
-    ExtClsInfo, Program,
+    ExtClsInfo, Program, ReturnCode,
 };
 use utils::error::ReportableError;
 
@@ -93,6 +94,35 @@ impl ExecContext {
             self.extclsinfos_reserve.clone().into_iter(),
         );
         self.vm = Some(vm);
+    }
+    pub fn try_get_main_loop(&mut self) -> Option<Box<dyn FnOnce()>> {
+        let mut mainloops = self.sys_plugins.iter_mut().filter_map(|p| {
+            let p = unsafe { p.0.get().as_mut().unwrap_unchecked() };
+            p.try_get_main_loop()
+        });
+        let res = mainloops.next();
+        if mainloops.next().is_some() {
+            log::warn!("more than 2 main loops in system plugins found")
+        }
+        res
+    }
+    pub fn run_main(&mut self) -> ReturnCode {
+        if let Some(mut vm) = self.vm.as_mut() {
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.on_init(&mut vm);
+            });
+            let res = vm.execute_main();
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.after_main(vm);
+            });
+            res
+        } else {
+            0
+        }
     }
 }
 

@@ -10,7 +10,6 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15.3"
-log = "0.4.22"
 num-traits = "0.2.19"
 ringbuf = "0.4.1"
 mimium-lang = {path = "../mimium-lang"}

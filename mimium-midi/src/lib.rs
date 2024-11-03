@@ -9,11 +9,12 @@ use mimium_lang::{
     function,
     interner::ToSymbol,
     numeric,
-    plugin::{SysPluginSignature, SystemPlugin},
-    runtime::{vm, Time},
+    plugin::{SysPluginSignature, SystemPlugin, SystemPluginFnType},
+    runtime::vm,
     string_t, tuple,
     types::{PType, Type},
     unit,
+    log
 };
 use std::{
     cell::{OnceCell, RefCell},
@@ -177,11 +178,10 @@ impl SystemPlugin for MidiPlugin {
             vec![numeric!(), numeric!(), numeric!()],
             function!(vec![], tuple!(numeric!(), numeric!()))
         );
-        let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::bind_midi_note_mono;
+        let fun: SystemPluginFnType<Self> = Self::bind_midi_note_mono;
         let bindnote = SysPluginSignature::new("bind_midi_note_mono", fun, ty);
         let ty = function!(vec![string_t!()], unit!());
-        let fun: fn(&mut Self, &mut vm::Machine) -> vm::ReturnCode = Self::set_midi_port;
-
+        let fun: SystemPluginFnType<Self> = Self::set_midi_port;
         let setport = SysPluginSignature::new("set_midi_port", fun, ty);
         vec![setport, bindnote]
     }

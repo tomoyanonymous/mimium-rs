@@ -8,6 +8,7 @@ use mimium_lang::runtime::{vm, Time};
 use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
+use mimium_lang::log;
 const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
     sr: SampleRate,
@@ -239,7 +240,6 @@ impl Driver for NativeDriver {
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
             let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
-            processor.vmdata.run_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
             log::info!(

@@ -58,7 +58,6 @@ let ch15 = bind_midi_note_mono(15.0,69.0,0.0);
 
 fn myadsr(gate){
     adsr(0.01,0.1,1.0,2.0,gate) *get_gain(gate)
-
 }
 fn synth(midiv){
     let (note,vel) = midiv

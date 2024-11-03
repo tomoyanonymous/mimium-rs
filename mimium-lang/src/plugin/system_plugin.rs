@@ -10,7 +10,7 @@ use std::{
     cell::{RefCell, UnsafeCell},
     rc::Rc,
 };
-
+pub type SystemPluginFnType<T> = fn(&mut T, &mut Machine) -> ReturnCode;
 pub struct SysPluginSignature {
     name: &'static str,
     /// The function internally implements Fn(&mut T:SystemPlugin,&mut Machine)->ReturnCode
@@ -33,19 +33,23 @@ impl SysPluginSignature {
 }
 
 pub trait SystemPlugin {
-    fn on_init(&mut self, _machine: &mut Machine) -> ReturnCode{
+    fn on_init(&mut self, _machine: &mut Machine) -> ReturnCode {
         0
     }
-    fn after_main(&mut self, _machine: &mut Machine) -> ReturnCode{
+    fn after_main(&mut self, _machine: &mut Machine) -> ReturnCode {
         0
     }
-    fn on_sample(&mut self, _time: Time, _machine: &mut Machine) -> ReturnCode{
+    fn on_sample(&mut self, _time: Time, _machine: &mut Machine) -> ReturnCode {
         0
     }
     fn gen_interfaces(&self) -> Vec<SysPluginSignature>;
+    fn try_get_main_loop(&mut self) -> Option<Box<dyn FnOnce()>> {
+        None
+    }
 }
 #[derive(Clone)]
 pub struct DynSystemPlugin(pub Rc<UnsafeCell<dyn SystemPlugin>>);
+
 
 pub fn to_ext_cls_info<T: SystemPlugin + 'static>(
     sysplugin: T,
@@ -61,7 +65,7 @@ pub fn to_ext_cls_info<T: SystemPlugin + 'static>(
                 .downcast::<fn(&mut T, &mut Machine) -> ReturnCode>()
                 .expect("invalid conversion applied in the system plugin resolution.");
             let fun = Rc::new(RefCell::new(move |machine: &mut Machine| -> ReturnCode {
-                // breaking double borrow rule at here!!! 
+                // breaking double borrow rule at here!!!
                 // Also here I do dirty downcasting because here the type of plugin is ensured as T.
                 unsafe {
                     let p = (plug.0.get() as *mut T).as_mut().unwrap();
