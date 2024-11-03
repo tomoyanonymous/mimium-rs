@@ -6,7 +6,7 @@ use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{PType, Type, TypeSize};
-use crate::utils::error::ReportableError;
+use crate::utils::{error::ReportableError,half_float::HFloat};
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
@@ -324,11 +324,13 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::Float(n) => {
-                let pos = funcproto.add_new_constant(gen_raw_float(n));
-                Some(VmInstruction::MoveConst(
-                    self.get_destination(dst, 1),
-                    pos as ConstPos,
-                ))
+                let dst = self.get_destination(dst, 1);
+                if let Ok(half_f) = HFloat::try_from(*n){
+                    Some(VmInstruction::MoveImmF(dst, half_f))
+                } else {
+                    let pos = funcproto.add_new_constant(gen_raw_float(n));
+                    Some(VmInstruction::MoveConst(dst, pos as ConstPos))
+                }
             }
             mir::Instruction::String(s) => {
                 let pos = self.program.add_new_str(*s);

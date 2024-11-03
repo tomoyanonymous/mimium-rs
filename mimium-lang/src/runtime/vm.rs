@@ -647,6 +647,9 @@ impl Machine {
                 Instruction::MoveConst(dst, pos) => {
                     self.set_stack(dst as i64, self.get_fnproto(func_i).constants[pos as usize]);
                 }
+                Instruction::MoveImmF(dst, v) => {
+                    self.set_stack(dst as i64, Self::to_value(Into::<f64>::into(v)));
+                }
                 Instruction::MoveRange(dst, src, n) => {
                     let (range, _slice) = self.get_stack_range(src as _, n);
                     self.move_stack_range(dst as i64, range);
@@ -868,7 +871,8 @@ impl Machine {
                         unsafe { self.delaysizes_pos_stack.last().unwrap_unchecked() };
 
                     let size_in_samples = unsafe {
-                        *self.get_fnproto(func_i)
+                        *self
+                            .get_fnproto(func_i)
                             .delay_sizes
                             .get_unchecked(*delaysize_i)
                     };

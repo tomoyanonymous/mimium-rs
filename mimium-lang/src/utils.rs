@@ -3,6 +3,7 @@ pub mod error;
 pub mod fileloader;
 pub mod metadata;
 pub mod miniprint;
+pub mod half_float;
 
 #[macro_export]
 macro_rules! format_vec {
