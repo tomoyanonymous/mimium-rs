@@ -1,5 +1,4 @@
 //! Main module of compiler and runtime for **mimium**, an infrastructural programming language for sound and music.
-#![feature(if_let_guard)]
 
 pub mod ast;
 pub mod interner;
