@@ -7,6 +7,7 @@ use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
 use mimium_audiodriver::driver::{load_default_runtime, SampleRate};
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
+use mimium_lang::log;
 use mimium_lang::plugin::Plugin;
 use mimium_lang::utils::error::ReportableError;
 use mimium_lang::utils::miniprint::MiniPrint;
@@ -107,6 +108,9 @@ fn get_default_context(path: Option<Symbol>) -> ExecContext {
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     ctx.add_system_plugin(mimium_midi::MidiPlugin::default());
+    #[cfg(not(target_arch = "wasm32"))]
+    ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
+
     ctx
 }
 
@@ -147,13 +151,16 @@ fn run_file(
         };
         let audiodriver_plug = driver.get_as_plugin();
         ctx.add_plugin(audiodriver_plug);
+        let _res = ctx.run_main();
+        let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
+            //wait until input something
+            let mut dummy = String::new();
+            eprintln!("Press Enter to exit");
+            let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        }));
         driver.init(ctx, Some(SampleRate(48000)));
         driver.play();
-
-        //wait until input something
-        let mut dummy = String::new();
-        eprintln!("Press Enter to exit");
-        let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+        mainloop()
     }
 
     Ok(())

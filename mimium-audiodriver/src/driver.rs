@@ -55,12 +55,13 @@ impl ReportableError for Error {
     }
 }
 
-// Note: `Driver` trait doesn't have `new()` so that the struct can have its own
-// `new()` with any parameters specific to the type. With this in mind, `init()`
-// can accept only common parameters.
+/// Note: `Driver` trait doesn't have `new()` so that the struct can have its own
+/// `new()` with any parameters specific to the type. With this in mind, `init()`
+/// can accept only common parameters.
 pub trait Driver {
     type Sample: Float;
     fn get_runtimefn_infos(&self) -> Vec<ExtClsInfo>;
+    /// Call ctx.run_main() before moving ctx to Driver with this function.
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
@@ -90,6 +91,9 @@ impl RuntimeData {
             dsp_i,
         }
     }
+
+    /// warn: Currently duplicated with ExecContext::run_main.
+    /// only LocalBufferDriver uses this function.
     pub fn run_main(&mut self) -> ReturnCode {
         self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
             //todo: encapsulate unsafety within SystemPlugin functionality

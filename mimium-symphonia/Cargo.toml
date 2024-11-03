@@ -13,7 +13,6 @@ build = "build.rs"
 
 mimium-lang = { path = "../mimium-lang" }
 symphonia = "0.5.4"
-log = "0.4.22"
 
 [dev-dependencies]
 mimium-test = { path = "../mimium-test" }
