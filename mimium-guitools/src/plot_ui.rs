@@ -10,7 +10,7 @@ pub(crate) struct PlotUi {
 }
 impl PlotUi {
     pub fn new(label: &str, buf: HeapCons<f64>, color: Color32) -> Self {
-        let local_buf = (0..4096).into_iter().map(|_| 0.0).collect();
+        let local_buf = (0..4096).map(|_| 0.0).collect();
 
         Self {
             label: label.to_string(),
@@ -22,8 +22,7 @@ impl PlotUi {
     }
     pub fn new_test(label: &str) -> Self {
         let local_buf = (0..4096)
-            .into_iter()
-            .map(|t| (6.28 * (t as f64 / 4096.0)).sin())
+            .map(|t| (std::f64::consts::PI * 2.0 * (t as f64 / 4096.0)).sin())
             .collect();
         Self {
             label: label.to_string(),

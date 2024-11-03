@@ -1,3 +1,4 @@
+// If you want to run benchmark, you need to run with nightly channel. Run with `cargo +nightly bench`.
 #![feature(test)]
 extern crate test;
 
