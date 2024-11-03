@@ -15,6 +15,8 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::Span;
 
 use crate::ast::{Expr, Literal};
+use itertools::Itertools;
+
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -454,7 +456,7 @@ impl Context {
                 }
                 Ok((res, t))
             })
-            .try_collect::<Vec<_>>()
+            .try_collect()
     }
     fn eval_block(
         &mut self,

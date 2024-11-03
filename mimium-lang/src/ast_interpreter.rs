@@ -11,6 +11,7 @@ use crate::{
     unit,
     utils::{environment::Environment, metadata::Span},
 };
+use itertools::Itertools;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PValue {

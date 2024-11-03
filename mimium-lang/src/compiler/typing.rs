@@ -5,6 +5,7 @@ use crate::pattern::{Pattern, TypedPattern};
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, integer, numeric, unit};
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -137,15 +138,9 @@ impl InferContext {
             intrinsics::SQRT,
         ];
 
-        let mut binds = binop_names
-            .iter()
-            .map(|n| (n.to_symbol(), binop_ty))
-            .collect::<Vec<(Symbol, TypeNodeId)>>();
-        uniop_names
-            .iter()
-            .map(|n| (n.to_symbol(), uniop_ty))
-            .collect_into(&mut binds);
-        binds.extend_from_slice(&[
+        let binds = binop_names.iter().map(|n| (n.to_symbol(), binop_ty));
+        let unibinds = uniop_names.iter().map(|n| (n.to_symbol(), uniop_ty));
+        [
             (
                 intrinsics::DELAY.to_symbol(),
                 function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
@@ -154,9 +149,11 @@ impl InferContext {
                 intrinsics::TOFLOAT.to_symbol(),
                 function!(vec![integer!()], numeric!()),
             ),
-        ]);
-
-        binds
+        ]
+        .into_iter()
+        .chain(binds)
+        .chain(unibinds)
+        .collect()
     }
     fn gen_intermediate_type(&mut self) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
@@ -412,7 +409,7 @@ impl InferContext {
                         };
                         self.bind_pattern(ity, &p, span.clone())
                     })
-                    .try_collect::<Vec<_>>()?;
+                    .try_collect()?;
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
@@ -605,7 +602,10 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(e: ExprNodeId,builtin_types:&[(Symbol,TypeNodeId)]) -> Result<InferContext, Error> {
+pub fn infer_root(
+    e: ExprNodeId,
+    builtin_types: &[(Symbol, TypeNodeId)],
+) -> Result<InferContext, Error> {
     let mut ctx = InferContext::new(builtin_types);
     let _ = ctx.infer_type(e)?;
     ctx.substitute_all_intermediates();
