@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
+use itertools::Itertools;
 
 //todo: span for 2 different locations
 #[derive(Clone, Debug, PartialEq)]
@@ -412,7 +413,7 @@ impl InferContext {
                         };
                         self.bind_pattern(ity, &p, span.clone())
                     })
-                    .try_collect::<Vec<_>>()?;
+                    .try_collect()?;
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
