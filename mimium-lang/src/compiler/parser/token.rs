@@ -114,7 +114,7 @@ impl Op {
             Op::Pipe => unreachable!(), // pipe is a syntax sugar, not a function
             Op::Unknown(x) => x.as_str(),
         }
-        .to_symbol() // TODO: use prefilled symbols instead of converting on the fly.
+        .to_symbol()
     }
 }
 

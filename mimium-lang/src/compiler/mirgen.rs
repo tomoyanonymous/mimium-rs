@@ -515,11 +515,6 @@ impl Context {
                 self.get_current_basicblock()
                     .0
                     .insert(alloc_insert_point, (dst.clone(), Instruction::Alloc(ty)));
-                // TODO: validate if the types are all identical?
-                // let first_ty = &types[0];
-                // if !types.iter().all(|x| x == first_ty) {
-                //     todo!("Return error");
-                // }
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
