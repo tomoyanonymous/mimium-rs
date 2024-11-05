@@ -226,7 +226,6 @@ macro_rules! f2_f {
     };
 }
 
-// TODO: use predefined symbols instead of strings
 pub fn get_builtin_fns() -> [BuiltinFn; 49] {
     [
         i_i!(neg),
