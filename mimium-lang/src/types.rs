@@ -72,36 +72,6 @@ impl Type {
             _ => None,
         }
     }
-    pub fn apply_fn<F>(&self, mut closure: F) -> Self
-    where
-        F: FnMut(Self) -> Self,
-    {
-        let apply_scalar =
-            |a: TypeNodeId, c: &mut F| -> TypeNodeId { c(a.to_type().clone()).into_id() };
-        let apply_vec = |v: &Vec<TypeNodeId>, c: &mut F| -> Vec<TypeNodeId> {
-            v.iter().map(|a| c(a.to_type().clone()).into_id()).collect()
-        };
-        match self {
-            Type::Array(a) => Type::Array(apply_scalar(*a, &mut closure)),
-            Type::Tuple(v) => Type::Tuple(apply_vec(v, &mut closure)),
-            Type::Struct(_s) => todo!(),
-            Type::Function(p, r, s) => {
-                let at = apply_vec(p, &mut closure);
-                let rt = apply_scalar(*r, &mut closure);
-                Type::Function(at, rt, s.map(|t| apply_scalar(t, &mut closure)))
-            }
-            Type::Ref(x) => Type::Ref(apply_scalar(*x, &mut closure)),
-            Type::Code(_c) => todo!(),
-            Type::Intermediate(id) => Type::Intermediate(id.clone()),
-            _ => self.clone(),
-        }
-    }
-    pub fn fold<F, R>(&self, _closure: F) -> R
-    where
-        F: Fn(Self, Self) -> R,
-    {
-        todo!()
-    }
 
     pub fn get_as_tuple(&self) -> Option<&[TypeNodeId]> {
         match self {
@@ -173,14 +143,35 @@ impl TypeNodeId {
             _ => *self,
         }
     }
-    //     // TODO: clean up the roundtrip between Type and TypeNodeId
     pub fn apply_fn<F>(&self, mut closure: F) -> Self
     where
         F: FnMut(Self) -> Self,
     {
-        self.to_type()
-            .apply_fn(|x| closure(x.into_id()).to_type())
-            .into_id()
+        let apply_scalar = |a: Self, c: &mut F| -> Self { c(a) };
+        let apply_vec = |v: &[Self], c: &mut F| -> Vec<Self> { v.iter().map(|a| c(*a)).collect() };
+        let result = match self.to_type() {
+            Type::Array(a) => Type::Array(apply_scalar(a, &mut closure)),
+            Type::Tuple(v) => Type::Tuple(apply_vec(&v, &mut closure)),
+            Type::Struct(_s) => todo!(),
+            Type::Function(p, r, s) => {
+                let at = apply_vec(&p, &mut closure);
+                let rt = apply_scalar(r, &mut closure);
+                Type::Function(at, rt, s.map(|t| apply_scalar(t, &mut closure)))
+            }
+            Type::Ref(x) => Type::Ref(apply_scalar(x, &mut closure)),
+            Type::Code(_c) => todo!(),
+            Type::Intermediate(id) => Type::Intermediate(id.clone()),
+            _ => self.to_type(),
+        };
+
+        result.into_id()
+    }
+
+    pub fn fold<F, R>(&self, _closure: F) -> R
+    where
+        F: Fn(Self, Self) -> R,
+    {
+        todo!()
     }
 }
 
