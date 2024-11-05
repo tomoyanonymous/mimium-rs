@@ -176,7 +176,7 @@ fn find_matched_builtin_fn(n: Symbol, tv: &[TypeNodeId]) -> Option<(Type, *const
         })
 }
 
-pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
+pub fn eval_extern(n: Symbol, argv: &[Value], span: Span) -> Result<Value, CompileError> {
     let tv = argv.iter().map(|v| v.get_type_id()).collect::<Vec<_>>();
 
     let (rt, ptr) = match find_matched_builtin_fn(n, &tv) {
@@ -185,7 +185,7 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
     };
     match argv.len() {
         1 => {
-            let v = argv.get(0).unwrap();
+            let v = &argv[0];
             match (rt, v) {
                 //f64 -> f64
                 (Type::Primitive(PType::Numeric), Value::Primitive(PValue::Numeric(fv)))
@@ -221,8 +221,8 @@ pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, Co
             }
         }
         2 => {
-            let v1 = argv.get(0).unwrap();
-            let v2 = argv.get(1).unwrap();
+            let v1 = &argv[0];
+            let v2 = &argv[1];
             match (rt, v1, v2) {
                 // (f64,f64)->f64
                 (
