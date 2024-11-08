@@ -8,13 +8,12 @@ use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use mimium_lang::{
     function,
     interner::ToSymbol,
-    numeric,
+    log, numeric,
     plugin::{SysPluginSignature, SystemPlugin, SystemPluginFnType},
     runtime::vm,
     string_t, tuple,
     types::{PType, Type},
     unit,
-    log
 };
 use std::{
     cell::{OnceCell, RefCell},
@@ -120,6 +119,11 @@ impl Drop for MidiPlugin {
 
 impl SystemPlugin for MidiPlugin {
     fn after_main(&mut self, _machine: &mut vm::Machine) -> vm::ReturnCode {
+        // If there's already a connection, do nothing
+        if self.connection.is_some() {
+            return 0;
+        }
+
         let input = self.input.as_ref().unwrap();
         let ports = input.ports();
 
