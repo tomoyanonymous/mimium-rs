@@ -88,7 +88,6 @@ impl Driver for LocalBufferDriver {
 
     fn play(&mut self) -> bool {
         let vmdata = self.vmdata.as_mut().expect("Not initialized yet?");
-        let _ = vmdata.run_main();
         self.localbuffer.clear();
         for _ in 0..self.times {
             let now = self.count.load(Ordering::Relaxed);
