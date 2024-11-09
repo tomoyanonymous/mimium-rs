@@ -49,6 +49,10 @@ pub fn native_driver(buffer_size: usize) -> Box<dyn Driver<Sample = f64>> {
 struct NativeAudioData {
     pub vmdata: RuntimeData,
     dsp_ochannels: usize,
+    // The number of output channels might differ between dsp() and the actual
+    // hardware. Depending on the combination, some channles might be duplicated
+    // or dropped.
+    adjusted_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
     count: Arc<AtomicU64>,
@@ -56,15 +60,27 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(ctx: ExecContext, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
+    pub fn new(
+        ctx: ExecContext,
+        buffer: HeapCons<f64>,
+        count: Arc<AtomicU64>,
+        h_ochannels: usize,
+    ) -> Self {
         //todo: split as trait interface method
         let vm = ctx.vm.expect("vm is not prepared yet");
         let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
-        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * dsp_ochannels];
+        let adjusted_ochannels = match (h_ochannels, dsp_ochannels) {
+            (2, 1) => 2,
+            (hout, dspout) if hout >= dspout => dspout as _,
+            (1, 2) => 1,
+            (_, _) => todo!(),
+        };
+        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * adjusted_ochannels];
         Self {
             vmdata,
             dsp_ochannels,
+            adjusted_ochannels,
             buffer,
             localbuffer,
             count,
@@ -208,13 +224,14 @@ impl Driver for NativeDriver {
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
         let dsp_ichannels = 1; //todo
+        println!("{}", self.buffer_size_per_ch);
         let dsp_ibuffer_size = self.buffer_size_per_ch * dsp_ichannels;
-        let (prod, cons) = HeapRb::<Self::Sample>::new(dsp_ibuffer_size).split();
+        let (prod, cons) = HeapRb::<Self::Sample>::new(BUFFER_RATIO * dsp_ibuffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
             let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            iconfig.buffer_size = BufferSize::Fixed((dsp_ibuffer_size / BUFFER_RATIO) as u32);
+            iconfig.buffer_size = BufferSize::Fixed((dsp_ibuffer_size) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
@@ -240,18 +257,20 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
-            let dsp_obuffer_size = self.buffer_size_per_ch * processor.dsp_ochannels;
-            oconfig.buffer_size = cpal::BufferSize::Fixed((dsp_obuffer_size / BUFFER_RATIO) as u32);
+            let h_ochannels = oconfig.channels as usize;
+            self.hardware_ochannels = h_ochannels;
+
+            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone(), h_ochannels);
+
+            oconfig.channels = processor.adjusted_ochannels as _;
+            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size_per_ch) as u32);
             log::info!(
-                "output device {}buffer size:{:?} channels: {}",
+                "output device {} buffer size:{:?} channels: {}",
                 odevice.name().unwrap_or_default(),
                 oconfig.buffer_size,
                 oconfig.channels
             );
-            self.hardware_ochannels = oconfig.channels as usize;
-            let h_ochannels = self.hardware_ochannels;
             let out_stream = odevice.build_output_stream(
                 &oconfig,
                 move |data: &mut [f32], _s: &cpal::OutputCallbackInfo| {
