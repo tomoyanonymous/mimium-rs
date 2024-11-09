@@ -225,23 +225,23 @@ impl Driver for NativeDriver {
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
+        let dsp_ichannels = 1; //todo
+        let adjusted_ichannels = 1; //todo: calculate similarly to adjusted_ochannels
+        let (prod, cons) =
+            HeapRb::<Self::Sample>::new(adjusted_ichannels * self.buffer_size).split();
 
         let idevice = host.default_input_device();
-        let (in_stream, cons) = if let Some(idevice) = idevice {
+        let in_stream = if let Some(idevice) = idevice {
             let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            let h_ichannels = iconfig.channels as usize;
-            self.hardware_ichannels = h_ichannels;
             iconfig.buffer_size = BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
                 iconfig.buffer_size
             );
-            let dsp_ichannels = 1; //todo
-            let adjusted_ichannels = 1; //todo
-            let (prod, cons) =
-                HeapRb::<Self::Sample>::new(adjusted_ichannels * self.buffer_size).split();
             let mut receiver = NativeAudioReceiver::new(dsp_ichannels, adjusted_ichannels, prod);
+            self.hardware_ichannels = iconfig.channels as usize;
+            let h_ichannels = self.hardware_ichannels;
             let in_stream = idevice.build_input_stream(
                 &iconfig,
                 move |data: &[f32], _s: &cpal::InputCallbackInfo| {
@@ -252,10 +252,9 @@ impl Driver for NativeDriver {
                 },
                 None,
             );
-            (in_stream.map_err(|e| log::error!("{e}")).ok(), cons)
+            in_stream.map_err(|e| log::error!("{e}")).ok()
         } else {
-            let (_, cons) = HeapRb::<Self::Sample>::new(0).split();
-            (None, cons)
+            None
         };
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
