@@ -224,7 +224,6 @@ impl Driver for NativeDriver {
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
         let dsp_ichannels = 1; //todo
-        println!("{}", self.buffer_size_per_ch);
         let dsp_ibuffer_size = self.buffer_size_per_ch * dsp_ichannels;
         let (prod, cons) = HeapRb::<Self::Sample>::new(BUFFER_RATIO * dsp_ibuffer_size).split();
 
