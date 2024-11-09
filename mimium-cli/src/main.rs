@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 // pub mod wcalculus;
 use clap::{Parser, ValueEnum};
-use mimium_audiodriver::backends::csv::{csv_driver, csv_driver_stdout};
-use mimium_audiodriver::driver::{load_default_runtime, SampleRate};
+use mimium_audiodriver::backends::csv::csv_driver;
+use mimium_audiodriver::driver::{load_default_runtime, Driver, SampleRate};
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
 use mimium_lang::log;
@@ -14,7 +14,6 @@ use mimium_lang::utils::miniprint::MiniPrint;
 use mimium_lang::utils::{error::report, fileloader};
 use mimium_lang::ExecContext;
 use mimium_lang::{compiler::mirgen::convert_pronoun, repl};
-use mimium_midi;
 use mimium_symphonia::{self, SamplerPlugin};
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +32,10 @@ pub struct Args {
     /// Output format
     #[arg(long, value_enum)]
     pub output_format: Option<OutputFileFormat>,
+
+    /// Don't launch GUI
+    #[arg(long, default_value_t = false)]
+    pub no_gui: bool,
 
     /// How many times to execute the code. This is only effective when --output
     /// is specified.
@@ -61,6 +64,82 @@ pub struct Mode {
     pub emit_bytecode: bool,
 }
 
+enum RunMode {
+    EmitAst,
+    EmitMir,
+    EmitByteCode,
+    NativeAudio,
+    WriteCsv {
+        times: usize,
+        output: Option<PathBuf>,
+    },
+}
+
+struct RunOptions {
+    mode: RunMode,
+    with_gui: bool,
+}
+
+impl RunOptions {
+    fn from_args(args: &Args) -> Self {
+        if args.mode.emit_ast {
+            return Self {
+                mode: RunMode::EmitAst,
+                with_gui: false,
+            };
+        }
+
+        if args.mode.emit_mir {
+            return Self {
+                mode: RunMode::EmitMir,
+                with_gui: false,
+            };
+        }
+
+        if args.mode.emit_bytecode {
+            return Self {
+                mode: RunMode::EmitByteCode,
+                with_gui: false,
+            };
+        }
+
+        let mode = match (&args.output_format, args.output.as_ref()) {
+            // if none of the output options is specified, make sounds.
+            (None, None) => RunMode::NativeAudio,
+            // When --output-format is explicitly specified, use it.
+            (Some(OutputFileFormat::Csv), path) => RunMode::WriteCsv {
+                times: args.times,
+                output: path.cloned(),
+            },
+            // Otherwise, guess from the file extension.
+            (None, Some(output)) => match output.extension() {
+                Some(x) if &x.to_os_string() == "csv" => RunMode::WriteCsv {
+                    times: args.times,
+                    output: Some(output.clone()),
+                },
+                _ => panic!("cannot determine the output file format"),
+            },
+        };
+
+        let with_gui = match &mode {
+            // launch except when --no-gui is specified
+            RunMode::NativeAudio => !args.no_gui,
+            // do not launch in other mode
+            _ => false,
+        };
+
+        Self { mode, with_gui }
+    }
+
+    fn get_driver(&self) -> Box<dyn Driver<Sample = f64>> {
+        match &self.mode {
+            RunMode::NativeAudio => load_default_runtime(),
+            RunMode::WriteCsv { times, output } => csv_driver(*times, output),
+            _ => unreachable!(),
+        }
+    }
+}
+
 fn emit_ast_local(src: &str, filepath: &Path) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let ast1 = emit_ast(src, Some(filepath.to_str().unwrap().to_symbol()))?;
 
@@ -84,7 +163,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(file) => {
             let fullpath = fileloader::get_canonical_path(".", &file)?;
             let content = fileloader::load(fullpath.to_str().unwrap())?;
-            match run_file(&args, &content, &fullpath) {
+            let options = RunOptions::from_args(&args);
+            match run_file(options, &content, &fullpath) {
                 Ok(_) => {}
                 Err(e) => {
                     // Note: I was hoping to implement std::error::Error for a
@@ -103,64 +183,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn get_default_context(path: Option<Symbol>) -> ExecContext {
+fn get_default_context(path: Option<Symbol>, with_gui: bool) -> ExecContext {
     let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     ctx.add_system_plugin(mimium_midi::MidiPlugin::default());
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
+
+    if with_gui {
+        #[cfg(not(target_arch = "wasm32"))]
+        ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
+    }
 
     ctx
 }
 
 fn run_file(
-    args: &Args,
+    options: RunOptions,
     content: &str,
     fullpath: &Path,
 ) -> Result<(), Vec<Box<dyn ReportableError>>> {
     log::debug!("Filename: {}", fullpath.display());
     let path_sym = fullpath.to_string_lossy().to_symbol();
-    let mut ctx = get_default_context(Some(path_sym));
-    if args.mode.emit_ast {
-        let ast = emit_ast_local(content, fullpath)?;
-        println!("{}", ast.pretty_print());
-    } else if args.mode.emit_mir {
-        ctx.prepare_compiler();
-        let mir = ctx.compiler.as_ref().unwrap().emit_mir(content)?;
-        println!("{mir}");
-    } else {
-        ctx.prepare_machine(content)?;
+    let mut ctx = get_default_context(Some(path_sym), options.with_gui);
 
-        if args.mode.emit_bytecode {
-            println!("{}", ctx.vm.unwrap().prog);
-            return Ok(());
+    match options.mode {
+        RunMode::EmitAst => {
+            let ast = emit_ast_local(content, fullpath)?;
+            println!("{}", ast.pretty_print());
         }
-
-        let mut driver = match (&args.output_format, &args.output) {
-            // if none of the output options is specified, make sounds.
-            (None, None) => load_default_runtime(),
-            // When --output-format is explicitly specified, use it.
-            (Some(OutputFileFormat::Csv), Some(output)) => csv_driver(args.times, output),
-            (Some(OutputFileFormat::Csv), None) => csv_driver_stdout(args.times),
-            // Otherwise, guess from the file extension.
-            (None, Some(output)) => match output.extension() {
-                Some(x) if &x.to_os_string() == "csv" => csv_driver(args.times, output),
-                _ => panic!("cannot determine the output file format"),
-            },
-        };
-        let audiodriver_plug = driver.get_as_plugin();
-        ctx.add_plugin(audiodriver_plug);
-        let _res = ctx.run_main();
-        let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
-            //wait until input something
-            let mut dummy = String::new();
-            eprintln!("Press Enter to exit");
-            let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
-        }));
-        driver.init(ctx, Some(SampleRate(48000)));
-        driver.play();
-        mainloop()
+        RunMode::EmitMir => {
+            ctx.prepare_compiler();
+            let mir = ctx.compiler.as_ref().unwrap().emit_mir(content)?;
+            println!("{mir}");
+        }
+        RunMode::EmitByteCode => {
+            ctx.prepare_machine(content)?;
+            println!("{}", ctx.vm.unwrap().prog);
+        }
+        _ => {
+            ctx.prepare_machine(content)?;
+            let mut driver = options.get_driver();
+            let audiodriver_plug = driver.get_as_plugin();
+            ctx.add_plugin(audiodriver_plug);
+            let _res = ctx.run_main();
+            let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
+                //wait until input something
+                let mut dummy = String::new();
+                eprintln!("Press Enter to exit");
+                let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
+            }));
+            driver.init(ctx, Some(SampleRate(48000)));
+            driver.play();
+            mainloop()
+        }
     }
 
     Ok(())

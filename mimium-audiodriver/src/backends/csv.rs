@@ -16,7 +16,14 @@ pub struct CsvDriver {
 }
 
 impl CsvDriver {
-    pub fn new(times: usize, csv_file: Box<dyn Write>) -> Self {
+    pub fn new<P: AsRef<Path>>(times: usize, path: &Option<P>) -> Self {
+        let csv_file: Box<dyn std::io::Write> = if let Some(path) = path {
+            let csv_file = File::create(path.as_ref()).unwrap();
+            Box::new(BufWriter::new(csv_file))
+        } else {
+            Box::new(BufWriter::new(std::io::stdout()))
+        };
+
         Self {
             driver: LocalBufferDriver::new(times),
             csv_file,
@@ -97,13 +104,6 @@ impl Driver for CsvDriver {
     }
 }
 
-pub fn csv_driver<P: AsRef<Path>>(times: usize, path: P) -> Box<dyn Driver<Sample = f64>> {
-    let csv_file_inner = File::create(path.as_ref()).unwrap();
-    let csv_file = Box::new(BufWriter::new(csv_file_inner));
-    Box::new(CsvDriver::new(times, csv_file))
-}
-
-pub fn csv_driver_stdout(times: usize) -> Box<dyn Driver<Sample = f64>> {
-    let csv_file = Box::new(BufWriter::new(std::io::stdout()));
-    Box::new(CsvDriver::new(times, csv_file))
+pub fn csv_driver<P: AsRef<Path>>(times: usize, path: &Option<P>) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(CsvDriver::new(times, path))
 }
