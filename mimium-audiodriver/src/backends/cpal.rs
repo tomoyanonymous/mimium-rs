@@ -4,11 +4,11 @@ use std::sync::Arc;
 use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
+use mimium_lang::log;
 use mimium_lang::runtime::{vm, Time};
 use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
-use mimium_lang::log;
 const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
     sr: SampleRate,
@@ -18,10 +18,10 @@ pub struct NativeDriver {
     istream: Option<cpal::Stream>,
     ostream: Option<cpal::Stream>,
     count: Arc<AtomicU64>,
-    buffer_size: usize,
+    buffer_size_per_ch: usize,
 }
 impl NativeDriver {
-    pub fn new(buffer_size: usize) -> Self {
+    pub fn new(buffer_size_per_ch: usize) -> Self {
         Self {
             sr: SampleRate(48000),
             hardware_ichannels: 1,
@@ -30,7 +30,7 @@ impl NativeDriver {
             istream: None,
             ostream: None,
             count: Default::default(),
-            buffer_size,
+            buffer_size_per_ch,
         }
     }
 }
@@ -120,7 +120,7 @@ impl NativeAudioReceiver {
     pub fn new(dsp_ichannels: usize, buffer: HeapProd<f64>) -> Self {
         Self {
             dsp_ichannels,
-            localbuffer: vec![0f64; 4096],
+            localbuffer: vec![0f64; 4096 * dsp_ichannels],
             buffer,
             count: 0,
         }
@@ -207,18 +207,19 @@ impl Driver for NativeDriver {
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
-        let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
+        let dsp_ichannels = 1; //todo
+        let dsp_ibuffer_size = self.buffer_size_per_ch * dsp_ichannels;
+        let (prod, cons) = HeapRb::<Self::Sample>::new(dsp_ibuffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
             let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            iconfig.buffer_size = BufferSize::Fixed((dsp_ibuffer_size / BUFFER_RATIO) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
                 iconfig.buffer_size
             );
-            let dsp_ichannels = 1; //todo
             let mut receiver = NativeAudioReceiver::new(dsp_ichannels, prod);
             self.hardware_ichannels = iconfig.channels as usize;
             let h_ichannels = self.hardware_ichannels;
@@ -241,7 +242,8 @@ impl Driver for NativeDriver {
         let out_stream = if let Some(odevice) = odevice {
             let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
-            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            let dsp_obuffer_size = self.buffer_size_per_ch * processor.dsp_ochannels;
+            oconfig.buffer_size = cpal::BufferSize::Fixed((dsp_obuffer_size / BUFFER_RATIO) as u32);
             log::info!(
                 "output device {}buffer size:{:?} channels: {}",
                 odevice.name().unwrap_or_default(),
