@@ -99,9 +99,6 @@ impl NativeAudioData {
                         o[i] = res[i] as f32;
                     }
                 }
-                (1, 2) => {
-                    o[0] = res[0] as f32;
-                }
                 (hout, _) => {
                     for i in 0..hout {
                         //truncate output up to hardware channels
