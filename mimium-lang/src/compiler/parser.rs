@@ -66,6 +66,7 @@ fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + 
         Token::Str(s) => Literal::String(s.to_symbol()),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
+        Token::SampleRate => Literal::SampleRate,
         Token::PlaceHolder => Literal::PlaceHolder,
     }
     .map_with_span(|e, s| Expr::Literal(e).into_id(s))

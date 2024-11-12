@@ -74,6 +74,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "macro" => Token::Macro,
         "self" => Token::SelfLit,
         "now" => Token::Now,
+        "samplerate" => Token::SampleRate,
         "let" => Token::Let,
         "letrec" => Token::LetRec,
         "if" => Token::If,
