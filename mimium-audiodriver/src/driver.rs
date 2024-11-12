@@ -122,5 +122,5 @@ impl RuntimeData {
 }
 
 pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
-    crate::backends::cpal::native_driver(4096 * 2)
+    crate::backends::cpal::native_driver(4096)
 }

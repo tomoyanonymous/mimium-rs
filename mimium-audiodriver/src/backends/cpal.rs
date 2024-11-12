@@ -4,12 +4,11 @@ use std::sync::Arc;
 use crate::driver::{Driver, RuntimeData, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
+use mimium_lang::log;
 use mimium_lang::runtime::{vm, Time};
 use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
-use mimium_lang::log;
-const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
     sr: SampleRate,
     hardware_ichannels: usize,
@@ -49,6 +48,10 @@ pub fn native_driver(buffer_size: usize) -> Box<dyn Driver<Sample = f64>> {
 struct NativeAudioData {
     pub vmdata: RuntimeData,
     dsp_ochannels: usize,
+    // The number of output channels might differ between dsp() and the actual
+    // hardware. Depending on the combination, some channles might be duplicated
+    // or dropped.
+    adjusted_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
     count: Arc<AtomicU64>,
@@ -56,15 +59,28 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(ctx: ExecContext, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
+    pub fn new(
+        ctx: ExecContext,
+        buffer: HeapCons<f64>,
+        count: Arc<AtomicU64>,
+        h_ochannels: usize,
+    ) -> Self {
         //todo: split as trait interface method
         let vm = ctx.vm.expect("vm is not prepared yet");
         let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
-        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * dsp_ochannels];
+        // Note: this must match the logic in process()
+        let adjusted_ochannels = match (h_ochannels, dsp_ochannels) {
+            (2, 1) => 2,
+            (hout, dspout) if hout >= dspout => dspout as _,
+            (1, 2) => 1,
+            (_, _) => todo!(),
+        };
+        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * adjusted_ochannels];
         Self {
             vmdata,
             dsp_ochannels,
+            adjusted_ochannels,
             buffer,
             localbuffer,
             count,
@@ -111,16 +127,18 @@ impl NativeAudioData {
 }
 struct NativeAudioReceiver {
     dsp_ichannels: usize,
+    adjusted_ichannels: usize,
     localbuffer: Vec<f64>,
     buffer: HeapProd<f64>,
     count: u64,
 }
 unsafe impl Send for NativeAudioReceiver {}
 impl NativeAudioReceiver {
-    pub fn new(dsp_ichannels: usize, buffer: HeapProd<f64>) -> Self {
+    pub fn new(dsp_ichannels: usize, adjusted_ichannels: usize, buffer: HeapProd<f64>) -> Self {
         Self {
             dsp_ichannels,
-            localbuffer: vec![0f64; 4096],
+            adjusted_ichannels,
+            localbuffer: vec![0f64; 4096 * dsp_ichannels],
             buffer,
             count: 0,
         }
@@ -207,19 +225,21 @@ impl Driver for NativeDriver {
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
-        let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
+        let dsp_ichannels = 1; //todo
+        let adjusted_ichannels = 1; //todo: calculate similarly to adjusted_ochannels
+        let (prod, cons) =
+            HeapRb::<Self::Sample>::new(adjusted_ichannels * self.buffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
             let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
                 iconfig.buffer_size
             );
-            let dsp_ichannels = 1; //todo
-            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, prod);
+            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, adjusted_ichannels, prod);
             self.hardware_ichannels = iconfig.channels as usize;
             let h_ichannels = self.hardware_ichannels;
             let in_stream = idevice.build_input_stream(
@@ -239,17 +259,20 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone());
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
-            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            let h_ochannels = oconfig.channels as usize;
+            self.hardware_ochannels = h_ochannels;
+
+            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone(), h_ochannels);
+
+            oconfig.channels = processor.adjusted_ochannels as _;
+            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
-                "output device {}buffer size:{:?} channels: {}",
+                "output device {} buffer size:{:?} channels: {}",
                 odevice.name().unwrap_or_default(),
                 oconfig.buffer_size,
                 oconfig.channels
             );
-            self.hardware_ochannels = oconfig.channels as usize;
-            let h_ochannels = self.hardware_ochannels;
             let out_stream = odevice.build_output_stream(
                 &oconfig,
                 move |data: &mut [f32], _s: &cpal::OutputCallbackInfo| {
