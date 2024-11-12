@@ -31,6 +31,9 @@ impl PlotApp {
             Color32::from_rgba_premultiplied(r, g, b, 200),
         ))
     }
+    pub fn is_empty(&self) -> bool {
+        self.plot.is_empty()
+    }
 }
 
 impl eframe::App for PlotApp {
@@ -55,7 +58,7 @@ impl eframe::App for PlotApp {
                 .legend(Legend::default())
                 .show_axes(true)
                 .show_grid(true)
-                .auto_bounds([true,self.autoscale].into())
+                .auto_bounds([true, self.autoscale].into())
                 .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
 
             plot.show(ui, |plot_ui| {
