@@ -48,10 +48,6 @@ pub fn native_driver(buffer_size: usize) -> Box<dyn Driver<Sample = f64>> {
 struct NativeAudioData {
     pub vmdata: RuntimeData,
     dsp_ochannels: usize,
-    // The number of output channels might differ between dsp() and the actual
-    // hardware. Depending on the combination, some channles might be duplicated
-    // or dropped.
-    adjusted_ochannels: usize,
     buffer: HeapCons<f64>,
     localbuffer: Vec<f64>,
     count: Arc<AtomicU64>,
@@ -69,18 +65,11 @@ impl NativeAudioData {
         let vm = ctx.vm.expect("vm is not prepared yet");
         let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
-        // Note: this must match the logic in process()
-        let adjusted_ochannels = match (h_ochannels, dsp_ochannels) {
-            (2, 1) => 2,
-            (hout, dspout) if hout >= dspout => dspout as _,
-            (1, 2) => 1,
-            (_, _) => todo!(),
-        };
-        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * adjusted_ochannels];
+        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * h_ochannels];
         Self {
             vmdata,
             dsp_ochannels,
-            adjusted_ochannels,
+
             buffer,
             localbuffer,
             count,
@@ -92,16 +81,14 @@ impl NativeAudioData {
 
         let local = &mut self.localbuffer.as_mut_slice()[..len];
         self.buffer.pop_slice(local);
-        for (o, _s) in dst
-            .chunks_mut(h_ochannels)
-            .zip(local.chunks(self.dsp_ochannels))
-        {
+        for (o, _s) in dst.chunks_mut(h_ochannels).zip(local.chunks(h_ochannels)) {
             let _rc = self
                 .vmdata
                 .run_dsp(Time(self.count.load(Ordering::Relaxed)));
             let res =
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
             self.count.fetch_add(1, Ordering::Relaxed);
+            o.fill(0.0);
             match (h_ochannels, self.dsp_ochannels) {
                 (2, 1) => {
                     o[0] = res[0] as f32;
@@ -111,15 +98,15 @@ impl NativeAudioData {
                     for i in 0..dspout {
                         o[i] = res[i] as f32;
                     }
-                    for i in dspout..hout {
-                        o[i] = 0.;
-                    }
                 }
                 (1, 2) => {
                     o[0] = res[0] as f32;
                 }
-                (_, _) => {
-                    todo!()
+                (hout, _) => {
+                    for i in 0..hout {
+                        //truncate output up to hardware channels
+                        o[i] = res[i] as f32;
+                    }
                 }
             }
         }
@@ -192,14 +179,16 @@ impl NativeDriver {
         let config_builder = device
             .supported_output_configs()
             .unwrap()
-            .next()
+            //try to find maximum channel setting, because some headphone device returns mono as default config.
+            .max_by(|x, y| x.channels().cmp(&y.channels()))
             .expect("no supported config");
+
         sample_rate
             .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.0)))
             .unwrap_or_else(|| {
-                device
-                    .default_output_config()
-                    .expect("no default output configs")
+                config_builder
+                    .try_with_sample_rate(cpal::SampleRate(44100))
+                    .unwrap_or_else(|| config_builder.with_max_sample_rate())
             })
             .config()
     }
@@ -264,14 +253,13 @@ impl Driver for NativeDriver {
             self.hardware_ochannels = h_ochannels;
 
             let mut processor = NativeAudioData::new(ctx, cons, self.count.clone(), h_ochannels);
-
-            oconfig.channels = processor.adjusted_ochannels as _;
             oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
-                "output device {} buffer size:{:?} channels: {}",
+                "output device {} buffer size:{:?} channels: {} samplerate {}Hz",
                 odevice.name().unwrap_or_default(),
                 oconfig.buffer_size,
-                oconfig.channels
+                oconfig.channels,
+                oconfig.sample_rate.0
             );
             let out_stream = odevice.build_output_stream(
                 &oconfig,
