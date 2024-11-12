@@ -91,7 +91,7 @@ impl Driver for CsvDriver {
         self.driver.pause()
     }
 
-    fn get_samplerate(&self) -> crate::driver::SampleRate {
+    fn get_samplerate(&self) -> u32 {
         self.driver.get_samplerate()
     }
 

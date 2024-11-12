@@ -1,3 +1,8 @@
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Arc,
+};
+
 use mimium_lang::{
     interner::ToSymbol,
     plugin::{DynSystemPlugin, InstantPlugin},
@@ -35,8 +40,18 @@ pub trait Component {
     fn render(&mut self, input: &[Self::Sample], output: &mut [Self::Sample], info: &PlaybackInfo);
 }
 
-#[derive(Clone, Copy)]
-pub struct SampleRate(pub u32);
+#[derive(Clone)]
+pub struct SampleRate(pub Arc<AtomicU32>);
+impl From<u32> for SampleRate {
+    fn from(value: u32) -> Self {
+        Self(Arc::new(value.into()))
+    }
+}
+impl SampleRate {
+    pub fn get(&self) -> u32 {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 #[derive(Debug)]
 pub enum Error {
     Unknown,
@@ -65,7 +80,7 @@ pub trait Driver {
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool;
     fn play(&mut self) -> bool;
     fn pause(&mut self) -> bool;
-    fn get_samplerate(&self) -> SampleRate;
+    fn get_samplerate(&self) -> u32;
     fn get_current_sample(&self) -> Time;
     fn is_playing(&self) -> bool;
     fn get_as_plugin(&self) -> InstantPlugin {

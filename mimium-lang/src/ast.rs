@@ -14,6 +14,7 @@ pub enum Literal {
     Float(Symbol),
     SelfLit,
     Now,
+    SampleRate,
     PlaceHolder,
 }
 
@@ -64,6 +65,7 @@ impl fmt::Display for Literal {
             Literal::Int(n) => write!(f, "(int {})", n),
             Literal::String(s) => write!(f, "\"{}\"", s),
             Literal::Now => write!(f, "now"),
+            Literal::SampleRate => write!(f, "samplerate"),
             Literal::SelfLit => write!(f, "self"),
             Literal::PlaceHolder => write!(f, "_"),
         }

@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::driver::{Driver, RuntimeData, SampleRate};
+use crate::runtime_fn;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
 use mimium_lang::log;
@@ -22,7 +23,7 @@ pub struct NativeDriver {
 impl NativeDriver {
     pub fn new(buffer_size: usize) -> Self {
         Self {
-            sr: SampleRate(48000),
+            sr: SampleRate::from(48000),
             hardware_ichannels: 1,
             hardware_ochannels: 1,
             is_playing: false,
@@ -164,7 +165,7 @@ impl NativeDriver {
             .next()
             .expect("no supported config");
         sample_rate
-            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.0)))
+            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.get())))
             .unwrap_or_else(|| {
                 device
                     .default_input_config()
@@ -181,7 +182,7 @@ impl NativeDriver {
             .expect("no supported config");
 
         sample_rate
-            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.0)))
+            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.get())))
             .unwrap_or_else(|| {
                 config_builder
                     .try_with_sample_rate(cpal::SampleRate(44100))
@@ -205,8 +206,10 @@ impl NativeDriver {
 impl Driver for NativeDriver {
     type Sample = f64;
     fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
-        let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
-        vec![getnow]
+        let getnow = runtime_fn::gen_getnowfn(self.count.clone());
+
+        let getsamplerate = runtime_fn::gen_getsampleratefn(self.sr.0.clone());
+        vec![getnow, getsamplerate]
     }
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
@@ -218,7 +221,7 @@ impl Driver for NativeDriver {
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
-            let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
+            let mut iconfig = Self::init_iconfig(&idevice, sample_rate.clone());
             iconfig.buffer_size = BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
@@ -339,8 +342,8 @@ impl Driver for NativeDriver {
         self.is_playing
     }
 
-    fn get_samplerate(&self) -> crate::driver::SampleRate {
-        self.sr
+    fn get_samplerate(&self) -> u32 {
+        self.sr.get()
     }
 
     fn get_current_sample(&self) -> Time {

@@ -116,6 +116,9 @@ fn eval_literal(e: &ast::Literal) -> Value {
         ast::Literal::Now => {
             panic!("now literal should not be shown in evaluation stage.")
         }
+        ast::Literal::SampleRate => {
+            panic!("samplerate literal should not be shown in evaluation stage.")
+        }
         ast::Literal::PlaceHolder => {
             panic!("_ literal should not be shown in evaluation stage.")
         }

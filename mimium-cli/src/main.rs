@@ -232,7 +232,7 @@ fn run_file(
                 eprintln!("Press Enter to exit");
                 let _size = stdin().read_line(&mut dummy).expect("stdin read error.");
             }));
-            driver.init(ctx, Some(SampleRate(48000)));
+            driver.init(ctx, Some(SampleRate::from(48000)));
             driver.play();
             mainloop()
         }
