@@ -67,7 +67,9 @@ impl Driver for LocalBufferDriver {
 
     fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
         let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
-        vec![getnow]
+        let getsamplerate = crate::runtime_fn::gen_getsampleratefn(self.samplerate.0.clone());
+
+        vec![getnow, getsamplerate]
     }
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
