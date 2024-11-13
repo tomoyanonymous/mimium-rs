@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 // pub mod wcalculus;
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::csv_driver;
+use mimium_audiodriver::backends::local_buffer::LocalBufferDriver;
 use mimium_audiodriver::driver::{load_default_runtime, Driver, SampleRate};
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
@@ -217,14 +218,18 @@ fn run_file(
             println!("{mir}");
         }
         RunMode::EmitByteCode => {
+            // need to prepare dummy audio plugin to link `now` and `samplerate`
+            let localdriver = LocalBufferDriver::new(0);
+            let plug = localdriver.get_as_plugin();
+            ctx.add_plugin(plug);
             ctx.prepare_machine(content)?;
             println!("{}", ctx.vm.unwrap().prog);
         }
         _ => {
-            ctx.prepare_machine(content)?;
             let mut driver = options.get_driver();
             let audiodriver_plug = driver.get_as_plugin();
             ctx.add_plugin(audiodriver_plug);
+            ctx.prepare_machine(content)?;
             let _res = ctx.run_main();
             let mainloop = ctx.try_get_main_loop().unwrap_or(Box::new(|| {
                 //wait until input something
