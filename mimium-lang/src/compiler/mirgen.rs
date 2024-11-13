@@ -315,7 +315,10 @@ impl Context {
             Literal::SampleRate => {
                 let ftype = numeric!();
                 let fntype = function!(vec![], ftype);
-                let samplerate = Arc::new(Value::ExtFunction("_mimium_getsamplerate".to_symbol(), fntype));
+                let samplerate = Arc::new(Value::ExtFunction(
+                    "_mimium_getsamplerate".to_symbol(),
+                    fntype,
+                ));
                 self.push_inst(Instruction::CallCls(samplerate, vec![], ftype))
             }
             Literal::SelfLit | Literal::PlaceHolder => unreachable!(),
@@ -639,15 +642,13 @@ impl Context {
             }
             Expr::Feed(id, expr) => {
                 //set typesize lazily
+                let statesize = StateSize { size: 1, ty };
                 let res = self.push_inst(Instruction::GetState(ty));
-                self.get_ctxdata()
-                    .cur_state_pos
-                    .push(StateSize { size: 1, ty });
+                self.get_ctxdata().cur_state_pos.push(statesize);
                 self.add_bind((*id, res.clone()));
+                self.get_ctxdata().next_state_offset = Some(vec![statesize]);
                 let (retv, _t) = self.eval_expr(*expr)?;
-                self.get_current_fn()
-                    .state_sizes
-                    .push(StateSize { size: 1, ty });
+                self.get_current_fn().state_sizes.push(statesize);
                 Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
