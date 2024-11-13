@@ -21,17 +21,17 @@ fn probelnf(machine: &mut Machine) -> ReturnCode {
     1
 }
 fn min(machine: &mut Machine) -> ReturnCode {
-    let lhs = machine.get_stack(0);
-    let rhs = machine.get_stack(1);
-
-    machine.set_stack(0, super::Machine::to_value(lhs.min(rhs)));
+    let lhs = super::Machine::get_as::<f64>(machine.get_stack(0));
+    let rhs = super::Machine::get_as::<f64>(machine.get_stack(1));
+    let res = lhs.min(rhs);
+    machine.set_stack(0, super::Machine::to_value(res));
     1
 }
 fn max(machine: &mut Machine) -> ReturnCode {
-    let lhs = machine.get_stack(0);
-    let rhs = machine.get_stack(1);
-
-    machine.set_stack(0, super::Machine::to_value(lhs.max(rhs)));
+    let lhs = super::Machine::get_as::<f64>(machine.get_stack(0));
+    let rhs = super::Machine::get_as::<f64>(machine.get_stack(1));
+    let res = lhs.max(rhs);
+    machine.set_stack(0, super::Machine::to_value(res));
     1
 }
 

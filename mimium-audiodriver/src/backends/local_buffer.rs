@@ -29,7 +29,7 @@ impl Default for LocalBufferDriver {
         Self {
             vmdata: None,
             count,
-            samplerate: SampleRate(48000),
+            samplerate: SampleRate::from(48000),
             localbuffer: vec![],
             times: 0,
             _ichannels: 0,
@@ -45,7 +45,7 @@ impl LocalBufferDriver {
         Self {
             vmdata: None,
             count,
-            samplerate: SampleRate(48000),
+            samplerate: SampleRate::from(48000),
             localbuffer: vec![],
             times,
             _ichannels: 0,
@@ -67,7 +67,9 @@ impl Driver for LocalBufferDriver {
 
     fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
         let getnow = crate::runtime_fn::gen_getnowfn(self.count.clone());
-        vec![getnow]
+        let getsamplerate = crate::runtime_fn::gen_getsampleratefn(self.samplerate.0.clone());
+
+        vec![getnow, getsamplerate]
     }
 
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
@@ -79,7 +81,7 @@ impl Driver for LocalBufferDriver {
         let (_, dsp_func) = &vm.prog.global_fn_table[dsp_i];
         self.ochannels = dsp_func.nret as u64;
         self.localbuffer = Vec::with_capacity(dsp_func.nret * self.times);
-        self.samplerate = sample_rate.unwrap_or(SampleRate(48000));
+        self.samplerate = sample_rate.unwrap_or(SampleRate::from(48000));
 
         self.vmdata = Some(RuntimeData::new(vm, ctx.sys_plugins));
 
@@ -108,8 +110,8 @@ impl Driver for LocalBufferDriver {
         false
     }
 
-    fn get_samplerate(&self) -> SampleRate {
-        self.samplerate
+    fn get_samplerate(&self) -> u32 {
+        self.samplerate.get()
     }
 
     fn get_current_sample(&self) -> Time {

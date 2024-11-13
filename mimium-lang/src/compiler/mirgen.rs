@@ -312,6 +312,12 @@ impl Context {
                 let getnow = Arc::new(Value::ExtFunction("_mimium_getnow".to_symbol(), fntype));
                 self.push_inst(Instruction::CallCls(getnow, vec![], ftype))
             }
+            Literal::SampleRate => {
+                let ftype = numeric!();
+                let fntype = function!(vec![], ftype);
+                let samplerate = Arc::new(Value::ExtFunction("_mimium_getsamplerate".to_symbol(), fntype));
+                self.push_inst(Instruction::CallCls(samplerate, vec![], ftype))
+            }
             Literal::SelfLit | Literal::PlaceHolder => unreachable!(),
         };
         Ok(v)

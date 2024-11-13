@@ -48,7 +48,7 @@ fn getnow_test() {
     let p: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
     let mut ctx = ExecContext::new([p].into_iter(), None);
     ctx.prepare_machine_with_bytecode(prog);
-    driver.init(ctx, Some(SampleRate(48000)));
+    driver.init(ctx, Some(SampleRate::from(48000)));
     driver.play();
 
     let res = driver.get_generated_samples();

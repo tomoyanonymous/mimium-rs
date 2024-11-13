@@ -429,10 +429,9 @@ impl InferContext {
     }
     pub(crate) fn infer_type_literal(e: &Literal) -> Result<TypeNodeId, Error> {
         let pt = match e {
-            Literal::Float(_s) => PType::Numeric,
+            Literal::Float(_) | Literal::Now | Literal::SampleRate => PType::Numeric,
             Literal::Int(_s) => PType::Int,
             Literal::String(_s) => PType::String,
-            Literal::Now => PType::Numeric,
             Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
             Literal::PlaceHolder => panic!("\"_\" should not be shown at type inference stage"),
         };

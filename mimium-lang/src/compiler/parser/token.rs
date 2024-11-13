@@ -52,7 +52,7 @@ pub enum Token {
     Op(Op),
     SelfLit,
     Now,
-
+    SampleRate,
     Comma,
     Dot,
 
@@ -157,6 +157,7 @@ impl fmt::Display for Token {
             Token::Op(x) => write!(f, "{}", x),
             Token::SelfLit => write!(f, "self"),
             Token::Now => write!(f, "now"),
+            Token::SampleRate => write!(f, "samplerate"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
             Token::Colon => write!(f, ":"),
