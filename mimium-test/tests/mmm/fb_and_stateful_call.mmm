@@ -1,0 +1,10 @@
+fn counter(){
+    self+1.0
+}
+fn testcounter(){
+    counter()+self
+}
+
+fn dsp(){
+    testcounter()
+}

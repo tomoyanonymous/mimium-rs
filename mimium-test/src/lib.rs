@@ -64,6 +64,7 @@ pub fn run_source_with_plugins(
         ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
     }
     ctx.prepare_machine(src).unwrap();
+    let _ = ctx.run_main();
     driver.init(ctx, None);
     driver.play();
     Ok(driver.get_generated_samples().to_vec())
