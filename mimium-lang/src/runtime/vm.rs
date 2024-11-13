@@ -498,7 +498,7 @@ impl Machine {
         let nret = action(self);
 
         if nret_req > nret as u8 {
-            panic!("invalid number of return value required.");
+            panic!("invalid number of return value {nret_req} required but accepts only {nret}.");
         }
         // shrink stack so as to match with number of return values
         self.stack

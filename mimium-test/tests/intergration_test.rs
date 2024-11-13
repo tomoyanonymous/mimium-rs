@@ -303,6 +303,15 @@ fn fb_mem3_state_size() {
 }
 
 #[test]
+fn fb_and_stateful_call(){
+    let res = run_file_test_mono("fb_and_stateful_call.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 1.0, 3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn delay() {
     let res = run_file_test_mono("delay.mmm", 10).unwrap();
     let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0];
