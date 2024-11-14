@@ -23,6 +23,13 @@ use runtime::vm::{
 };
 use utils::error::ReportableError;
 
+#[cfg(feature = "mimalloc")]
+use mimalloc::MiMalloc;
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
 pub struct ExecContext {
