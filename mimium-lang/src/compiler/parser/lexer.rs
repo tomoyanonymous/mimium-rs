@@ -8,16 +8,21 @@ fn comment_parser() -> impl Parser<char, Comment, Error = Simple<char>> + Clone 
     // comment parser that keep its contents length, not to break line number for debugging.
     // replaces all characters except for newline.
     let single_line = (just("//"))
-        .ignore_then(take_until(text::newline().ignored()))
+        .ignore_then(take_until(text::newline()))
         .map(|(c, _)| Comment::SingleLine(String::from_iter(c.iter())));
 
     let multi_line = just("/*")
-        .ignore_then(take_until(just("*/").ignored()))
+        .ignore_then(take_until(just("*/")))
         .map(|(c, _)| Comment::MultiLine(String::from_iter(c.iter())));
 
     single_line.or(multi_line)
 }
-
+fn linebreak_parser() -> impl Parser<char, Token, Error = Simple<char>> + Clone {
+    text::newline()
+        .repeated()
+        .at_least(1)
+        .map(|_s| Token::LineBreak)
+}
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // A parser for numbers
     let int = text::int(10).map(|s: String| Token::Int(s.parse().unwrap()));
@@ -34,11 +39,17 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .collect::<String>()
         .map(Token::Str);
 
-    // A parser for operators
+    // A parser for operators, we must disallow // or /* */, not to mixed with comment parser.
+    // let op_special = just("*")
+    //     .repeated()
+    //     .at_least(1)
+    //     .or(just("/").repeated().at_most(1));
+    // //     .collect::<String>();
+
     let op = one_of("+-*/!=&|%><^@")
         .repeated()
         .at_least(1)
-        .collect::<String>()
+        .collect()
         .map(|s: String| match s.as_str() {
             "->" => Token::Arrow,
             "|" => Token::LambdaArgBeginEnd,
@@ -103,35 +114,28 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         ']' => Token::ArrayEnd,
         _ => Token::Ident(c.to_string().to_symbol()),
     });
-    let linebreak = text::newline()
-        .map(|_| '\n')
-        // .or(just::<_, _, Simple<char>>(';'))
-        .repeated()
-        .at_least(1)
-        .map(|_s| Token::LineBreak);
-    // A single token can be one of the above
-    let token = comment_parser()
-        .map(Token::Comment)
-        .or(float)
-        .or(int)
-        .or(str_)
-        // .or(ctrl)
-        .or(macro_expand)
-        .or(separator)
-        .or(ident)
-        .or(op)
-        .or(parens)
-        .or(linebreak)
-        .recover_with(skip_then_retry_until([]));
 
-    let whitespaces = one_of(" \t\u{0020}").repeated();
+    // A single token can be one of the above
+    let token = choice((
+        float,
+        int,
+        str_,
+        macro_expand,
+        separator,
+        ident,
+        op,
+        parens,
+        linebreak_parser(),
+    ))
+    .recover_with(skip_then_retry_until([]));
+
+    let whitespaces = one_of(" \t\u{0020}").repeated().ignored();
 
     token
         .map_with_span(|tok, span| (tok, span))
-        // .padded_by(comment_parser().repeated())
+        .padded_by(comment_parser().repeated())
         .padded_by(whitespaces)
         .repeated()
-        .then_ignore(end())
 }
 
 #[cfg(test)]
@@ -157,8 +161,16 @@ mod test {
             panic!()
         }
     }
+
     #[test]
     fn comment() {
+        let test_parser = comment_parser()
+            .map(Token::Comment)
+            .or(text::ident().map(|s: String| Token::Ident(s.to_symbol())))
+            .or(linebreak_parser())
+            .map_with_span(|t, s| (t, s))
+            .padded_by(just(" ").repeated())
+            .repeated();
         let src = "test
 //comment start
 conrains src
@@ -167,7 +179,7 @@ here */
 another line
 ";
         let ans = vec![
-            (Token::Ident("test".to_symbol()), 0..4),
+            (Token::Ident("test".to_symbol()), 0usize..4),
             (Token::LineBreak, 4..5),
             (
                 Token::Comment(Comment::SingleLine("comment start".into())),
@@ -185,7 +197,8 @@ another line
             (Token::Ident("line".to_symbol()), 70..74),
             (Token::LineBreak, 74..75),
         ];
-        let (res, errs) = lexer().parse_recovery(src);
+
+        let (res, errs) = test_parser.parse_recovery(src);
         assert!(errs.is_empty());
         assert!(res.is_some());
         assert_eq!(ans, res.unwrap());

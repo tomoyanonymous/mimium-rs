@@ -57,7 +57,7 @@ pub fn run_source_with_plugins(
     let mut driver = LocalBufferDriver::new(times as _);
     let audiodriverplug: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
     let mut ctx = ExecContext::new(
-        plugins.chain([audiodriverplug].into_iter()),
+        plugins.chain([audiodriverplug]),
         path.map(|s| s.to_symbol()),
     );
     if with_scheduler {
