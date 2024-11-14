@@ -10,7 +10,7 @@ use chumsky::{prelude::*, Parser};
 // use chumsky::Parser;
 mod token;
 use resolve_include::resolve_include;
-use token::{Comment, Op, Token};
+use token::{Op, Token};
 mod error;
 mod lexer;
 mod resolve_include;
@@ -399,10 +399,7 @@ fn exprgroup_parser<'a>() -> ExprParser<'a> {
             .or(expr.clone())
     })
 }
-fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
-    select! {Token::Comment(Comment::SingleLine(_t))=>(),
-    Token::Comment(Comment::MultiLine(_t))=>()}
-}
+
 fn gen_unknown_function_type(
     ids: &[TypedId],
     r_type: Option<TypeNodeId>,
@@ -523,8 +520,8 @@ fn preprocess_parser(
 fn parser(
     current_file: Option<PathBuf>,
 ) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let ignored = comment_parser()
-        .or(just(Token::LineBreak).ignored())
+    let ignored = just(Token::LineBreak)
+        .ignored()
         .or(just(Token::SemiColon).ignored());
     func_parser(current_file)
         .padded_by(ignored.repeated())

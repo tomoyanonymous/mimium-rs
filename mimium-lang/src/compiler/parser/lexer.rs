@@ -1,3 +1,5 @@
+use std::io::BufRead;
+
 use super::token::*;
 use super::ToSymbol;
 use crate::utils::metadata::*;
@@ -105,31 +107,28 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     });
     let linebreak = text::newline()
         .map(|_| '\n')
-        // .or(just::<_, _, Simple<char>>(';'))
         .repeated()
         .at_least(1)
         .map(|_s| Token::LineBreak);
     // A single token can be one of the above
-    let token = comment_parser()
-        .map(Token::Comment)
-        .or(float)
-        .or(int)
-        .or(str_)
-        // .or(ctrl)
-        .or(macro_expand)
-        .or(separator)
-        .or(ident)
-        .or(op)
-        .or(parens)
-        .or(linebreak)
-        .recover_with(skip_then_retry_until([]));
+    let token = choice((
+        float,
+        int,
+        str_,
+        macro_expand,
+        separator,
+        ident,
+        op,
+        parens,
+        linebreak,
+    ))
+    .recover_with(skip_then_retry_until([]));
 
-    let whitespaces = one_of(" \t\u{0020}").repeated();
+    let whitespaces = one_of(" \t\u{0020}").repeated().ignored();
 
     token
         .map_with_span(|tok, span| (tok, span))
-        // .padded_by(comment_parser().repeated())
-        .padded_by(whitespaces)
+        .padded_by(whitespaces.or(comment_parser().ignored()))
         .repeated()
         .then_ignore(end())
 }
