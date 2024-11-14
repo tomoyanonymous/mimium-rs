@@ -4,6 +4,8 @@ version.workspace = true
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
+description = "mimium(minimal-musical-medium) an infrastructural programming language for sound and music."
+
 
 [features]
 default = ["mimalloc"]
