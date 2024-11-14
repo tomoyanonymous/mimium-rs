@@ -1,9 +1,9 @@
 [package]
 name = "mimium-cli"
-version = "2.0.0-alpha-1"
-license = "MPL 2.0"
-edition = "2021"
-repository = "https://github.com/tomoyanonymous/mimium-rs/"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
@@ -13,10 +13,10 @@ repository = "https://github.com/tomoyanonymous/mimium-rs/"
 
 clap = { version = "4.5.7", features = ["derive"] }
 
-mimium-lang = { path = "../mimium-lang" }
-mimium-audiodriver = { path = "../mimium-audiodriver" }
-mimium-midi = { path = "../mimium-midi" }
-mimium-symphonia = { path = "../mimium-symphonia" }
-mimium-scheduler = { path = "../mimium-scheduler" }
-mimium-guitools = { path = "../mimium-guitools" }
+mimium-lang = { path = "../mimium-lang", version = "2.0.0-alpha-1" }
+mimium-audiodriver = { path = "../mimium-audiodriver", version = "2.0.0-alpha-1" }
+mimium-midi = { path = "../mimium-midi", version = "2.0.0-alpha-1" }
+mimium-symphonia = { path = "../mimium-symphonia", version = "2.0.0-alpha-1" }
+mimium-scheduler = { path = "../mimium-scheduler", version = "2.0.0-alpha-1" }
+mimium-guitools = { path = "../mimium-guitools", version = "2.0.0-alpha-1" }
 colog = "1.3.0"
