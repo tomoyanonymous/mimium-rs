@@ -1,8 +1,9 @@
 [package]
 name = "mimium-symphonia"
-version = "2.0.0-alpha-1"
-license = "MPL 2.0"
-edition = "2021"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
 build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,8 +12,8 @@ build = "build.rs"
 
 [dependencies]
 
-mimium-lang = { path = "../mimium-lang" }
+mimium-lang = { workspace = true }
 symphonia = "0.5.4"
 
 [dev-dependencies]
-mimium-test = { path = "../mimium-test" }
+mimium-test = { workspace = true }

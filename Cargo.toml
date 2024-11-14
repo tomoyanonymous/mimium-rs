@@ -19,6 +19,15 @@ license = "MPL 2.0"
 version = "2.0.0-alpha-1"
 repository = "https://github.com/tomoyanonymous/mimium-rs/"
 
+[workspace.dependencies]
+mimium-cli = { path = "mimium-cli", version = "2.0.0-alpha-1" }
+mimium-lang = { path = "mimium-lang", version = "2.0.0-alpha-1" }
+mimium-audiodriver = { path = "mimium-audiodriver", version = "2.0.0-alpha-1" }
+mimium-midi = { path = "mimium-midi", version = "2.0.0-alpha-1" }
+mimium-symphonia = { path = "mimium-symphonia", version = "2.0.0-alpha-1" }
+mimium-scheduler = { path = "mimium-scheduler", version = "2.0.0-alpha-1" }
+mimium-guitools = { path = "mimium-guitools", version = "2.0.0-alpha-1" }
+mimium-test = { path = "mimium-test", version = "2.0.0-alpha-1" }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
