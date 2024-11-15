@@ -4,7 +4,7 @@ version.workspace = true
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
-description = "basic scheduler implementation as a plugin"
+description = "basic scheduler implementation as a plugin for mimium"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
