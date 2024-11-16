@@ -1,8 +1,10 @@
 [package]
 name = "mimium-audiodriver"
-version = "2.0.0-alpha-1"
-license = "MPL 2.0"
-edition = "2021"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "audio driver plugin for mimium"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
@@ -12,4 +14,4 @@ edition = "2021"
 cpal = "0.15.3"
 num-traits = "0.2.19"
 ringbuf = "0.4.1"
-mimium-lang = {path = "../mimium-lang"}
+mimium-lang = { workspace = true }

@@ -67,13 +67,17 @@ This repository is for a mimium *version 2*, all the code base is rewritten in R
 
 TODO
 
+## Development
+
+See [Development](./Development) section.
+
 ## Contributing
 
 There's no concrete way for contributing to the mimium project for now but any type of contribution (bugfix, code refactoring, documentation, showing the usecases, etc).
 
 (However, because the mimium is still early stage of the development and there's much things to do, the proposal or request for new feature without Pull Request will not be accepted.)
 
-Take a look at [Code of Conduct] before you make contribution.
+Take a look at [Code of Conduct](./CODE_OF_CONDUCT) before you make contribution.
 
 ## [License](LICENSE)
 
