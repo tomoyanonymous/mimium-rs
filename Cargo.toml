@@ -28,7 +28,7 @@ mimium-midi = { path = "mimium-midi", version = "2.0.0-alpha-1" }
 mimium-symphonia = { path = "mimium-symphonia", version = "2.0.0-alpha-1" }
 mimium-scheduler = { path = "mimium-scheduler", version = "2.0.0-alpha-1" }
 mimium-guitools = { path = "mimium-guitools", version = "2.0.0-alpha-1" }
-mimium-test = { path = "mimium-test", version = "2.0.0-alpha-1" }
+mimium-test = { path = "mimium-test" }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
