@@ -11,6 +11,7 @@ use crate::{
     unit,
     utils::{environment::Environment, metadata::Span},
 };
+use itertools::Itertools;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PValue {
@@ -106,14 +107,17 @@ const EXTERN_SYMS: [&str; 28] = [
 
 fn eval_literal(e: &ast::Literal) -> Value {
     match e {
-        ast::Literal::String(s) => Value::String(s.clone()),
+        ast::Literal::String(s) => Value::String(s.to_string()),
         ast::Literal::Int(i) => Value::Primitive(PValue::Integer(i.clone())),
-        ast::Literal::Float(f) => Value::Primitive(PValue::Numeric(f.parse().unwrap())),
+        ast::Literal::Float(f) => Value::Primitive(PValue::Numeric(f.as_str().parse().unwrap())),
         ast::Literal::SelfLit => {
             panic!("self literal should not be shown in evaluation stage.")
         }
         ast::Literal::Now => {
             panic!("now literal should not be shown in evaluation stage.")
+        }
+        ast::Literal::SampleRate => {
+            panic!("samplerate literal should not be shown in evaluation stage.")
         }
         ast::Literal::PlaceHolder => {
             panic!("_ literal should not be shown in evaluation stage.")
@@ -158,91 +162,93 @@ fn eval_with_new_env(
     res
 }
 
-pub fn eval_extern(n: Symbol, argv: &Vec<Value>, span: Span) -> Result<Value, CompileError> {
-    use builtin_fn::get_builtin_fns;
+fn find_matched_builtin_fn(n: Symbol, tv: &[TypeNodeId]) -> Option<(Type, *const ())> {
+    builtin_fn::get_builtin_fns()
+        .iter()
+        .find_map(|(name, ty, ptr)| {
+            let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty.to_type() {
+                (tv.eq(&tv2), rt.to_type())
+            } else {
+                return None;
+            };
+            if n == name.to_symbol() && ty_same {
+                Some((rt, *ptr))
+            } else {
+                None
+            }
+        })
+}
+
+pub fn eval_extern(n: Symbol, argv: &[Value], span: Span) -> Result<Value, CompileError> {
     let tv = argv.iter().map(|v| v.get_type_id()).collect::<Vec<_>>();
 
-    // TODO: clean up code later
-    if let Some((rt, ptr)) = get_builtin_fns().iter().find_map(|(name, ty, ptr)| {
-        let (ty_same, rt) = if let Type::Function(tv2, rt, _) = ty.to_type() {
-            (tv.eq(&tv2), rt.to_type())
-        } else {
-            return None;
-        };
-        if n == name.to_symbol() && ty_same {
-            Some((rt, ptr))
-        } else {
-            None
-        }
-    }) {
-        match argv.len() {
-            1 => {
-                let v = argv.get(0).unwrap();
-                match (rt, v) {
-                    //f64 -> f64
-                    (Type::Primitive(PType::Numeric), Value::Primitive(PValue::Numeric(fv)))
-                        if v.get_type() == Type::Primitive(PType::Numeric) =>
-                    {
-                        let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> f64>(*ptr) };
-                        Ok(Value::Primitive(PValue::Numeric(f(*fv))))
-                    }
-                    //i64 -> i64
-                    (Type::Primitive(PType::Int), Value::Primitive(PValue::Integer(iv)))
-                        if v.get_type() == Type::Primitive(PType::Int) =>
-                    {
-                        let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> i64>(*ptr) };
-                        Ok(Value::Primitive(PValue::Integer(f(*iv))))
-                    }
-                    //f64 -> ()
-                    (Type::Primitive(PType::Unit), Value::Primitive(PValue::Numeric(fv)))
-                        if v.get_type() == Type::Primitive(PType::Numeric) =>
-                    {
-                        let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> ()>(*ptr) };
-                        f(*fv);
-                        Ok(Value::Primitive(PValue::Unit))
-                    }
-                    //i64 -> ()
-                    (Type::Primitive(PType::Unit), Value::Primitive(PValue::Integer(fv)))
-                        if v.get_type() == Type::Primitive(PType::Int) =>
-                    {
-                        let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> ()>(*ptr) };
-                        f(*fv);
-                        Ok(Value::Primitive(PValue::Unit))
-                    }
-                    _ => Err(CompileError(ErrorKind::NotApplicable, span)),
+    let (rt, ptr) = match find_matched_builtin_fn(n, &tv) {
+        Some(x) => x,
+        None => return Err(CompileError(ErrorKind::NotApplicable, span)),
+    };
+    match argv.len() {
+        1 => {
+            let v = &argv[0];
+            match (rt, v) {
+                //f64 -> f64
+                (Type::Primitive(PType::Numeric), Value::Primitive(PValue::Numeric(fv)))
+                    if v.get_type() == Type::Primitive(PType::Numeric) =>
+                {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> f64>(ptr) };
+                    Ok(Value::Primitive(PValue::Numeric(f(*fv))))
                 }
-            }
-            2 => {
-                let v1 = argv.get(0).unwrap();
-                let v2 = argv.get(1).unwrap();
-                match (rt, v1, v2) {
-                    // (f64,f64)->f64
-                    (
-                        Type::Primitive(PType::Numeric),
-                        Value::Primitive(PValue::Numeric(fv1)),
-                        Value::Primitive(PValue::Numeric(fv2)),
-                    ) => {
-                        let f =
-                            unsafe { std::mem::transmute::<*const (), fn(f64, f64) -> f64>(*ptr) };
-                        Ok(Value::Primitive(PValue::Numeric(f(*fv1, *fv2))))
-                    }
-                    // (i64,i64)->i64
-                    (
-                        Type::Primitive(PType::Numeric),
-                        Value::Primitive(PValue::Integer(iv1)),
-                        Value::Primitive(PValue::Integer(iv2)),
-                    ) => {
-                        let f =
-                            unsafe { std::mem::transmute::<*const (), fn(i64, i64) -> i64>(*ptr) };
-                        Ok(Value::Primitive(PValue::Integer(f(*iv1, *iv2))))
-                    }
-                    _ => Err(CompileError(ErrorKind::NotApplicable, span)),
+                //i64 -> i64
+                (Type::Primitive(PType::Int), Value::Primitive(PValue::Integer(iv)))
+                    if v.get_type() == Type::Primitive(PType::Int) =>
+                {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> i64>(ptr) };
+                    Ok(Value::Primitive(PValue::Integer(f(*iv))))
                 }
+                //f64 -> ()
+                (Type::Primitive(PType::Unit), Value::Primitive(PValue::Numeric(fv)))
+                    if v.get_type() == Type::Primitive(PType::Numeric) =>
+                {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(f64) -> ()>(ptr) };
+                    f(*fv);
+                    Ok(Value::Primitive(PValue::Unit))
+                }
+                //i64 -> ()
+                (Type::Primitive(PType::Unit), Value::Primitive(PValue::Integer(fv)))
+                    if v.get_type() == Type::Primitive(PType::Int) =>
+                {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(i64) -> ()>(ptr) };
+                    f(*fv);
+                    Ok(Value::Primitive(PValue::Unit))
+                }
+                _ => Err(CompileError(ErrorKind::NotApplicable, span)),
             }
-            _ => Err(CompileError(ErrorKind::NotApplicable, span)),
         }
-    } else {
-        Err(CompileError(ErrorKind::NotApplicable, span))
+        2 => {
+            let v1 = &argv[0];
+            let v2 = &argv[1];
+            match (rt, v1, v2) {
+                // (f64,f64)->f64
+                (
+                    Type::Primitive(PType::Numeric),
+                    Value::Primitive(PValue::Numeric(fv1)),
+                    Value::Primitive(PValue::Numeric(fv2)),
+                ) => {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(f64, f64) -> f64>(ptr) };
+                    Ok(Value::Primitive(PValue::Numeric(f(*fv1, *fv2))))
+                }
+                // (i64,i64)->i64
+                (
+                    Type::Primitive(PType::Numeric),
+                    Value::Primitive(PValue::Integer(iv1)),
+                    Value::Primitive(PValue::Integer(iv2)),
+                ) => {
+                    let f = unsafe { std::mem::transmute::<*const (), fn(i64, i64) -> i64>(ptr) };
+                    Ok(Value::Primitive(PValue::Integer(f(*iv1, *iv2))))
+                }
+                _ => Err(CompileError(ErrorKind::NotApplicable, span)),
+            }
+        }
+        _ => Err(CompileError(ErrorKind::NotApplicable, span)),
     }
 }
 

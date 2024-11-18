@@ -1,0 +1,6 @@
+fn counter(){
+    self+1
+}
+fn dsp(){
+    delay(10,counter(),5)
+}

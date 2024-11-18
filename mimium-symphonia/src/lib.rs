@@ -1,8 +1,11 @@
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use mimium_lang::interner::TypeNodeId;
+use mimium_lang::interner::ToSymbol;
+use mimium_lang::plugin::Plugin;
 use mimium_lang::runtime::vm::{self, ExtFunType, Machine, ReturnCode};
 use mimium_lang::types::{PType, Type};
+use mimium_lang::utils::fileloader;
 use mimium_lang::{function, numeric, string_t};
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{CodecParameters, Decoder, DecoderOptions, CODEC_TYPE_NULL};
@@ -105,7 +108,7 @@ fn interpolate_vec(vec: &[f64], pos: f64) -> f64 {
     let pos_u = pos.floor() as usize;
     //todo: efficient boundary check
     match pos_u {
-        _ if pos >= 0.0 && ((pos_u + 1) as usize) < bound => {
+        _ if pos >= 0.0 && (pos_u + 1) < bound => {
             let frac = pos.fract();
             let frac_rem = 1.0 - frac;
             vec[pos_u] * frac_rem + vec[pos_u + 1] * frac
@@ -119,17 +122,20 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
     //return higher order closure
 
     let relpath = machine.prog.strings[vm::Machine::get_as::<usize>(machine.get_stack(0))];
-    let relpath2 = std::path::Path::new(relpath.as_str());
-    let filepath = machine
+
+    let mmmfilepath = machine
         .prog
         .file_path
         .map_or_else(|| "".to_string(), |s| s.to_string());
-    let mmm_dirpath = std::path::Path::new(filepath.as_str()).parent().unwrap();
-    let abspath = mmm_dirpath.join(relpath2).canonicalize().unwrap();
-
-    let vec = load_wavfile_to_vec(&abspath.to_string_lossy())
+    let abspath = fileloader::get_canonical_path(&mmmfilepath, relpath.as_str())
         .inspect_err(|e| {
-            panic!("gen_sampler_mono error: {}", e.to_string());
+            panic!("{}", e);
+        })
+        .unwrap();
+
+    let vec = load_wavfile_to_vec(abspath.to_str().unwrap())
+        .inspect_err(|e| {
+            panic!("gen_sampler_mono error: {}", e);
         })
         .unwrap(); //the generated vector is moved into the closure
 
@@ -141,12 +147,25 @@ fn gen_sampler_mono(machine: &mut Machine) -> ReturnCode {
         1
     };
     let ty = function!(vec![numeric!()], numeric!());
-    let idx = machine.wrap_extern_cls(("sampler_mono", Arc::new(res), ty));
+    let idx = machine.wrap_extern_cls(("sampler_mono".to_symbol(), Rc::new(RefCell::new(res)), ty));
     machine.set_stack(0, Machine::to_value(idx));
     1
 }
 
-pub fn get_signature() -> (&'static str, ExtFunType, TypeNodeId) {
-    let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
-    ("gen_sampler_mono", gen_sampler_mono, t)
+pub struct SamplerPlugin;
+
+impl Plugin for SamplerPlugin {
+    fn get_ext_functions(&self) -> Vec<vm::ExtFnInfo> {
+        let t = function!(vec![string_t!()], function!(vec![numeric!()], numeric!()));
+        let sig = (
+            "gen_sampler_mono".to_symbol(),
+            gen_sampler_mono as ExtFunType,
+            t,
+        );
+        vec![sig]
+    }
+
+    fn get_ext_closures(&self) -> Vec<vm::ExtClsInfo> {
+        vec![]
+    }
 }

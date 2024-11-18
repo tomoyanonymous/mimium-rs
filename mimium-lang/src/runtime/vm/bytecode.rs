@@ -1,59 +1,63 @@
-use crate::types::TypeSize;
+use crate::{types::TypeSize, utils::half_float::HFloat};
 
 pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u8;
 pub type Offset = i16;
 
+/// Instructions for bytecode. Currently, each instructon has the 64 bit size(Tag, up to 3 bytes arguments.)
 #[derive(Debug, Clone, Copy, PartialEq)]
-// #[repr(C)]
 pub enum Instruction {
-    // Destination / Source
+    /// Move Single Value, Destination, Source
     Move(Reg, Reg),
+    /// Load Single Value from Constants. Destination, Source
     MoveConst(Reg, ConstPos),
-    // Move the range of registers (e.g. tuple)
+    /// Load Immediate float from half precision. Destination, Value
+    MoveImmF(Reg,HFloat),
+    // Move the range of registers (e.g. tuple) Destination, Source, Wordsize
     MoveRange(Reg, Reg, TypeSize),
-    // call internal function
-    // Function Address,Nargs,Word Size of Return Value
+    /// Call to internal function
+    /// Function Address,Nargs,Word Size of Return Value
     Call(Reg, u8, TypeSize),
     //call internal closure
     CallCls(Reg, u8, TypeSize),
-    // external function
-    // Function Address,Nargs,Nret
+    /// Call external rust functions or closure,
+    /// Currently, The execution branches into the invocation of a raw function item(function pointer), or Rust Closure depending on the information on the VM.
+    /// Previously there was another operation `CallExtCls` for Rust Closure Invocation separately but keeping distinction between raw function pointer and closure at the type checking and program generation stage, makes compiler's design complex thus it was removed.
+    /// The distincion may also be resolved statically at linking time.
+    /// Function Address,Nargs,Nret
     CallExtFun(Reg, u8, TypeSize),
-    //call rust closure
-    // Function Address,Nargs,Nret
-    CallExtCls(Reg, u8, TypeSize),
-    // destination, index of inner function prototype in global function table.
+    /// Create new closure. Destination, index of inner function prototype in global function table.
     Closure(Reg, Reg),
-    // register of the closure to be closed. other local closures will be released with this instruction.
+    /// register of the closure to be closed. other local closures will be released with this instruction.
     Close(Reg),
-    //destination,source, size
+    /// destination,source, size
     GetUpValue(Reg, Reg, TypeSize),
     SetUpValue(Reg, Reg, TypeSize),
 
-    //destination,source
+    /// destination,source
     GetGlobal(Reg, GlobalPos, TypeSize),
     SetGlobal(GlobalPos, Reg, TypeSize),
-    //call internal state over time, destination,source
+    /// Call internal state over time, destination,source
     GetState(Reg, TypeSize),
     SetState(Reg, TypeSize),
     ShiftStatePos(Offset),
 
-    // Close(), // currently not implemented as it is not required unless loop/break is used
+    /// Return from current function without return value.
     Return0,
-    // value start position, Nrets
+    /// value start position, Nrets
     Return(Reg, TypeSize),
     //dst,src,time,idx
     Delay(Reg, Reg, Reg),
     Mem(Reg, Reg),
 
-    //jump label
+    /// jump to instruction over the offset.
     Jmp(Offset),
+    /// jump to instruction over the offset if the value in the first argument was negative.
     JmpIfNeg(Reg, Offset),
 
-    // Primitive Operations.
-    // Destination, Src1, Src2
+    /// Primitive Operations.
+    /// Destination, Src1, Src2
     AddF(Reg, Reg, Reg),
     SubF(Reg, Reg, Reg),
     MulF(Reg, Reg, Reg),
@@ -105,6 +109,7 @@ impl std::fmt::Display for Instruction {
             Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
+            Instruction::MoveImmF(dst,v)=> write!(f, "{:<10} {} {}", "movimmF", dst, v),
             Instruction::MoveRange(dst, src, n) => {
                 write!(
                     f,
@@ -164,10 +169,6 @@ impl std::fmt::Display for Instruction {
             Instruction::CallExtFun(func, nargs, nret_req) => {
                 write!(f, "{:<10} {} {} {}", "callext", func, nargs, nret_req)
             }
-            Instruction::CallExtCls(func, nargs, nret_req) => {
-                write!(f, "{:<10} {} {} {}", "callextcls", func, nargs, nret_req)
-            }
-
             Instruction::LogI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "logi", dst, lhs, rhs),
             Instruction::PowI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "powi", dst, lhs, rhs),
             Instruction::AddF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "addf", dst, lhs, rhs),

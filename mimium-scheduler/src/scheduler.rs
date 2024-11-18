@@ -1,12 +1,6 @@
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::{cmp::Reverse, collections::BinaryHeap};
 
-use crate::interner::{Symbol, ToSymbol};
-
-use super::vm::{self, ClosureIdx, ExtFunType, ReturnCode};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Time(pub u64);
+use mimium_lang::runtime::{vm::ClosureIdx, Time};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Task {
@@ -23,7 +17,7 @@ impl Ord for Task {
         self.when.cmp(&other.when)
     }
 }
-pub trait Scheduler {
+pub trait SchedulerInterface {
     fn new() -> Self
     where
         Self: Sized;
@@ -38,7 +32,7 @@ pub struct SyncScheduler {
     cur_time: Time,
 }
 
-impl Scheduler for SyncScheduler {
+impl SchedulerInterface for SyncScheduler {
     fn new() -> Self {
         Self {
             tasks: Default::default(),
@@ -73,8 +67,8 @@ impl Scheduler for SyncScheduler {
 }
 
 #[derive(Clone)]
-pub(crate) struct DummyScheduler;
-impl Scheduler for DummyScheduler {
+pub struct DummyScheduler;
+impl SchedulerInterface for DummyScheduler {
     fn new() -> Self
     where
         Self: Sized,
@@ -82,11 +76,11 @@ impl Scheduler for DummyScheduler {
         Self
     }
 
-    fn schedule_at(&mut self, time: Time, task: ClosureIdx) {
+    fn schedule_at(&mut self, _time: Time, _task: ClosureIdx) {
         // do nothing
     }
 
-    fn pop_task(&mut self, now: Time) -> Option<ClosureIdx> {
+    fn pop_task(&mut self, _now: Time) -> Option<ClosureIdx> {
         // do nothing
         None
     }
@@ -94,14 +88,4 @@ impl Scheduler for DummyScheduler {
     fn set_cur_time(&mut self, _time: Time) {
         // do nothing
     }
-}
-
-pub(crate) fn mimium_schedule_at(machine: &mut vm::Machine) -> ReturnCode {
-    let time = Time(vm::Machine::get_as::<f64>(machine.get_stack(0)) as u64);
-    let clsid = vm::Machine::get_as::<ClosureIdx>(machine.get_stack(1));
-    machine.scheduler.schedule_at(time, clsid);
-    0
-}
-pub fn gen_schedule_at() -> (Symbol, ExtFunType) {
-    ("_mimium_schedule_at".to_symbol(), mimium_schedule_at)
 }

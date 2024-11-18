@@ -14,7 +14,9 @@ fn fbdelay(input,time,fb,mix){
 }
 
 fn dsp(){
-    let sig = amosc(1000.0,1.0)
+      let f = phasor(1.0)*3000.0+50.0
+
+    let sig = amosc(f,1.0)
     fbdelay(sig,40000.0,0.9,0.5)
 }
 

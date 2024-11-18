@@ -1,0 +1,21 @@
+let RANDMAX	= 2147483647.0
+	
+fn gen_rand(seed){
+     (self*48271.0) % (2.0^31.0 -1.0)+seed
+}
+fn gen_noise(seed){
+    gen_rand(seed)/RANDMAX
+}
+
+fn noise(){
+    gen_noise(27642.0)
+}
+fn noise2(){
+    gen_noise(12345.0)
+}
+
+fn dsp(){
+    let l = noise()*2.0-1.0
+    let r = noise2()*2.0-1.0
+    (l,r)
+}

@@ -66,6 +66,8 @@ impl ReportableError for Error {
     }
 }
 
+use std::path::PathBuf;
+
 use mirgen::recursecheck;
 
 use crate::{
@@ -76,25 +78,50 @@ use crate::{
     types::Type,
     utils::{error::ReportableError, metadata::Span},
 };
-pub fn emit_ast(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
+pub fn emit_ast(
+    src: &str,
+    filepath: Option<Symbol>,
+) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+    let ast = parser::parse(src, filepath.map(|sym| PathBuf::from(sym.to_string())))
+        .map(|ast| parser::add_global_context(ast))?;
     Ok(recursecheck::convert_recurse(ast))
+}
+#[derive(Clone, Copy)]
+pub struct ExtFunTypeInfo {
+    pub name: Symbol,
+    pub ty: TypeNodeId,
 }
 
 pub struct Context {
-    builtin_fns: Vec<(Symbol, TypeNodeId)>,
+    ext_fns: Vec<ExtFunTypeInfo>,
     file_path: Option<Symbol>,
 }
 impl Context {
-    pub fn new(builtin_fns: &[(Symbol, TypeNodeId)], file_path: Option<Symbol>) -> Self {
+    pub fn new(
+        ext_fns: impl IntoIterator<Item = ExtFunTypeInfo>,
+        file_path: Option<Symbol>,
+    ) -> Self {
         Self {
-            builtin_fns: builtin_fns.to_vec(),
+            ext_fns: ext_fns.into_iter().collect(),
+
             file_path,
         }
     }
+    fn get_ext_typeinfos(&self) -> Vec<(Symbol, TypeNodeId)> {
+        self.ext_fns
+            .clone()
+            .into_iter()
+            .map(|ExtFunTypeInfo { name, ty }| (name, ty))
+            .collect()
+    }
     pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
-        let ast = parser::parse(src).map(|ast| parser::add_global_context(ast))?;
-        mirgen::compile(ast, &self.builtin_fns, self.file_path).map_err(|e| {
+        let ast = parser::parse(
+            src,
+            self.file_path.map(|sym| PathBuf::from(sym.to_string())),
+        )
+        .map(|ast| parser::add_global_context(ast))?;
+
+        mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path).map_err(|e| {
             let bres = e as Box<dyn ReportableError>;
             vec![bres]
         })
@@ -109,7 +136,7 @@ pub fn interpret_top(
     content: String,
     global_ctx: &mut ast_interpreter::Context,
 ) -> Result<ast_interpreter::Value, Vec<Box<dyn ReportableError>>> {
-    let ast = emit_ast(&content)?;
+    let ast = emit_ast(&content,None)?;
     ast_interpreter::eval_ast(ast, global_ctx).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         vec![eb]

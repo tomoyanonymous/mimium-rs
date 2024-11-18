@@ -1,8 +1,6 @@
-mod common;
-use std::path::Path;
-
-use common::*;
 use mimium_lang::utils::error::report;
+use mimium_test::*;
+use std::path::Path;
 
 fn run_simple_test(expr: &str, expect: f64, times: u64) {
     let src = format!(
@@ -120,6 +118,13 @@ fn primitive_sin() {
 fn ifblock() {
     let res = run_file_test_mono("if.mmm", 1).unwrap();
     let ans = vec![4120.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn nested_ifblock() {
+    let res = run_file_test_mono("nested_if.mmm", 1).unwrap();
+    let ans = vec![119.0];
     assert_eq!(res, ans);
 }
 
@@ -295,4 +300,43 @@ fn fb_mem3_state_size() {
         "fb_mem3.mmm",
         [("counter", 1), ("mem_by_hand", 4), ("dsp", 5)],
     );
+}
+
+#[test]
+fn fb_and_stateful_call(){
+    let res = run_file_test_mono("fb_and_stateful_call.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 1.0, 3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn delay() {
+    let res = run_file_test_mono("delay.mmm", 10).unwrap();
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
+#[test]
+fn delay2() {
+    let res = run_file_test_mono("delay2.mmm", 10).unwrap();
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn include_file() {
+    let res = run_file_test_mono("test_include.mmm", 10).unwrap();
+    let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+    assert_eq!(res, ans);
+}
+
+#[test]
+fn if_state() {
+    let res = run_file_test_stereo("if_state.mmm", 10).unwrap();
+    let ans = vec![
+        0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0, 0.0, 6.0, 0.0, 7.0, 0.0, 8.0, 0.0,
+        9.0, 0.0,
+    ];
+    assert_eq!(res, ans);
 }

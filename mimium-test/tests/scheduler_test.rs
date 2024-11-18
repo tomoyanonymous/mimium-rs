@@ -1,9 +1,6 @@
-mod common;
-use common::*;
-use mimium_audiodriver::{
-    backends::local_buffer::LocalBufferDriver, driver::Driver, runtime_fn::gen_getnowfn,
-};
-use mimium_lang::{compiler, ExecContext};
+use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};
+use mimium_lang::{plugin::Plugin, ExecContext};
+use mimium_test::*;
 
 #[test]
 fn scheduler_global_recursion() {
@@ -40,12 +37,13 @@ fn scheduler_counter_indirect() {
 }
 
 fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
-    let mut driver = LocalBufferDriver::new(2);
-    let getnowfn = gen_getnowfn(driver.count.clone());
-
-    let mut ctx = ExecContext::new(&[], &[getnowfn],None);
-    let vm = ctx.prepare_machine(&src);
-    driver.init(vm, None);
+    let mut driver = LocalBufferDriver::new(times);
+    let driverplug: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
+    let mut ctx = ExecContext::new([driverplug].into_iter(), None);
+    ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    let _ = ctx.prepare_machine(&src);
+    let _ = ctx.run_main();
+    driver.init(ctx, None);
     driver
 }
 //check if the number of closure does not change over times.

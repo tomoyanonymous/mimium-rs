@@ -2,10 +2,10 @@ use crate::ast::{Expr, Literal};
 use crate::compiler::intrinsics;
 use crate::interner::{ExprKey, ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
-use crate::runtime::vm::builtin;
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, integer, numeric, unit};
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -120,7 +120,7 @@ impl InferContext {
             intrinsics::MULT,
             intrinsics::DIV,
             intrinsics::MODULO,
-            intrinsics::EXP,
+            intrinsics::POW,
             intrinsics::GT,
             intrinsics::LT,
             intrinsics::GE,
@@ -138,15 +138,9 @@ impl InferContext {
             intrinsics::SQRT,
         ];
 
-        let mut binds = binop_names
-            .iter()
-            .map(|n| (n.to_symbol(), binop_ty))
-            .collect::<Vec<(Symbol, TypeNodeId)>>();
-        uniop_names
-            .iter()
-            .map(|n| (n.to_symbol(), uniop_ty))
-            .collect_into(&mut binds);
-        binds.extend_from_slice(&[
+        let binds = binop_names.iter().map(|n| (n.to_symbol(), binop_ty));
+        let unibinds = uniop_names.iter().map(|n| (n.to_symbol(), uniop_ty));
+        [
             (
                 intrinsics::DELAY.to_symbol(),
                 function!(vec![numeric!(), numeric!(), numeric!()], numeric!()),
@@ -155,9 +149,11 @@ impl InferContext {
                 intrinsics::TOFLOAT.to_symbol(),
                 function!(vec![integer!()], numeric!()),
             ),
-        ]);
-
-        binds
+        ]
+        .into_iter()
+        .chain(binds)
+        .chain(unibinds)
+        .collect()
     }
     fn gen_intermediate_type(&mut self) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
@@ -277,7 +273,7 @@ impl InferContext {
                 .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
                 .try_collect()
         };
-        log::debug!("unify {} and {}", t1.to_type(), t2.to_type());
+        log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
@@ -413,7 +409,7 @@ impl InferContext {
                         };
                         self.bind_pattern(ity, &p, span.clone())
                     })
-                    .try_collect::<Vec<_>>()?;
+                    .try_collect()?;
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
@@ -433,10 +429,9 @@ impl InferContext {
     }
     pub(crate) fn infer_type_literal(e: &Literal) -> Result<TypeNodeId, Error> {
         let pt = match e {
-            Literal::Float(_s) => PType::Numeric,
+            Literal::Float(_) | Literal::Now | Literal::SampleRate => PType::Numeric,
             Literal::Int(_s) => PType::Int,
             Literal::String(_s) => PType::String,
-            Literal::Now => PType::Numeric,
             Literal::SelfLit => panic!("\"self\" should not be shown at type inference stage"),
             Literal::PlaceHolder => panic!("\"_\" should not be shown at type inference stage"),
         };
@@ -586,7 +581,7 @@ impl InferContext {
                     self.infer_type(e)
                 })?;
                 let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
-                log::debug!("then: {}, else: {}", thent.to_type(), elset.to_type());
+                log::trace!("then: {}, else: {}", thent.to_type(), elset.to_type());
                 Self::unify_types(thent, elset, else_span)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
@@ -606,7 +601,10 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(e: ExprNodeId,builtin_types:&[(Symbol,TypeNodeId)]) -> Result<InferContext, Error> {
+pub fn infer_root(
+    e: ExprNodeId,
+    builtin_types: &[(Symbol, TypeNodeId)],
+) -> Result<InferContext, Error> {
     let mut ctx = InferContext::new(builtin_types);
     let _ = ctx.infer_type(e)?;
     ctx.substitute_all_intermediates();

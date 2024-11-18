@@ -1,9 +1,5 @@
 //! Main module of compiler and runtime for **mimium**, an infrastructural programming language for sound and music.
 
-#![feature(iterator_try_collect)]
-#![feature(iter_collect_into)]
-#![feature(if_let_guard)]
-
 pub mod ast;
 pub mod interner;
 pub mod mir;
@@ -14,56 +10,122 @@ pub mod utils;
 pub mod compiler;
 pub mod runtime;
 
-/// A set of compilr and external functions (plugins).
-/// From this information, user can generate VM with [`Self::prepare_machine`].
+pub mod plugin;
 
-pub struct ExecContext {
-    pub compiler: compiler::Context,
-    // pub vm: Option<runtime::vm::Machine>,
-    pub extfuns: Vec<ExtFnInfo>,
-    pub extcls: Vec<ExtClsInfo>,
-    //pub plugins: Vec<Plugin>
-}
-
-use interner::{Symbol, ToSymbol};
-use runtime::{
-    scheduler::{Scheduler, SyncScheduler},
-    vm::{self, ExtClsInfo, ExtFnInfo},
+use compiler::ExtFunTypeInfo;
+use interner::Symbol;
+pub use log;
+use plugin::{to_ext_cls_info, DynSystemPlugin, Plugin, SystemPlugin};
+use runtime::vm::{
+    self,
+    builtin::{get_builtin_fn_types, get_builtin_fns},
+    ExtClsInfo, Program, ReturnCode,
 };
+use utils::error::ReportableError;
+
+#[cfg(feature = "mimalloc")]
+use mimalloc::MiMalloc;
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+
+/// A set of compiler and external functions (plugins).
+/// From this information, user can generate VM with [`Self::prepare_machine`].
+pub struct ExecContext {
+    pub compiler: Option<compiler::Context>,
+    pub vm: Option<runtime::vm::Machine>,
+    pub plugins: Vec<Box<dyn Plugin>>,
+    pub sys_plugins: Vec<DynSystemPlugin>,
+    path: Option<Symbol>,
+    extclsinfos_reserve: Vec<ExtClsInfo>,
+    extfuntypes: Vec<ExtFunTypeInfo>,
+}
 impl ExecContext {
     //The Argument will be changed to the plugins, when the plugin system is introduced
-    pub fn new(
-        additional_extfuns: &[ExtFnInfo],
-        extcls: &[ExtClsInfo],
-        file_path: Option<Symbol>,
-    ) -> Self {
-        let mut extfuns = runtime::vm::builtin::get_builtin_fns().to_vec();
-        extfuns.append(&mut additional_extfuns.to_vec());
-        let mut extfuntypes = extfuns
-            .iter()
-            .map(|(name, _, ty)| (name.to_symbol(), *ty))
+    pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, path: Option<Symbol>) -> Self {
+        let plugins = plugins.collect::<Vec<_>>();
+        let extfuntypes = plugin::get_extfun_types(&plugins)
+            .chain(get_builtin_fn_types().into_iter())
             .collect::<Vec<_>>();
-        let mut extclstypes = extcls
-            .iter()
-            .map(|(name, _, ty)| (name.to_symbol(), *ty))
-            .collect::<Vec<_>>();
-        extfuntypes.append(&mut extclstypes);
-        let compiler = compiler::Context::new(&extfuntypes, file_path);
 
+        let sys_plugins = vec![];
         Self {
-            compiler,
-            extfuns,
-            extcls: extcls.to_vec(),
+            compiler: None,
+            vm: None,
+            plugins,
+            sys_plugins,
+            path,
+            extclsinfos_reserve: vec![],
+            extfuntypes,
         }
     }
-    pub fn prepare_machine(&mut self, src: &str) -> vm::Machine {
-        let prog = self.compiler.emit_bytecode(src).unwrap();
-        vm::Machine::new(
-            Some(Box::new(SyncScheduler::new())),
+    pub fn add_plugin<T: Plugin + 'static>(&mut self, plug: T) {
+        self.plugins.push(Box::new(plug))
+    }
+    //todo: make it to builder pattern
+    pub fn add_system_plugin<T: SystemPlugin + 'static>(&mut self, plug: T) {
+        let (plugin_dyn, sysplug_info) = to_ext_cls_info(plug);
+        let sysplug_typeinfo = sysplug_info
+            .iter()
+            .cloned()
+            .map(|(name, _, ty)| ExtFunTypeInfo { name, ty });
+        self.extfuntypes.extend(sysplug_typeinfo);
+        self.extclsinfos_reserve.extend(sysplug_info);
+        self.sys_plugins.push(plugin_dyn)
+    }
+    pub fn prepare_compiler(&mut self) {
+        self.compiler = Some(compiler::Context::new(self.extfuntypes.clone(), self.path));
+    }
+    pub fn prepare_machine(&mut self, src: &str) -> Result<(), Vec<Box<dyn ReportableError>>> {
+        if self.compiler.is_none() {
+            self.prepare_compiler();
+        }
+
+        let prog = self.compiler.as_ref().unwrap().emit_bytecode(src)?;
+        self.prepare_machine_with_bytecode(prog);
+        Ok(())
+    }
+    pub fn prepare_machine_with_bytecode(&mut self, prog: Program) {
+        self.extclsinfos_reserve
+            .extend(plugin::get_extclsinfos(&self.plugins));
+        let extfninfos =
+            plugin::get_extfuninfos(&self.plugins).chain(get_builtin_fns().into_iter());
+        let vm = vm::Machine::new(
             prog,
-            &self.extfuns,
-            &self.extcls,
-        )
+            extfninfos,
+            self.extclsinfos_reserve.clone().into_iter(),
+        );
+        self.vm = Some(vm);
+    }
+    pub fn try_get_main_loop(&mut self) -> Option<Box<dyn FnOnce()>> {
+        let mut mainloops = self.sys_plugins.iter_mut().filter_map(|p| {
+            let p = unsafe { p.0.get().as_mut().unwrap_unchecked() };
+            p.try_get_main_loop()
+        });
+        let res = mainloops.next();
+        if mainloops.next().is_some() {
+            log::warn!("more than 2 main loops in system plugins found")
+        }
+        res
+    }
+    pub fn run_main(&mut self) -> ReturnCode {
+        if let Some(mut vm) = self.vm.as_mut() {
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.on_init(&mut vm);
+            });
+            let res = vm.execute_main();
+            self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
+                //todo: encapsulate unsafety within SystemPlugin functionality
+                let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
+                let _ = p.after_main(vm);
+            });
+            res
+        } else {
+            0
+        }
     }
 }
 

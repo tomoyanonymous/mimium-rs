@@ -4,6 +4,7 @@ use crate::pattern::TypedId;
 use crate::types::Type;
 use crate::utils::{error::ReportableError, metadata::Span};
 use std::fmt;
+use itertools::Itertools;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {

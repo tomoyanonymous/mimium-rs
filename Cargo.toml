@@ -4,34 +4,33 @@ members = [
     "mimium-lang",
     "mimium-audiodriver",
     "mimium-cli",
-    "mimium-symphonia"
+    "mimium-test",
+    "mimium-scheduler",
+    "mimium-symphonia",
+    "mimium-midi",
+    "mimium-guitools",
 ]
 
 resolver = "2"
 
-# Config for 'cargo dist'
-[workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.0"
-# CI backends to support
-ci = "github"
-# The installers to generate for each app
-installers = []
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = [
-    "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-    "x86_64-pc-windows-msvc",
-]
+[workspace.package]
+edition = "2021"
+license = "MPL-2.0"
+version = "2.0.0-alpha-1"
+repository = "https://github.com/tomoyanonymous/mimium-rs/"
+readme = "Readme.md"
+
+[workspace.dependencies]
+mimium-cli = { path = "mimium-cli", version = "2.0.0-alpha-1" }
+mimium-lang = { path = "mimium-lang", version = "2.0.0-alpha-1" }
+mimium-audiodriver = { path = "mimium-audiodriver", version = "2.0.0-alpha-1" }
+mimium-midi = { path = "mimium-midi", version = "2.0.0-alpha-1" }
+mimium-symphonia = { path = "mimium-symphonia", version = "2.0.0-alpha-1" }
+mimium-scheduler = { path = "mimium-scheduler", version = "2.0.0-alpha-1" }
+mimium-guitools = { path = "mimium-guitools", version = "2.0.0-alpha-1" }
+mimium-test = { path = "mimium-test" }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
 lto = "thin"
-
-[workspace.metadata.dist.dependencies.apt]
-libasound2-dev = "*"
-
-[workspace.metadata.dist.github-custom-runners]
-x86_64-unknown-linux-gnu = "ubuntu-latest"

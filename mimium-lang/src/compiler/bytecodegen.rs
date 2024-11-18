@@ -6,7 +6,7 @@ use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self};
 use crate::types::{PType, Type, TypeSize};
-use crate::utils::error::ReportableError;
+use crate::utils::{error::ReportableError,half_float::HFloat};
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
@@ -248,16 +248,16 @@ impl ByteCodeGenerator {
                 self.program.ext_fun_table.len() - 1
             }) as ConstPos
     }
-    fn get_or_insert_extclsid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
-        self.program
-            .ext_cls_table
-            .iter()
-            .position(|(name, _ty)| *name == label)
-            .unwrap_or_else(|| {
-                self.program.ext_cls_table.push((label, ty));
-                self.program.ext_cls_table.len() - 1
-            }) as ConstPos
-    }
+    // fn get_or_insert_extclsid(&mut self, label: Symbol, ty: TypeNodeId) -> ConstPos {
+    //     self.program
+    //         .ext_cls_table
+    //         .iter()
+    //         .position(|(name, _ty)| *name == label)
+    //         .unwrap_or_else(|| {
+    //             self.program.ext_cls_table.push((label, ty));
+    //             self.program.ext_cls_table.len() - 1
+    //         }) as ConstPos
+    // }
     fn prepare_extfun_or_cls(
         &mut self,
         funcproto: &mut vm::FuncProto,
@@ -287,18 +287,18 @@ impl ByteCodeGenerator {
         let idx = self.get_or_insert_extfunid(label, ty);
         self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
     }
-    fn prepare_extcls(
-        &mut self,
-        funcproto: &mut vm::FuncProto,
-        bytecodes_dst: Option<&mut Vec<VmInstruction>>,
-        dst: Arc<mir::Value>,
-        args: &[(Arc<mir::Value>, TypeNodeId)],
-        label: Symbol,
-        ty: TypeNodeId,
-    ) -> (Reg, Reg, TypeSize) {
-        let idx = self.get_or_insert_extclsid(label, ty);
-        self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
-    }
+    // fn prepare_extcls(
+    //     &mut self,
+    //     funcproto: &mut vm::FuncProto,
+    //     bytecodes_dst: Option<&mut Vec<VmInstruction>>,
+    //     dst: Arc<mir::Value>,
+    //     args: &[(Arc<mir::Value>, TypeNodeId)],
+    //     label: Symbol,
+    //     ty: TypeNodeId,
+    // ) -> (Reg, Reg, TypeSize) {
+    //     let idx = self.get_or_insert_extclsid(label, ty);
+    //     self.prepare_extfun_or_cls(funcproto, bytecodes_dst, dst, args, idx, ty)
+    // }
     fn emit_instruction(
         &mut self,
         funcproto: &mut vm::FuncProto,
@@ -324,17 +324,20 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::Float(n) => {
-                let pos = funcproto.add_new_constant(gen_raw_float(n));
-                Some(VmInstruction::MoveConst(
-                    self.get_destination(dst, 1),
-                    pos as ConstPos,
-                ))
+                let dst = self.get_destination(dst, 1);
+                if let Ok(half_f) = HFloat::try_from(*n){
+                    Some(VmInstruction::MoveImmF(dst, half_f))
+                } else {
+                    let pos = funcproto.add_new_constant(gen_raw_float(n));
+                    Some(VmInstruction::MoveConst(dst, pos as ConstPos))
+                }
             }
             mir::Instruction::String(s) => {
                 let pos = self.program.add_new_str(*s);
+                let cpos = funcproto.add_new_constant(pos as u64);
                 Some(VmInstruction::MoveConst(
                     self.get_destination(dst, 1),
-                    pos as ConstPos,
+                    cpos as ConstPos,
                 ))
             }
             mir::Instruction::Alloc(t) => {
@@ -418,7 +421,7 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(label, ty) => {
+                    mir::Value::ExtFunction(label, _ty) => {
                         //todo: use btreemap
                         let (dst, argsize, nret) =
                             self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
@@ -447,10 +450,10 @@ impl ByteCodeGenerator {
                     mir::Value::Function(_idx) => {
                         unreachable!();
                     }
-                    mir::Value::ExtFunction(label, ty) => {
+                    mir::Value::ExtFunction(label, _ty) => {
                         let (dst, argsize, nret) =
-                            self.prepare_extcls(funcproto, bytecodes_dst, dst, args, *label, *ty);
-                        Some(VmInstruction::CallExtCls(dst, argsize, nret))
+                            self.prepare_extfun(funcproto, bytecodes_dst, dst, args, *label, *r_ty);
+                        Some(VmInstruction::CallExtFun(dst, argsize, nret))
                     }
                     _ => unreachable!(),
                 }
@@ -532,8 +535,12 @@ impl ByteCodeGenerator {
                 Some(VmInstruction::GetState(d, size))
             }
 
-            mir::Instruction::JmpIf(cond, tbb, ebb) => {
+            mir::Instruction::JmpIf(cond, tbb, ebb, pbb) => {
                 let c = self.find(cond);
+
+                // TODO: to allow &mut match, but there should be nicer way...
+                let mut bytecodes_dst = bytecodes_dst;
+
                 let mut then_bytecodes: Vec<VmInstruction> = vec![];
                 let mut else_bytecodes: Vec<VmInstruction> = vec![];
                 mirfunc.body[*tbb as usize]
@@ -551,7 +558,6 @@ impl ByteCodeGenerator {
                             then_bytecodes.push(inst);
                         }
                     });
-                let else_offset = then_bytecodes.len() + 3; //add offset to jmp inst and loading phi
 
                 mirfunc.body[*ebb as usize]
                     .0
@@ -568,7 +574,7 @@ impl ByteCodeGenerator {
                             else_bytecodes.push(inst);
                         };
                     });
-                let phiblock = &mirfunc.body[(*ebb + 1) as usize].0;
+                let phiblock = &mirfunc.body[*pbb as usize].0;
                 let (phidst, pinst) = phiblock.first().unwrap();
                 let phi = self.vregister.add_newvalue(phidst);
                 if let mir::Instruction::Phi(t, e) = pinst {
@@ -577,23 +583,35 @@ impl ByteCodeGenerator {
                     let e = self.find(e);
                     else_bytecodes.push(VmInstruction::Move(phi, e));
                 } else {
-                    unreachable!();
+                    unreachable!("Unexpected inst: {pinst:?}");
                 }
-                funcproto
-                    .bytecodes
-                    .push(VmInstruction::JmpIfNeg(c, else_offset as i16));
+                let else_offset = then_bytecodes.len() + 2; // +1 for Jmp, which will be added later
+                let inst = VmInstruction::JmpIfNeg(c, else_offset as _);
+                match &mut bytecodes_dst {
+                    Some(dst) => dst.push(inst),
+                    None => funcproto.bytecodes.push(inst),
+                }
 
+                // bytes between the bottom of then block and phi
                 let ret_offset = else_bytecodes.len() + 1;
 
                 then_bytecodes.push(VmInstruction::Jmp(ret_offset as i16));
 
-                funcproto.bytecodes.append(&mut then_bytecodes);
-                funcproto.bytecodes.append(&mut else_bytecodes);
+                for mut b in [then_bytecodes, else_bytecodes] {
+                    match &mut bytecodes_dst {
+                        Some(dst) => dst.append(&mut b),
+                        None => funcproto.bytecodes.append(&mut b),
+                    }
+                }
+
                 phiblock.iter().skip(1).for_each(|(dst, p_inst)| {
                     if let Some(inst) =
                         self.emit_instruction(funcproto, None, fidx, mirfunc, dst.clone(), p_inst)
                     {
-                        funcproto.bytecodes.push(inst);
+                        match &mut bytecodes_dst {
+                            Some(dst) => dst.push(inst),
+                            None => funcproto.bytecodes.push(inst),
+                        }
                     };
                 });
                 None
@@ -761,7 +779,7 @@ fn remove_redundunt_mov(program: vm::Program) -> vm::Program {
     res
 }
 fn optimize(program: vm::Program) -> vm::Program {
-    // remove_redundunt_mov(program)
+    // remove_redundunt_mov(program);
     program
 }
 pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {

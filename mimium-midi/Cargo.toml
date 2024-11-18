@@ -1,0 +1,22 @@
+[package]
+name = "mimium-midi"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "midi input plugin for mimium using midir."
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# [lib]
+
+
+[dependencies]
+atomic_float = "1.1.0"
+midir = "0.10.0"
+
+mimium-lang = { workspace = true }
+wmidi = "4.0.10"
+
+[dev-dependencies]
+mimium-test = { workspace = true }

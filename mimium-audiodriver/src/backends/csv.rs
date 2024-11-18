@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use mimium_lang::runtime::vm;
+use mimium_lang::{runtime::vm, ExecContext};
 
 use crate::driver::Driver;
 
@@ -16,7 +16,14 @@ pub struct CsvDriver {
 }
 
 impl CsvDriver {
-    pub fn new(times: usize, csv_file: Box<dyn Write>) -> Self {
+    pub fn new<P: AsRef<Path>>(times: usize, path: &Option<P>) -> Self {
+        let csv_file: Box<dyn std::io::Write> = if let Some(path) = path {
+            let csv_file = File::create(path.as_ref()).unwrap();
+            Box::new(BufWriter::new(csv_file))
+        } else {
+            Box::new(BufWriter::new(std::io::stdout()))
+        };
+
         Self {
             driver: LocalBufferDriver::new(times),
             csv_file,
@@ -26,9 +33,12 @@ impl CsvDriver {
 
 impl Driver for CsvDriver {
     type Sample = <LocalBufferDriver as Driver>::Sample;
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        self.driver.get_runtimefn_infos()
+    }
 
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<crate::driver::SampleRate>) -> bool {
-        let res = self.driver.init(vm, sample_rate);
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<crate::driver::SampleRate>) -> bool {
+        let res = self.driver.init(ctx, sample_rate);
 
         let chunk_size = self.driver.get_ochannels();
         let mut header = String::new();
@@ -81,11 +91,11 @@ impl Driver for CsvDriver {
         self.driver.pause()
     }
 
-    fn get_samplerate(&self) -> crate::driver::SampleRate {
+    fn get_samplerate(&self) -> u32 {
         self.driver.get_samplerate()
     }
 
-    fn get_current_sample(&self) -> mimium_lang::runtime::scheduler::Time {
+    fn get_current_sample(&self) -> mimium_lang::runtime::Time {
         self.driver.get_current_sample()
     }
 
@@ -94,13 +104,6 @@ impl Driver for CsvDriver {
     }
 }
 
-pub fn csv_driver<P: AsRef<Path>>(times: usize, path: P) -> Box<dyn Driver<Sample = f64>> {
-    let csv_file_inner = File::create(path.as_ref()).unwrap();
-    let csv_file = Box::new(BufWriter::new(csv_file_inner));
-    Box::new(CsvDriver::new(times, csv_file))
-}
-
-pub fn csv_driver_stdout(times: usize) -> Box<dyn Driver<Sample = f64>> {
-    let csv_file = Box::new(BufWriter::new(std::io::stdout()));
-    Box::new(CsvDriver::new(times, csv_file))
+pub fn csv_driver<P: AsRef<Path>>(times: usize, path: &Option<P>) -> Box<dyn Driver<Sample = f64>> {
+    Box::new(CsvDriver::new(times, path))
 }

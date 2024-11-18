@@ -1,0 +1,3 @@
+fn hoge()->float{
+    self+1.0
+}

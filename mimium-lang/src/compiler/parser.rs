@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::ast::*;
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
@@ -7,12 +9,15 @@ use crate::utils::metadata::*;
 use chumsky::{prelude::*, Parser};
 // use chumsky::Parser;
 mod token;
-use token::{Comment, Op, Token};
+use resolve_include::resolve_include;
+use token::{Op, Token};
 mod error;
 mod lexer;
+mod resolve_include;
 mod statement;
+use statement::{into_then_expr, stmt_from_expr_top, Statement};
 
-use statement::{into_then_expr, Statement};
+use super::intrinsics;
 
 #[cfg(test)]
 mod test;
@@ -54,11 +59,14 @@ fn ident_parser() -> impl Parser<Token, Symbol, Error = Simple<Token>> + Clone {
 }
 fn literals_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     select! {
-        Token::Int(x) => Literal::Int(x),
-        Token::Float(x) =>Literal::Float(x.parse().unwrap()),
-        Token::Str(s) => Literal::String(s),
+        //Currently Integer literals are treated as float until the integer type is introduced in type system.
+        // Token::Int(x) => Literal::Int(x),
+        Token::Int(x)=>Literal::Float(x.to_string().to_symbol()),
+        Token::Float(x) =>Literal::Float(x.to_symbol()),
+        Token::Str(s) => Literal::String(s.to_symbol()),
         Token::SelfLit => Literal::SelfLit,
         Token::Now => Literal::Now,
+        Token::SampleRate => Literal::SampleRate,
         Token::PlaceHolder => Literal::PlaceHolder,
     }
     .map_with_span(|e, s| Expr::Literal(e).into_id(s))
@@ -298,17 +306,45 @@ fn expr_parser(expr_group: ExprParser<'_>) -> ExprParser<'_> {
 //         .labelled("assign");
 //     let_stmt.or(assign)
 // }
+fn validate_reserved_pat(id: &TypedPattern, span: Span) -> Result<(), Simple<Token>> {
+    match &id.pat {
+        Pattern::Single(symbol) => validate_reserved_ident(*symbol, span),
+        _ => Ok(()),
+    }
+}
+
+fn validate_reserved_ident(id: Symbol, span: Span) -> Result<(), Simple<Token>> {
+    if intrinsics::BUILTIN_SYMS.with(|syms| syms.binary_search(&id).is_ok()) {
+        Err(Simple::custom(
+            span,
+            "Builtin functions cannot be re-defined.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn statement_parser(
     expr: ExprParser<'_>,
 ) -> impl Parser<Token, (Statement, Span), Error = Simple<Token>> + Clone + '_ {
     let let_ = just(Token::Let)
-        .ignore_then(pattern_parser().clone())
+        .ignore_then(pattern_parser().clone().validate(|pat, span, emit| {
+            if let Err(e) = validate_reserved_pat(&pat, span.clone()) {
+                emit(e);
+            }
+            pat
+        }))
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::Let(ident, body), span))
         .labelled("let");
     let letrec = just(Token::LetRec)
-        .ignore_then(lvar_parser_typed())
+        .ignore_then(lvar_parser_typed().validate(|ident, span, emit| {
+            if let Err(e) = validate_reserved_ident(ident.id, span.clone()) {
+                emit(e);
+            }
+            ident
+        }))
         .then_ignore(just(Token::Assign))
         .then(expr.clone())
         .map_with_span(|(ident, body), span| (Statement::LetRec(ident, body), span))
@@ -363,10 +399,7 @@ fn exprgroup_parser<'a>() -> ExprParser<'a> {
             .or(expr.clone())
     })
 }
-fn comment_parser() -> impl Parser<Token, (), Error = Simple<Token>> + Clone {
-    select! {Token::Comment(Comment::SingleLine(_t))=>(),
-    Token::Comment(Comment::MultiLine(_t))=>()}
-}
+
 fn gen_unknown_function_type(
     ids: &[TypedId],
     r_type: Option<TypeNodeId>,
@@ -389,7 +422,9 @@ fn gen_unknown_function_type(
     )
     .into_id_with_span(span.clone())
 }
-fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+fn func_parser(
+    current_file: Option<PathBuf>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
     let exprgroup = exprgroup_parser();
     let lvar = lvar_parser_typed();
     let blockstart = just(Token::BlockBegin)
@@ -405,7 +440,12 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
         .labelled("fnparams");
 
     let function_s = just(Token::Function)
-        .ignore_then(lvar.clone())
+        .ignore_then(lvar.clone().validate(|ident, span, emit| {
+            if let Err(e) = validate_reserved_ident(ident.id, span) {
+                emit(e);
+            }
+            ident
+        }))
         .then(fnparams.clone())
         .then(just(Token::Arrow).ignore_then(type_parser()).or_not())
         .then(block_parser(exprgroup.clone()).map(|e| match e.to_expr() {
@@ -446,18 +486,44 @@ fn func_parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clon
     let global_stmt = statement_parser(exprgroup.clone());
     let stmt = function_s.or(macro_s).or(global_stmt);
     let stmts = stmt
+        .map(|s: (Statement, Span)| vec![s])
+        .or(
+            preprocess_parser(current_file.unwrap_or_default()).map_with_span(|e, s| {
+                stmt_from_expr_top(e)
+                    .into_iter()
+                    .map(|st| (st, s.clone()))
+                    .collect()
+            }),
+        )
         .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
         .allow_leading()
         .allow_trailing()
-        .map(|stmts| into_then_expr(&stmts));
+        .flatten()
+        .map(|stmt| into_then_expr(&stmt));
     stmts.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
 }
-
-fn parser() -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
-    let ignored = comment_parser()
-        .or(just(Token::LineBreak).ignored())
+fn preprocess_parser(
+    current_file: PathBuf,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+    just(Token::Include)
+        .ignore_then(
+            select! {Token::Str(s) => s}
+                .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd)),
+        )
+        .try_map(move |filename, span: Span| {
+            let cfile = current_file.to_str().unwrap();
+            resolve_include(cfile, &filename, span.clone()).map_err(|_e| {
+                Simple::<Token>::custom(span, format!("failed to resolve include for {filename}"))
+            })
+        })
+}
+fn parser(
+    current_file: Option<PathBuf>,
+) -> impl Parser<Token, ExprNodeId, Error = Simple<Token>> + Clone {
+    let ignored = just(Token::LineBreak)
+        .ignored()
         .or(just(Token::SemiColon).ignored());
-    func_parser()
+    func_parser(current_file)
         .padded_by(ignored.repeated())
         .then_ignore(end())
 }
@@ -474,7 +540,10 @@ pub(crate) fn add_global_context(ast: ExprNodeId) -> ExprNodeId {
     );
     res.into_id(span.clone())
 }
-pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+pub fn parse(
+    src: &str,
+    current_file: Option<PathBuf>,
+) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let mut errs = Vec::<Box<dyn ReportableError>>::new();
 
@@ -484,11 +553,11 @@ pub fn parse(src: &str) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
         .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
 
     if let Some(t) = tokens {
-        let (ast, parse_errs) =
-            parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
+        let (ast, parse_errs) = parser(current_file)
+            .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
-            Some(ast) => Ok(ast),
-            None => {
+            Some(ast) if parse_errs.is_empty() => Ok(ast),
+            _ => {
                 parse_errs
                     .iter()
                     .for_each(|e| errs.push(Box::new(error::ParseError::<Token>(e.clone()))));

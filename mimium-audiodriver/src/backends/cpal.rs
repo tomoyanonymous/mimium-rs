@@ -1,14 +1,15 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use crate::driver::{Driver, RuntimeData, SampleRate, Time};
+use crate::driver::{Driver, RuntimeData, SampleRate};
+use crate::runtime_fn;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{self, BufferSize, StreamConfig};
-use mimium_lang::interner::ToSymbol;
-use mimium_lang::runtime::vm;
+use mimium_lang::log;
+use mimium_lang::runtime::{vm, Time};
+use mimium_lang::ExecContext;
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
-const BUFFER_RATIO: usize = 2;
 pub struct NativeDriver {
     sr: SampleRate,
     hardware_ichannels: usize,
@@ -22,7 +23,7 @@ pub struct NativeDriver {
 impl NativeDriver {
     pub fn new(buffer_size: usize) -> Self {
         Self {
-            sr: SampleRate(48000),
+            sr: SampleRate::from(48000),
             hardware_ichannels: 1,
             hardware_ochannels: 1,
             is_playing: false,
@@ -55,49 +56,55 @@ struct NativeAudioData {
 unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
-    pub fn new(vm: vm::Machine, buffer: HeapCons<f64>, count: Arc<AtomicU64>) -> Self {
+    pub fn new(
+        ctx: ExecContext,
+        buffer: HeapCons<f64>,
+        count: Arc<AtomicU64>,
+        h_ochannels: usize,
+    ) -> Self {
         //todo: split as trait interface method
-        let (fname, getnow_fn, _type) = crate::runtime_fn::gen_getnowfn(count.clone());
-        let vmdata = RuntimeData::new(vm, &[(fname.to_symbol(), getnow_fn)]);
+        let vm = ctx.vm.expect("vm is not prepared yet");
+        let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
-        let localbuffer: Vec<f64> = vec![0.0f64; 4096];
+        let localbuffer: Vec<f64> = vec![0.0f64; 4096 * h_ochannels];
         Self {
             vmdata,
             dsp_ochannels,
+
             buffer,
             localbuffer,
             count,
         }
     }
     pub fn process(&mut self, dst: &mut [f32], h_ochannels: usize) {
-        // let sample_size = dst.len() / h_ochannels;
-        let local = &mut self.localbuffer.as_mut_slice()[..dst.len()];
+        // let len = dst.len().min(self.localbuffer.len());
+        let len = dst.len();
+
+        let local = &mut self.localbuffer.as_mut_slice()[..len];
         self.buffer.pop_slice(local);
-        for (o, _s) in dst
-            .chunks_mut(h_ochannels)
-            .zip(local.chunks(self.dsp_ochannels))
-        {
+        for (o, _s) in dst.chunks_mut(h_ochannels).zip(local.chunks(h_ochannels)) {
             let _rc = self
                 .vmdata
                 .run_dsp(Time(self.count.load(Ordering::Relaxed)));
             let res =
                 vm::Machine::get_as_array::<f64>(self.vmdata.vm.get_top_n(self.dsp_ochannels));
             self.count.fetch_add(1, Ordering::Relaxed);
+            o.fill(0.0);
             match (h_ochannels, self.dsp_ochannels) {
-                (i1, i2) if i1 == i2 => {
-                    for i in 0..i1 {
-                        o[i] = res[i] as f32;
-                    }
-                }
                 (2, 1) => {
                     o[0] = res[0] as f32;
                     o[1] = res[0] as f32;
                 }
-                (1, 2) => {
-                    o[0] = res[0] as f32;
+                (hout, dspout) if hout >= dspout => {
+                    for i in 0..dspout {
+                        o[i] = res[i] as f32;
+                    }
                 }
-                (_, _) => {
-                    todo!()
+                (hout, _) => {
+                    for i in 0..hout {
+                        //truncate output up to hardware channels
+                        o[i] = res[i] as f32;
+                    }
                 }
             }
         }
@@ -105,16 +112,18 @@ impl NativeAudioData {
 }
 struct NativeAudioReceiver {
     dsp_ichannels: usize,
+    adjusted_ichannels: usize,
     localbuffer: Vec<f64>,
     buffer: HeapProd<f64>,
     count: u64,
 }
 unsafe impl Send for NativeAudioReceiver {}
 impl NativeAudioReceiver {
-    pub fn new(dsp_ichannels: usize, buffer: HeapProd<f64>) -> Self {
+    pub fn new(dsp_ichannels: usize, adjusted_ichannels: usize, buffer: HeapProd<f64>) -> Self {
         Self {
             dsp_ichannels,
-            localbuffer: vec![0f64; 4096],
+            adjusted_ichannels,
+            localbuffer: vec![0f64; 4096 * dsp_ichannels],
             buffer,
             count: 0,
         }
@@ -155,33 +164,36 @@ impl NativeDriver {
             .unwrap()
             .next()
             .expect("no supported config");
-        if let Some(SampleRate(sr)) = sample_rate {
-            config_builder
-                .with_sample_rate(cpal::SampleRate(sr))
-                .config()
-        } else {
-            device
-                .default_input_config()
-                .expect("no default input configs")
-                .config()
-        }
+        sample_rate
+            .and_then(|sr| config_builder.try_with_sample_rate(cpal::SampleRate(sr.get())))
+            .unwrap_or_else(|| {
+                device
+                    .default_input_config()
+                    .expect("no default input configs")
+            })
+            .config()
     }
     fn init_oconfig(device: &cpal::Device, sample_rate: Option<SampleRate>) -> StreamConfig {
-        let config_builder = device
-            .supported_output_configs()
-            .unwrap()
-            .next()
-            .expect("no supported config");
-        if let Some(SampleRate(sr)) = sample_rate {
-            config_builder
-                .with_sample_rate(cpal::SampleRate(sr))
-                .config()
-        } else {
-            device
-                .default_output_config()
-                .expect("no default output configs")
-                .config()
-        }
+        sample_rate
+            .and_then(|sr| {
+                if cfg!(not(target_os = "macos")) {
+                    let config_builder = device
+                        .supported_output_configs()
+                        .unwrap()
+                        .max_by(|x, y| x.cmp_default_heuristics(&y))
+                        .expect("no supported config");
+                    config_builder.try_with_sample_rate(cpal::SampleRate(sr.get()))
+                } else {
+                    // Because the cpal's Device:.supported_output_configs: for CoreAudio is not usable,
+                    // we ignore given samplerate and use default configuration.
+                    // See https://github.com/RustAudio/cpal/pull/96
+                    None
+                }
+            })
+            .map_or_else(
+                || device.default_output_config().unwrap().config(),
+                |builder| builder.config(),
+            )
     }
     fn set_streams(
         &mut self,
@@ -198,22 +210,29 @@ impl NativeDriver {
 }
 impl Driver for NativeDriver {
     type Sample = f64;
+    fn get_runtimefn_infos(&self) -> Vec<vm::ExtClsInfo> {
+        let getnow = runtime_fn::gen_getnowfn(self.count.clone());
+        let getsamplerate = runtime_fn::gen_getsampleratefn(self.sr.0.clone());
+        vec![getnow, getsamplerate]
+    }
 
-    fn init(&mut self, vm: vm::Machine, sample_rate: Option<SampleRate>) -> bool {
+    fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
-        let (prod, cons) = HeapRb::<Self::Sample>::new(self.buffer_size).split();
+        let dsp_ichannels = 1; //todo
+        let adjusted_ichannels = 1; //todo: calculate similarly to adjusted_ochannels
+        let (prod, cons) =
+            HeapRb::<Self::Sample>::new(adjusted_ichannels * self.buffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
-            let mut iconfig = Self::init_iconfig(&idevice, sample_rate);
-            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            let mut iconfig = Self::init_iconfig(&idevice, sample_rate.clone());
+            iconfig.buffer_size = BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
                 "input device: {} buffer size:{:?}",
                 idevice.name().unwrap_or_default(),
                 iconfig.buffer_size
             );
-            let dsp_ichannels = 1; //todo
-            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, prod);
+            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, adjusted_ichannels, prod);
             self.hardware_ichannels = iconfig.channels as usize;
             let h_ichannels = self.hardware_ichannels;
             let in_stream = idevice.build_input_stream(
@@ -233,17 +252,19 @@ impl Driver for NativeDriver {
         let _ = in_stream.as_ref().map(|i| i.pause());
         let odevice = host.default_output_device();
         let out_stream = if let Some(odevice) = odevice {
-            let mut processor = NativeAudioData::new(vm, cons, self.count.clone());
-            processor.vmdata.vm.execute_main();
             let mut oconfig = Self::init_oconfig(&odevice, sample_rate);
-            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size / BUFFER_RATIO) as u32);
+            let h_ochannels = oconfig.channels as usize;
+            self.hardware_ochannels = h_ochannels;
+
+            let mut processor = NativeAudioData::new(ctx, cons, self.count.clone(), h_ochannels);
+            oconfig.buffer_size = cpal::BufferSize::Fixed((self.buffer_size) as u32);
             log::info!(
-                "output device {}buffer size:{:?}",
+                "output device {} buffer size:{:?} channels: {} samplerate {}Hz",
                 odevice.name().unwrap_or_default(),
-                oconfig.buffer_size
+                oconfig.buffer_size,
+                oconfig.channels,
+                oconfig.sample_rate.0
             );
-            self.hardware_ochannels = oconfig.channels as usize;
-            let h_ochannels = self.hardware_ochannels;
             let out_stream = odevice.build_output_stream(
                 &oconfig,
                 move |data: &mut [f32], _s: &cpal::OutputCallbackInfo| {
@@ -325,11 +346,11 @@ impl Driver for NativeDriver {
         self.is_playing
     }
 
-    fn get_samplerate(&self) -> crate::driver::SampleRate {
-        self.sr
+    fn get_samplerate(&self) -> u32 {
+        self.sr.get()
     }
 
-    fn get_current_sample(&self) -> crate::driver::Time {
+    fn get_current_sample(&self) -> Time {
         Time(self.count.load(Ordering::Relaxed))
     }
 }

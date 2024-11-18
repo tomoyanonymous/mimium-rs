@@ -1,5 +1,5 @@
 let pi = 3.14159265359
-let sr = 44100.0
+let sr = 48000.0
 fn phasor(freq){
   (self + freq/sr)%1.0
 }
@@ -8,5 +8,6 @@ fn osc(freq){
 }
 
 fn dsp(){
-  osc(440.0 +osc(0.1)*1000.0)
+  let r = osc(440.0)
+  (r,r)
 }

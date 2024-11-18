@@ -1,0 +1,51 @@
+fn onepole(x, ratio){
+    x*(1.0-ratio) + self*ratio
+}
+
+fn smooth(x){
+    onepole(0.95)
+}
+
+fn gen_hp_coeff(fc,q,fs){
+    let omega = 2.0 * pi* fc / fs
+    let alpha = sin(omega)/(2.0* q)
+    let norm = 1.0 + alpha
+    let a1 = -2.0 * cos(omega) / norm
+    let a2 = (1.0 - alpha)/ norm
+    let btmp = 1.0 + cos(omega)
+    let b0 = btmp / (2.0*norm)
+    let b1 = -btmp / norm
+    let b2 = b0
+    (a1,a2,b0,b1,b2)
+}
+fn gen_lp_coeff(fc,q,fs){
+    let omega = 2.0 * pi* fc / fs
+    let alpha = sin(omega)/(2.0*q)
+    let norm = 1.0 + alpha
+    let a1 = -2.0 * cos(omega) / norm
+    let a2 = (1.0 - alpha)/ norm
+    let btmp = 1.0 - cos(omega)
+    let b0 = btmp / (2.0*norm)
+    let b1 = btmp  / norm
+    let b2 = b0
+    (a1,a2,b0,b1,b2)
+}
+fn _biquad_inner (x,a1,a2){
+    let (ws, wss, _wsss) = self
+    let w = x - a1*ws - a2*wss
+    (w, ws, wss)
+}
+fn biquad(x,coeffs){
+    let (a1,a2,b0,b1,b2) = coeffs;
+	let (w,ws,wss) = _biquad_inner(x,a1,a2);
+	b0*w + b1*ws + b2*wss
+}
+
+fn lowpass(x,fc,q,fs){
+    biquad(x,gen_lp_coeff(fc,q,fs))
+}
+
+fn highpass(x,fc,q,fs){
+    biquad(x,gen_hp_coeff(fc,q,fs))
+}
+

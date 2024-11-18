@@ -1,7 +1,9 @@
-use super::{Instruction, RawVal};
+use super::{ConstPos, Instruction, RawVal};
 use crate::interner::{Symbol, ToSymbol, TypeNodeId};
 use crate::mir;
 pub use mir::OpenUpValue;
+
+/// Function prototype definition in the bytecode program.
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FuncProto {
@@ -10,7 +12,6 @@ pub struct FuncProto {
     pub upindexes: Vec<OpenUpValue>,
     pub bytecodes: Vec<Instruction>,
     pub constants: Vec<RawVal>,
-    // feedvalues are mapped in this vector
     pub state_size: u64,
     pub delay_sizes: Vec<u64>,
 }
@@ -19,26 +20,23 @@ impl FuncProto {
         Self {
             nparam,
             nret,
-            upindexes: vec![],
-            bytecodes: vec![],
-            constants: vec![],
-            state_size: 0,
-            delay_sizes: vec![],
+            ..Default::default()
         }
     }
-    pub fn add_new_constant(&mut self, cval: RawVal) -> usize {
+    /// Adds new constant to the program. Returns index in the array.
+    pub fn add_new_constant(&mut self, cval: RawVal) -> ConstPos {
         self.constants.binary_search(&cval).unwrap_or_else(|_err| {
             self.constants.push(cval);
-            self.constants.len() - 1
-        })
+            self.constants.len() - 1 
+        }) as _
     }
 }
 
+/// Complete bytecode programs.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Program {
     pub global_fn_table: Vec<(Symbol, FuncProto)>,
     pub ext_fun_table: Vec<(Symbol, TypeNodeId)>,
-    pub ext_cls_table: Vec<(Symbol, TypeNodeId)>,
     pub global_vals: Vec<RawVal>,
     pub strings: Vec<Symbol>,
     pub file_path: Option<Symbol>,
@@ -88,7 +86,6 @@ impl std::fmt::Display for Program {
                     format!("{s}, {f}")
                 })
         );
-        let _ = write!(f, "ext_cls:\n{:?}\n", self.ext_cls_table);
         let _ = write!(f, "globals:\n{:?}", self.global_vals);
         write!(
             f,

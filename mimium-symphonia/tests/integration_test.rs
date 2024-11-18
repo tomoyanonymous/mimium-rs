@@ -1,45 +1,37 @@
-use std::path::PathBuf;
+use mimium_lang::plugin::Plugin;
+use mimium_symphonia::SamplerPlugin;
+use mimium_test::*;
 
-use mimium_lang::{
-    interner::{Symbol, ToSymbol},
-    runtime::vm::Machine,
-    utils::fileloader,
-    ExecContext,
-};
-
-//todo: create common utility module for testing over multiple crate to prevent from duplicating code.
-fn load_src(path: &str) -> (PathBuf, String) {
-    let file: PathBuf = [env!("CARGO_MANIFEST_DIR"), "tests/mmm", path]
-        .iter()
-        .collect();
-    println!("{}", file.to_str().unwrap());
-    let (src, _path) = fileloader::load(file.to_string_lossy().to_string()).unwrap();
-    (file, src)
+fn run_file_with_symphonia(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+    let plugins: [Box<dyn Plugin>; 1] = [Box::new(SamplerPlugin)];
+    run_file_with_plugins(path, times, plugins.into_iter(), false)
 }
 
-fn render(path: &str, len: usize) -> Vec<f64> {
-    let (abspath, src) = load_src(path);
-    let mut ctx = ExecContext::new(
-        &[mimium_symphonia::get_signature()],
-        &[],
-        Some(abspath.to_str().unwrap().to_symbol()),
-    );
-    let mut vm = ctx.prepare_machine(&src);
-    let ret = vm.execute_main();
-    assert_eq!(ret, 0);
-    let mut res = vec![0.0f64; len];
-    res.iter_mut().for_each(|r| {
-        let _ = vm.execute_entry(&"dsp".to_symbol());
-        *r = Machine::get_as::<f64>(vm.get_stack(0));
-    });
-    res
-}
+//loadwav reads wave file `count_100_by_0_01_f32_48000Hz.wav` that is sequence of 0, 0.01, 0.02...
 
 #[test]
 fn test_readwav() {
-    let res = render("loadwav.mmm", 101);
-    let res_int = res.iter().map(|f| (*f * 100.0).round() as u32).collect::<Vec<_>>();
-    let mut ans = (0u32..100).into_iter().collect::<Vec<_>>();
-    ans.push(0);//0 should be returned when the index exceeds the boundary
+    let res = run_file_with_symphonia("loadwav.mmm", 101).expect("failed to evaluate");
+    let res_int = res
+        .iter()
+        .map(|f| (*f * 100.0).round() as u32)
+        .collect::<Vec<_>>();
+    let mut ans = (0u32..100).collect::<Vec<_>>();
+    ans.push(0); //0 should be returned when the index exceeds the boundary
+    assert_eq!(res_int, ans);
+}
+
+#[test]
+fn test_readwav_interp() {
+    //res should be 0.005, 0.0015,
+    let res = run_file_with_symphonia("loadwav_interp.mmm", 101).expect("failed to evaluate");
+    let res_int = res
+        .iter()
+        .map(|f| (*f * 1000.0).round() as u32)
+        .collect::<Vec<_>>();
+    let mut ans = (0u32..100)
+        .map(|x| (x * 10 + 5).min(990))
+        .collect::<Vec<_>>();
+    ans.push(0); //0 should be returned when the index exceeds the boundary
     assert_eq!(res_int, ans);
 }

@@ -1,7 +1,0 @@
-fn fbdelay(input,time,fb){
-    delay(300.0,input+self*fb,time)
-}
-
-fn dsp(){
-    fbdelay(1.0,100.0,0.8)+fbdelay(2.0,200.0,0.7)
-}

@@ -15,6 +15,8 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::Span;
 
 use crate::ast::{Expr, Literal};
+use itertools::Itertools;
+
 // pub mod closure_convert;
 // pub mod feedconvert;
 // pub mod hir_solve_stage;
@@ -75,7 +77,7 @@ impl Context {
     }
     fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
         let rt = match f.as_ref() {
-            Value::ExtFunction(name, rt) if *name != "delay".to_symbol() => rt,
+            Value::ExtFunction(name, ft) if *name == "delay".to_symbol() => ft,
             _ => return Ok(None),
         };
 
@@ -83,10 +85,11 @@ impl Context {
             [max, src, time] => (max, src, time),
             _ => return Ok(None),
         };
-
-        match (rt.to_type(), max.to_expr()) {
-            (Type::Primitive(PType::Numeric), Expr::Literal(Literal::Float(max))) => {
-                let max_time = max.parse::<f64>().unwrap();
+        match max.to_expr() {
+            Expr::Literal(Literal::Float(max)) => {
+                //need to evaluate args first before calculate state offset because the argument for time contains stateful function call.
+                let args = self.eval_args(&[*src, *time])?;
+                let max_time = max.as_str().parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_sizes.push(StateSize {
                     size: shift_size,
@@ -99,7 +102,6 @@ impl Context {
                         .0
                         .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
                 }
-                let args = self.eval_args(&[*src, *time])?;
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
                 Ok(Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
@@ -126,7 +128,7 @@ impl Context {
             intrinsics::SUB => Some(Instruction::SubF(a0, a1)),
             intrinsics::MULT => Some(Instruction::MulF(a0, a1)),
             intrinsics::DIV => Some(Instruction::DivF(a0, a1)),
-            intrinsics::EXP => Some(Instruction::PowF(a0, a1)),
+            intrinsics::POW => Some(Instruction::PowF(a0, a1)),
             intrinsics::MODULO => Some(Instruction::ModF(a0, a1)),
             intrinsics::LOG => Some(Instruction::LogF(a0, a1)),
             intrinsics::GT => Some(Instruction::Gt(a0, a1)),
@@ -272,10 +274,7 @@ impl Context {
 
         self.data.push(ContextData {
             func_i: c_idx,
-            current_bb: 0,
-            next_state_offset: None,
-            cur_state_pos: vec![],
-            push_sum: vec![],
+            ..Default::default()
         });
         self.data_i += 1;
         //do action
@@ -302,16 +301,25 @@ impl Context {
 
     pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
         let v = match lit {
-            Literal::String(s) => self.push_inst(Instruction::String((&s).to_symbol())),
+            Literal::String(s) => self.push_inst(Instruction::String(*s)),
             Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
             Literal::Float(f) => self.push_inst(Instruction::Float(
-                f.parse::<f64>().expect("illegal float format"),
+                f.as_str().parse::<f64>().expect("illegal float format"),
             )),
             Literal::Now => {
                 let ftype = numeric!();
                 let fntype = function!(vec![], ftype);
                 let getnow = Arc::new(Value::ExtFunction("_mimium_getnow".to_symbol(), fntype));
                 self.push_inst(Instruction::CallCls(getnow, vec![], ftype))
+            }
+            Literal::SampleRate => {
+                let ftype = numeric!();
+                let fntype = function!(vec![], ftype);
+                let samplerate = Arc::new(Value::ExtFunction(
+                    "_mimium_getsamplerate".to_symbol(),
+                    fntype,
+                ));
+                self.push_inst(Instruction::CallCls(samplerate, vec![], ftype))
             }
             Literal::SelfLit | Literal::PlaceHolder => unreachable!(),
         };
@@ -323,7 +331,7 @@ impl Context {
         t: TypeNodeId,
         span: &Span,
     ) -> Result<VPtr, CompileError> {
-        log::debug!("rv t:{} {}", name.to_string(), t.to_type());
+        log::trace!("rv t:{} {}", name.to_string(), t.to_type());
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
                 Value::Function(i) => {
@@ -457,7 +465,7 @@ impl Context {
                 }
                 Ok((res, t))
             })
-            .try_collect::<Vec<_>>()
+            .try_collect()
     }
     fn eval_block(
         &mut self,
@@ -516,11 +524,6 @@ impl Context {
                 self.get_current_basicblock()
                     .0
                     .insert(alloc_insert_point, (dst.clone(), Instruction::Alloc(ty)));
-                // TODO: validate if the types are all identical?
-                // let first_ty = &types[0];
-                // if !types.iter().all(|x| x == first_ty) {
-                //     todo!("Return error");
-                // }
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
@@ -639,32 +642,30 @@ impl Context {
             }
             Expr::Feed(id, expr) => {
                 //set typesize lazily
+                let statesize = StateSize { size: 1, ty };
                 let res = self.push_inst(Instruction::GetState(ty));
-                self.get_ctxdata()
-                    .cur_state_pos
-                    .push(StateSize { size: 1, ty });
+                self.get_ctxdata().cur_state_pos.push(statesize);
                 self.add_bind((*id, res.clone()));
+                self.get_ctxdata().next_state_offset = Some(vec![statesize]);
                 let (retv, _t) = self.eval_expr(*expr)?;
-                self.get_current_fn()
-                    .state_sizes
-                    .push(StateSize { size: 1, ty });
+                self.get_current_fn().state_sizes.push(statesize);
                 Ok((Arc::new(Value::State(retv)), ty))
             }
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
-                    log::debug!(
+                    log::trace!(
                         "{}",
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
+                let insert_bb = self.get_ctxdata().current_bb;
                 let insert_pos = if self.program.functions.is_empty() {
                     0
                 } else {
                     self.get_current_basicblock().0.len()
                 };
                 let (bodyv, t) = self.eval_expr(*body)?;
-                log::debug!("let body: {}", t.to_type());
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
@@ -675,7 +676,7 @@ impl Context {
                 ) {
                     (false, false, Some(then_e)) => {
                         let alloc_res = self.gen_new_register();
-                        let block = &mut self.get_current_basicblock().0;
+                        let block = &mut self.get_current_fn().body.get_mut(insert_bb).unwrap().0;
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
@@ -726,20 +727,43 @@ impl Context {
             }
             Expr::If(cond, then, else_) => {
                 let (c, _) = self.eval_expr(*cond)?;
-                let bbidx = self.get_ctxdata().current_bb;
-                let _ = self.push_inst(Instruction::JmpIf(
-                    c,
-                    (bbidx + 1) as u64,
-                    (bbidx + 2) as u64,
-                ));
+                let cond_bidx = self.get_ctxdata().current_bb;
+
+                // This is just a placeholder. At this point, the locations of
+                // the block are not determined yet. These 0s will be
+                // overwritten later.
+                let _ = self.push_inst(Instruction::JmpIf(c, 0, 0, 0));
+
                 //insert then block
+                let then_bidx = cond_bidx + 1;
                 let (t, _) = self.eval_block(Some(*then))?;
                 //jmp to ret is inserted in bytecodegen
                 //insert else block
+                let else_bidx = self.get_ctxdata().current_bb + 1;
                 let (e, _) = self.eval_block(*else_)?;
                 //insert return block
                 self.add_new_basicblock();
                 let res = self.push_inst(Instruction::Phi(t, e));
+                let phi_bidx = self.get_ctxdata().current_bb;
+
+                // overwrite JmpIf
+                let jmp_if = self
+                    .get_current_fn()
+                    .body
+                    .get_mut(cond_bidx)
+                    .expect("no basic block found")
+                    .0
+                    .last_mut()
+                    .expect("the block contains no inst?");
+                match &mut jmp_if.1 {
+                    Instruction::JmpIf(_, then_dst, else_dst, phi_dst) => {
+                        *then_dst = then_bidx as _;
+                        *else_dst = else_bidx as _;
+                        *phi_dst = phi_bidx as _;
+                    }
+                    _ => panic!("the last block should be Jmp"),
+                }
+
                 Ok((res, ty))
             }
             Expr::Bracket(_) => todo!(),

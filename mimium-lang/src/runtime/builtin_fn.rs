@@ -1,5 +1,3 @@
-use std::cell::LazyCell;
-
 use crate::{function, integer, interner::TypeNodeId, numeric, types::*, unit};
 
 fn b_to_f(b: bool) -> f64 {
@@ -228,7 +226,6 @@ macro_rules! f2_f {
     };
 }
 
-// TODO: use predefined symbols instead of strings
 pub fn get_builtin_fns() -> [BuiltinFn; 49] {
     [
         i_i!(neg),

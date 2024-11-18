@@ -3,7 +3,7 @@ let sr = 44100.0
 fn phasor(freq){
   (self + freq/sr)%1.0
 }
-fn osc(freq){
+fn saw(freq){
   (phasor(freq)*2.0)-1.0
 }
 
@@ -43,6 +43,8 @@ fn biquad(x,coeffs){
 }
 
 fn dsp(){
-    let coeff = gen_lp_coeff(834.5,2.0,sr);
-    biquad(osc(440.0),coeff)
+    let f = phasor(0.2)*3000.0+200.0
+    let coeff = gen_lp_coeff(f,10.0,sr);
+    let r = biquad(saw(220.0),coeff)
+    (r, r)
 }
