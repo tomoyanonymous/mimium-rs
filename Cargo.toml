@@ -30,6 +30,10 @@ mimium-scheduler = { path = "mimium-scheduler", version = "2.0.0-alpha2" }
 mimium-guitools = { path = "mimium-guitools", version = "2.0.0-alpha2" }
 mimium-test = { path = "mimium-test" }
 
+# do not add git tag for each crates on release.
+[workspace.metadata.release]
+tag-prefix = ""
+
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
