@@ -1140,6 +1140,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "intx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f38a50a899dc47a6d0ed5508e7f601a2e34c3a85303514b5d137f3c10a0c75"
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1388,6 +1394,7 @@ dependencies = [
  "chumsky",
  "colog",
  "half",
+ "intx",
  "itertools 0.13.0",
  "log",
  "mimalloc",

@@ -4,9 +4,9 @@ use std::sync::Arc;
 use crate::interner::{Symbol, TypeNodeId};
 use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
-use crate::runtime::vm::{self};
+use crate::runtime::vm::{self, StateOffset};
 use crate::types::{PType, Type, TypeSize};
-use crate::utils::{error::ReportableError,half_float::HFloat};
+use crate::utils::{error::ReportableError, half_float::HFloat};
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
@@ -325,7 +325,7 @@ impl ByteCodeGenerator {
             }
             mir::Instruction::Float(n) => {
                 let dst = self.get_destination(dst, 1);
-                if let Ok(half_f) = HFloat::try_from(*n){
+                if let Ok(half_f) = HFloat::try_from(*n) {
                     Some(VmInstruction::MoveImmF(dst, half_f))
                 } else {
                     let pos = funcproto.add_new_constant(gen_raw_float(n));
@@ -522,12 +522,14 @@ impl ByteCodeGenerator {
                 ))
             }
             mir::Instruction::PushStateOffset(v) => {
-                let state_size = Self::calc_state_size(v) as i16;
-                Some(VmInstruction::ShiftStatePos(state_size))
+                let state_size = StateOffset::try_from(Self::calc_state_size(v))
+                    .expect("too much large state offset.");
+                Some(VmInstruction::PushStatePos(state_size))
             }
             mir::Instruction::PopStateOffset(v) => {
-                let state_size = Self::calc_state_size(v) as i16;
-                Some(VmInstruction::ShiftStatePos(-state_size))
+                let state_size = StateOffset::try_from(Self::calc_state_size(v))
+                    .expect("too much large state offset.");
+                Some(VmInstruction::PopStatePos(state_size))
             }
             mir::Instruction::GetState(ty) => {
                 let size = Self::word_size_for_type(*ty);
