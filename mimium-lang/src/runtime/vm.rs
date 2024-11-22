@@ -1,6 +1,6 @@
 use core::slice;
 use slotmap::{DefaultKey, SlotMap};
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, ops::Range, rc::Rc};
 
 pub mod builtin;
 pub mod bytecode;
@@ -50,8 +50,11 @@ impl StateStorage {
         let data_head = unsafe { self.rawdata.as_mut_ptr().add(self.pos) };
         Ringbuffer::new(data_head, size_in_samples)
     }
-    fn shift_pos(&mut self, offset: i16) {
-        self.pos = (self.pos as i64 + offset as i64) as usize;
+    fn push_pos(&mut self, offset: StateOffset) {
+        self.pos = (self.pos as u64 + (std::convert::Into::<u64>::into(offset))) as usize ;
+    }
+    fn pop_pos(&mut self, offset: StateOffset) {
+        self.pos = (self.pos as u64 - (std::convert::Into::<u64>::into(offset))) as usize ;
     }
 }
 
@@ -863,7 +866,8 @@ impl Machine {
                     let dst = self.get_current_state().get_state_mut(size as _);
                     dst.copy_from_slice(vs);
                 }
-                Instruction::ShiftStatePos(v) => self.get_current_state().shift_pos(v),
+                Instruction::PushStatePos(v) => self.get_current_state().push_pos(v),
+                Instruction::PopStatePos(v) => self.get_current_state().pop_pos(v),
                 Instruction::Delay(dst, src, time) => {
                     let i = self.get_stack(src as i64);
                     let t = self.get_stack(time as i64);

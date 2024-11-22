@@ -4,7 +4,8 @@ pub type Reg = u8; // register position
 pub type ConstPos = u16;
 pub type GlobalPos = u8;
 pub type Offset = i16;
-
+//24bit unsigned integer for shiftsate
+pub type StateOffset = intx::U24;
 /// Instructions for bytecode. Currently, each instructon has the 64 bit size(Tag, up to 3 bytes arguments.)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Instruction {
@@ -41,7 +42,8 @@ pub enum Instruction {
     /// Call internal state over time, destination,source
     GetState(Reg, TypeSize),
     SetState(Reg, TypeSize),
-    ShiftStatePos(Offset),
+    PushStatePos(StateOffset),
+    PopStatePos(StateOffset),
 
     /// Return from current function without return value.
     Return0,
@@ -106,7 +108,9 @@ impl std::fmt::Display for Instruction {
             Instruction::Jmp(dst) => write!(f, "{:<10} {}", "jmp", dst),
             Instruction::GetState(dst, size) => write!(f, "{:<10} {} {}", "getstate", dst, size),
             Instruction::SetState(src, size) => write!(f, "{:<10} {} {}", "setstate", src, size),
-            Instruction::ShiftStatePos(v) => write!(f, "{:<10} {}", "shiftsttpos", v),
+            Instruction::PushStatePos(v) => write!(f, "{:<10} {}", "pushsttpos", v),
+            Instruction::PopStatePos(v) => write!(f, "{:<10} {}", "popsttpos", v),
+
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
             Instruction::MoveImmF(dst,v)=> write!(f, "{:<10} {} {}", "movimmF", dst, v),
