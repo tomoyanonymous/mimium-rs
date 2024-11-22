@@ -1,6 +1,8 @@
+let _ = set_midi_port("from Max 1")
 let pi = 3.14159265359
-let sr = 44100.0
-let _ = set_midi_port("from Max 2")
+let sr = samplerate
+let probe1 = make_probe("gain")
+let probe2 = make_probe("out")
 fn phasor(freq){
   (self + freq/sr)%1.0
 }
@@ -8,14 +10,13 @@ fn osc(freq){
   sin(phasor(freq)*pi*2.0)
 }
 fn midi_to_hz(note){
-    440.0*  (2.0 ^((note-69.0)/12.0))
+    440.0* (2.0 ^((note-69.0)/12.0))
 }
 let boundval = bind_midi_note_mono(0.0,69.0,127.0);
-
 fn dsp(){
     let (note,vel) = boundval();
-
     let sig = note |> midi_to_hz |> osc 
-    let r = sig * (vel /127.0);
+    let r = sig * probe1((vel /127.0)) 
+            |> probe2;
     (r,r)
 }
