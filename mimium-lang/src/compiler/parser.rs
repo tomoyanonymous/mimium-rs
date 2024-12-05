@@ -545,12 +545,10 @@ pub fn parse(
     current_file: Option<PathBuf>,
 ) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
-    let mut errs = Vec::<Box<dyn ReportableError>>::new();
-
     let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
-    lex_errs
+    let lex_errs = lex_errs
         .iter()
-        .for_each(|e| errs.push(Box::new(error::ParseError::<char>(e.clone()))));
+        .map(|e| -> Box<dyn ReportableError> { Box::new(error::ParseError::<char>(e.clone())) });
 
     if let Some(t) = tokens {
         let (ast, parse_errs) = parser(current_file)
@@ -558,13 +556,17 @@ pub fn parse(
         match ast {
             Some(ast) if parse_errs.is_empty() => Ok(ast),
             _ => {
-                parse_errs
+                let errs = parse_errs
                     .iter()
-                    .for_each(|e| errs.push(Box::new(error::ParseError::<Token>(e.clone()))));
+                    .map(|e| -> Box<dyn ReportableError> {
+                        Box::new(error::ParseError::<Token>(e.clone()))
+                    })
+                    .chain(lex_errs)
+                    .collect();
                 Err(errs)
             }
         }
     } else {
-        Err(errs)
+        Err(lex_errs.collect())
     }
 }

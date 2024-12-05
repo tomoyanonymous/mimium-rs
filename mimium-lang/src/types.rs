@@ -3,7 +3,7 @@ use std::{cell::RefCell, fmt, rc::Rc};
 use crate::{
     format_vec,
     interner::{with_session_globals, Symbol, TypeNodeId},
-    utils::metadata::Span,
+    utils::metadata::Location,
 };
 
 /// Basic types that are not boxed.
@@ -86,7 +86,7 @@ impl Type {
         with_session_globals(|session_globals| session_globals.store_type(self))
     }
 
-    pub fn into_id_with_span(self, span: Span) -> TypeNodeId {
+    pub fn into_id_with_span(self, span: Location) -> TypeNodeId {
         with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
     }
 
