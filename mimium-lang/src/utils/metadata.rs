@@ -8,6 +8,12 @@ pub struct Location {
     pub span: Span,
     pub path: Symbol,
 }
+impl Default for Location{
+    fn default() -> Self {
+        Self { span: 0..0, path: "".to_symbol() }
+    }
+}
+
 impl ariadne::Span for Location {
     type SourceId = Symbol;
 
