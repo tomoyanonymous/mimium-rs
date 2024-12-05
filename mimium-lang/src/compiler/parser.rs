@@ -6,7 +6,7 @@ use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::types::{PType, Type};
 use crate::utils::error::ReportableError;
 use crate::utils::metadata::*;
-use chumsky::{prelude::*, span, Parser};
+use chumsky::{prelude::*, Parser};
 // use chumsky::Parser;
 mod token;
 use resolve_include::resolve_include;
@@ -696,20 +696,34 @@ pub fn parse(
 ) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let len = src.chars().count();
     let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
-    let lex_errs = lex_errs
-        .iter()
-        .map(|e| -> Box<dyn ReportableError> { Box::new(error::ParseError::<char>(e.clone())) });
+    let lex_errs = lex_errs.into_iter().map(|e| -> Box<dyn ReportableError> {
+        Box::new(error::ParseError::<char> {
+            content: e,
+            file: current_file
+                .clone()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_symbol(),
+        })
+    });
 
     if let Some(t) = tokens {
-        let (ast, parse_errs) = parser(current_file)
+        let (ast, parse_errs) = parser(current_file.clone())
             .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
         match ast {
             Some(ast) if parse_errs.is_empty() => Ok(ast),
             _ => {
                 let errs = parse_errs
-                    .iter()
+                    .into_iter()
                     .map(|e| -> Box<dyn ReportableError> {
-                        Box::new(error::ParseError::<Token>(e.clone()))
+                        Box::new(error::ParseError {
+                            content: e,
+                            file: current_file
+                                .clone()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_symbol(),
+                        })
                     })
                     .chain(lex_errs)
                     .collect();
