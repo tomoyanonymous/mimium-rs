@@ -764,7 +764,7 @@ pub fn compile(
     let ast2 = recursecheck::convert_recurse(root_expr_id, file_path.unwrap_or_default());
     let (expr2, convert_errs) =
         convert_pronoun::convert_pronoun(ast2, file_path.unwrap_or_default());
-    let infer_ctx = infer_root(expr2, builtin_types);
+    let infer_ctx = infer_root(expr2, builtin_types, file_path.unwrap_or_default());
     let errors = infer_ctx
         .errors
         .iter()
