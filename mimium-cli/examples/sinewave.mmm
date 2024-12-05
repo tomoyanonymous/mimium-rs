@@ -1,13 +1,6 @@
-let pi = 3.14159265359
-let sr = 48000.0
-fn phasor(freq){
-  (self + freq/sr)%1.0
-}
-fn osc(freq){
-  sin(phasor(freq)*pi*2.0)
-}
+include("../../mimium-lang/lib/osc.mmm")
 
 fn dsp(){
-  let r = osc(440.0)
+  let r = sinwave(440.0,0.0)*0.2
   (r,r)
 }
