@@ -15,7 +15,7 @@ macro_rules! test_string {
                 $ans
             );
         } else {
-            utils::error::report(&srcstr, PathBuf::new(), &errs);
+            utils::error::report(&srcstr, "".to_symbol(), &errs);
             panic!();
         }
     };

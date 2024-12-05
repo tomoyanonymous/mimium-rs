@@ -8,7 +8,8 @@ use mimium_lang::{
     runtime::{self, vm},
     utils::{
         error::{report, ReportableError},
-        fileloader, metadata::Location,
+        fileloader,
+        metadata::Location,
     },
     ExecContext,
 };
@@ -23,7 +24,7 @@ pub fn run_bytecode_test(
     } else {
         Err(vec![Box::new(runtime::Error(
             runtime::ErrorKind::Unknown,
-            Location::default()
+            Location::default(),
         ))])
     }
 }
@@ -108,7 +109,7 @@ pub fn run_file_with_plugins(
     match res {
         Ok(res) => Some(res),
         Err(errs) => {
-            report(&src, file, &errs);
+            report(&src, file.to_string_lossy().to_symbol(), &errs);
             None
         }
     }
@@ -123,7 +124,7 @@ pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Option<Vec<f64>> {
     match res {
         Ok(res) => Some(res),
         Err(errs) => {
-            report(&src, file, &errs);
+            report(&src, path_sym, &errs);
             None
         }
     }

@@ -1,7 +1,6 @@
 use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
-use std::path;
 
-use crate::interner::ToSymbol;
+use crate::interner::Symbol;
 
 use super::metadata::Location;
 
@@ -31,11 +30,27 @@ impl ReportableError for SimpleError {
     }
 }
 
-pub fn report<T>(src: &String, srcpath: T, errs: &[Box<dyn ReportableError>])
-where
-    T: AsRef<path::Path>,
-{
-    let path = srcpath.as_ref().to_str().unwrap_or_default();
+struct FileCache {
+    path: Symbol,
+    src: ariadne::Source<String>,
+}
+
+impl ariadne::Cache<Symbol> for FileCache {
+    type Storage = String;
+
+    fn fetch(
+        &mut self,
+        _id: &Symbol,
+    ) -> Result<&Source<Self::Storage>, Box<dyn std::fmt::Debug + '_>> {
+        Ok(&self.src)
+    }
+
+    fn display<'a>(&self, id: &'a Symbol) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(id.to_string()))
+    }
+}
+
+pub fn report(src: &String, path: Symbol, errs: &[Box<dyn ReportableError>]) {
     let mut colors = ColorGenerator::new();
     for e in errs {
         // let a_span = (src.source(), span);color
@@ -45,12 +60,15 @@ where
                 .with_message(message)
                 .with_color(colors.next())
         });
-        let builder = Report::build(ReportKind::Error, path.to_symbol(), 4)
+        let builder = Report::build(ReportKind::Error, path, 4)
             .with_message(e.get_message())
             .with_labels(labels)
             .finish();
         builder
-            .eprint((path.to_symbol(), Source::from(src)))
+            .eprint(FileCache {
+                path,
+                src: ariadne::Source::from(src.clone()),
+            })
             .unwrap();
     }
 }

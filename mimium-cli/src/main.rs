@@ -159,7 +159,7 @@ fn emit_ast_local(src: &str, filepath: &Path) -> Result<ExprNodeId, Vec<Box<dyn 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) | cfg!(test) {
         colog::default_builder()
-            .filter_level(log::LevelFilter::Debug)
+            .filter_level(log::LevelFilter::Trace)
             .init();
     } else {
         colog::default_builder().init();
@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     match &args.file {
         Some(file) => {
-            let fullpath = fileloader::get_canonical_path(".", &file)?;
+            let fullpath = fileloader::get_canonical_path(".", file)?;
             let content = fileloader::load(fullpath.to_str().unwrap())?;
             let options = RunOptions::from_args(&args);
             match run_file(options, &content, &fullpath) {
@@ -178,7 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // struct around ReportableError and directly return it,
                     // however, std::error::Error cannot be so color-rich as
                     // ariadne because it just uses std::fmt::Display.
-                    report(&content, fullpath, &e);
+                    report(&content, fullpath.to_string_lossy().to_symbol(), &e);
                     return Err(format!("Failed to process {file}").into());
                 }
             }
@@ -220,12 +220,10 @@ fn run_file(
         }
         RunMode::EmitMir => {
             ctx.prepare_compiler();
-            let (mir, errs) = ctx.compiler.as_ref().unwrap().emit_mir(content);
-            if errs.is_empty() {
-                Ok(println!("{mir}"))
-            } else {
-                Err(errs)
-            }
+            let res = ctx.compiler.as_ref().unwrap().emit_mir(content);
+            res.map(|r| {
+                println!("{r}");
+            })
         }
         RunMode::EmitByteCode => {
             // need to prepare dummy audio plugin to link `now` and `samplerate`
@@ -253,5 +251,4 @@ fn run_file(
             Ok(())
         }
     }
-
 }

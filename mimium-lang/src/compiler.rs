@@ -29,8 +29,7 @@ impl std::fmt::Display for ErrorKind {
                 write!(
                     f,
                     "Type Mismatch, expected {}, but the actual was {}.",
-                    expect.to_string(),
-                    actual.to_string()
+                    expect, actual
                 )
             }
             ErrorKind::IndexForNonTuple(t) => {
@@ -122,21 +121,19 @@ impl Context {
             .map(|ExtFunTypeInfo { name, ty }| (name, ty))
             .collect()
     }
-    pub fn emit_mir(&self, src: &str) -> (Mir, Vec<Box<dyn ReportableError>>) {
+    pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
         let path = self.file_path.map(|sym| PathBuf::from(sym.to_string()));
-        let (ast,mut parse_errs) = parser::parse(src, path);
-        let ast =parser::add_global_context(ast, self.file_path.unwrap_or_default());
-        let (mir,mut errs) = mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path);
-        errs.append(&mut parse_errs);
-        (mir,errs)
+        let (ast, mut parse_errs) = parser::parse(src, path);
+        let ast = parser::add_global_context(ast, self.file_path.unwrap_or_default());
+        let mir = mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path);
+        mir.map_err(|mut e| {
+            e.append(&mut parse_errs);
+            e
+        })
     }
     pub fn emit_bytecode(&self, src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
-        let (mir, err) = self.emit_mir(src);
-        if err.is_empty() {
-            Ok(bytecodegen::gen_bytecode(mir))
-        } else {
-            Err(err)
-        }
+        let mir = self.emit_mir(src)?;
+        Ok(bytecodegen::gen_bytecode(mir))
     }
 }
 

@@ -748,7 +748,10 @@ impl Context {
             }
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
-            Expr::Error => todo!(),
+            Expr::Error => {
+                self.push_inst(Instruction::Error);
+                (Arc::new(Value::None), unit!())
+            }
         }
     }
 }
@@ -757,7 +760,7 @@ pub fn compile(
     root_expr_id: ExprNodeId,
     builtin_types: &[(Symbol, TypeNodeId)],
     file_path: Option<Symbol>,
-) -> (Mir, Vec<Box<dyn ReportableError>>) {
+) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
     let ast2 = recursecheck::convert_recurse(root_expr_id, file_path.unwrap_or_default());
     let (expr2, convert_errs) =
         convert_pronoun::convert_pronoun(ast2, file_path.unwrap_or_default());
@@ -774,8 +777,12 @@ pub fn compile(
         )
         .collect::<Vec<_>>();
 
-    let mut ctx = Context::new(infer_ctx, file_path);
-    let _res = ctx.eval_expr(expr2);
-    ctx.program.file_path = file_path;
-    (ctx.program.clone(), errors)
+    if errors.is_empty() {
+        let mut ctx = Context::new(infer_ctx, file_path);
+        let _res = ctx.eval_expr(expr2);
+        ctx.program.file_path = file_path;
+        Ok(ctx.program.clone())
+    } else {
+        Err(errors)
+    }
 }

@@ -156,7 +156,7 @@ fn dsp() {{
             let content = make_many_symbols_src(n);
             let compiler = compiler::Context::new([], None);
             b.iter(move || {
-                let (_mir, _errs) = compiler.emit_mir(&content);
+                let _mir = compiler.emit_mir(&content);
             });
         }
 

@@ -1,4 +1,4 @@
-use mimium_lang::utils::error::report;
+use mimium_lang::{interner::ToSymbol, utils::error::report};
 use mimium_test::*;
 use std::path::Path;
 
@@ -18,7 +18,7 @@ fn dsp(){{
             assert_eq!(res, ans, "expr: {expr}");
         }
         Err(errs) => {
-            report(&src, Path::new("(from template)"), &errs);
+            report(&src, "(from template)".to_symbol(), &errs);
             panic!("invalid syntax");
         }
     }
@@ -303,11 +303,9 @@ fn fb_mem3_state_size() {
 }
 
 #[test]
-fn fb_and_stateful_call(){
+fn fb_and_stateful_call() {
     let res = run_file_test_mono("fb_and_stateful_call.mmm", 10).unwrap();
-    let ans = vec![
-        0.0, 0.0, 1.0, 3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0
-    ];
+    let ans = vec![0.0, 0.0, 1.0, 3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0];
     assert_eq!(res, ans);
 }
 

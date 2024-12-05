@@ -123,6 +123,7 @@ pub enum Instruction {
     CastFtoI(VPtr),
     CastItoF(VPtr),
     CastItoB(VPtr),
+    Error,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
