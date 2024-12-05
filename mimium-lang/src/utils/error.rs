@@ -1,6 +1,8 @@
 use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
 use std::path;
 
+use crate::interner::ToSymbol;
+
 use super::metadata::Location;
 
 pub trait ReportableError: std::error::Error {
@@ -43,12 +45,12 @@ where
                 .with_message(message)
                 .with_color(colors.next())
         });
-        let builder = Report::build(ReportKind::Error, path.to_string(), 4)
+        let builder = Report::build(ReportKind::Error, path.to_symbol(), 4)
             .with_message(e.get_message())
             .with_labels(labels)
             .finish();
         builder
-            .eprint((path.to_string(), Source::from(src)))
+            .eprint((path.to_symbol(), Source::from(src)))
             .unwrap();
     }
 }

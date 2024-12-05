@@ -8,7 +8,7 @@ use std::{
 use slotmap::SlotMap;
 use string_interner::{backend::StringBackend, StringInterner};
 
-use crate::{ast::Expr, dummy_span, types::Type, utils::metadata::Span};
+use crate::{ast::Expr, dummy_span, types::Type, utils::metadata::{Location, Span}};
 slotmap::new_key_type! {
     pub struct ExprKey;
     pub struct TypeKey;
@@ -18,7 +18,7 @@ pub struct SessionGlobals {
     pub symbol_interner: StringInterner<StringBackend<usize>>,
     pub expr_storage: SlotMap<ExprKey, Expr>,
     pub type_storage: SlotMap<TypeKey, Type>,
-    pub span_storage: BTreeMap<NodeId, Span>,
+    pub loc_storage: BTreeMap<NodeId, Location>,
 }
 
 impl SessionGlobals {
@@ -27,8 +27,8 @@ impl SessionGlobals {
         ExprNodeId(key)
     }
 
-    fn store_span<T: ToNodeId>(&mut self, node_id: T, span: Span) {
-        self.span_storage.insert(node_id.to_node_id(), span);
+    fn store_loc<T: ToNodeId>(&mut self, node_id: T, loc: Location) {
+        self.loc_storage.insert(node_id.to_node_id(), loc);
     }
 
     pub fn store_type(&mut self, ty: Type) -> TypeNodeId {
@@ -36,15 +36,15 @@ impl SessionGlobals {
         TypeNodeId(key)
     }
 
-    pub fn store_expr_with_span(&mut self, expr: Expr, span: Span) -> ExprNodeId {
+    pub fn store_expr_with_location(&mut self, expr: Expr, loc:Location) -> ExprNodeId {
         let expr_id = self.store_expr(expr);
-        self.store_span(expr_id, span);
+        self.store_loc(expr_id, loc);
         expr_id
     }
 
-    pub fn store_type_with_span(&mut self, ty: Type, span: Span) -> TypeNodeId {
+    pub fn store_type_with_location(&mut self, ty: Type, loc:Location) -> TypeNodeId {
         let type_id = self.store_type(ty);
-        self.store_span(type_id, span);
+        self.store_loc(type_id, loc);
         type_id
     }
 
@@ -61,8 +61,8 @@ impl SessionGlobals {
         unsafe { self.type_storage.get_unchecked(type_id.0) }.clone()
     }
 
-    pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Span> {
-        self.span_storage.get(&node_id.to_node_id())
+    pub fn get_span<T: ToNodeId>(&self, node_id: T) -> Option<&Location> {
+        self.loc_storage.get(&node_id.to_node_id())
     }
 }
 
@@ -71,7 +71,7 @@ thread_local!(static SESSION_GLOBALS: RefCell<SessionGlobals> =  RefCell::new(
         symbol_interner: StringInterner::new(),
         expr_storage: SlotMap::with_key(),
         type_storage: SlotMap::with_key(),
-        span_storage: BTreeMap::new()
+        loc_storage: BTreeMap::new()
     }
 ));
 

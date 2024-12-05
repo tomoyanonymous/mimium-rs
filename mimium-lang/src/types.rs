@@ -86,8 +86,8 @@ impl Type {
         with_session_globals(|session_globals| session_globals.store_type(self))
     }
 
-    pub fn into_id_with_span(self, span: Location) -> TypeNodeId {
-        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
+    pub fn into_id_with_location(self, loc: Location) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type_with_location(self, loc))
     }
 
     pub fn to_string_for_error(&self) -> String {

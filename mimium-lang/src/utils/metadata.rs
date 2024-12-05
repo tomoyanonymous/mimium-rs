@@ -1,12 +1,15 @@
 use crate::interner::{Symbol, ToSymbol};
 
+
+pub type Span = std::ops::Range<usize>;
+
 #[derive(Clone,Debug)]
 pub struct Location {
-    span: std::ops::Range<usize>,
-    path: String,
+    pub span: Span,
+    pub path: Symbol,
 }
 impl ariadne::Span for Location {
-    type SourceId = String;
+    type SourceId = Symbol;
 
     fn source(&self) -> &Self::SourceId {
         &self.path
