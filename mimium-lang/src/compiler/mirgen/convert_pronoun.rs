@@ -174,33 +174,66 @@ impl FeedId {
     }
 }
 
-fn convert_self(e_id: ExprNodeId, feedctx: FeedId) -> Result<ConvertResult, Error> {
-    let conversion = |e: ExprNodeId| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
-    let span = e_id.to_span().clone();
+fn convert_self(
+    e_id: ExprNodeId,
+    feedctx: FeedId,
+    file_path: PathBuf,
+) -> (ConvertResult, Vec<Error>) {
+    let conversion = |e: ExprNodeId| -> (ConvertResult, Vec<Error>) {
+        convert_self(e, feedctx, file_path.clone())
+    };
+    let loc = Location {
+        span: e_id.to_span().clone(),
+        path: file_path.to_string_lossy().to_symbol(),
+    };
     match e_id.to_expr().clone() {
         Expr::Literal(Literal::SelfLit) => match feedctx {
-            FeedId::Global => Err(Error::NoParentSelf(span.clone())),
-            FeedId::Local(i) => Ok(ConvertResult::Err(
-                Expr::Var(feedctx.get_name()).into_id(span.clone()),
-            )),
+            FeedId::Global => {
+                let err = vec![SimpleError {
+                    message: "self cannot be used in global context.".to_string(),
+                    span: loc.clone(),
+                }];
+                (
+                    ConvertResult {
+                        expr: Expr::Error.into_id(loc),
+                        found_any: false,
+                    },
+                    err,
+                )
+            }
+            FeedId::Local(_) => {
+                let expr = Expr::Var(feedctx.get_name()).into_id(loc.clone());
+                (
+                    ConvertResult {
+                        expr,
+                        found_any: true,
+                    },
+                    vec![],
+                )
+            }
         },
         Expr::Lambda(params, r_type, body) => {
             let nfctx = feedctx.get_next_id();
-            let nbody = match convert_self(body, nfctx)? {
-                ConvertResult::Err(nbody) => {
-                    Expr::Feed(nfctx.get_name(), nbody).into_id(span.clone())
-                }
-                ConvertResult::Ok(nbody) => nbody,
+            let (res, err) = convert_self(body, nfctx, file_path);
+            let nbody = if res.found_any {
+                Expr::Feed(nfctx.get_name(), res.expr).into_id(loc.clone())
+            } else {
+                res.expr
             };
-            Ok(ConvertResult::Ok(
-                Expr::Lambda(params, r_type, nbody).into_id(span.clone()),
-            ))
+            let expr = Expr::Lambda(params, r_type, nbody).into_id(loc.clone());
+            (
+                ConvertResult {
+                    expr,
+                    found_any: false,
+                },
+                err,
+            )
         }
         Expr::Feed(_, _) => panic!(
             "Feed should not be shown before conversion at {}..{}",
-            span.start, span.end
+            loc.span.start, loc.span.end
         ),
-        _ => convert_recursively(e_id, conversion),
+        _ => convert_recursively(e_id, conversion, file_path.clone()),
     }
 }
 
