@@ -7,8 +7,6 @@ type EnvInner<T> = LinkedList<Vec<(Symbol, T)>>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment<T>(pub EnvInner<T>);
 
-pub struct Error(String);
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum LookupRes<T: Clone> {
     Local(T),
@@ -16,7 +14,7 @@ pub enum LookupRes<T: Clone> {
     Global(T),
     None,
 }
-impl<T:Clone> Default for Environment<T>{
+impl<T: Clone> Default for Environment<T> {
     fn default() -> Self {
         Self(EnvInner::new())
     }
@@ -35,7 +33,7 @@ impl<T: Clone> Environment<T> {
         let _ = self.0.pop_front();
     }
     pub fn add_bind(&mut self, binds: &[(Symbol, T)]) {
-        assert!(self.0.len() > 0);
+        assert!(!self.0.is_empty());
         self.0.front_mut().unwrap().extend_from_slice(binds);
     }
 
@@ -44,9 +42,8 @@ impl<T: Clone> Environment<T> {
             .0
             .iter()
             .enumerate()
-            .find(|(_level, vec)| vec.iter().find(|(n, _)| n == name).is_some())
-            .map(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
-            .flatten()
+            .find(|(_level, vec)| vec.iter().any(|(n, _)| n == name))
+            .and_then(|(level, vec)| vec.iter().find(|(n, _)| n == name).map(|(_, v)| (level, v)))
         {
             None => LookupRes::None,
             Some((level, e)) if level >= self.0.len() - 1 => LookupRes::Global(e),
