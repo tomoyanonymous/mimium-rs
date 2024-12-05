@@ -127,8 +127,8 @@ impl Context {
         let ast = parser::add_global_context(ast, self.file_path.unwrap_or_default());
         let mir = mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path);
         mir.map_err(|mut e| {
-            e.append(&mut parse_errs);
-            e
+            parse_errs.append(&mut e);
+            parse_errs
         })
     }
     pub fn emit_bytecode(&self, src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
