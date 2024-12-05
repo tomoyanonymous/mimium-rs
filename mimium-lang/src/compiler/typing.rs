@@ -4,7 +4,7 @@ use crate::interner::{ExprKey, ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::types::{PType, Type, TypeVar};
 use crate::utils::metadata::Location;
-use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
+use crate::utils::{environment::Environment, error::ReportableError};
 use crate::{function, integer, numeric, unit};
 use itertools::{EitherOrBoth, Itertools};
 use std::cell::RefCell;
@@ -191,12 +191,12 @@ impl InferContext {
         .chain(unibinds)
         .collect()
     }
-    fn unwrap_result(&mut self, res: Result<TypeNodeId, Error>) -> TypeNodeId {
+    fn unwrap_result(&mut self, res: Result<TypeNodeId, Vec<Error>>) -> TypeNodeId {
         match res {
             Ok(t) => t,
-            Err(e) => {
-                self.errors.push(e.clone());
-                let loc = &e.get_labels()[0].0;
+            Err(mut e) => {
+                let loc = &e[0].get_labels()[0].0; //todo
+                self.errors.append(&mut e);
                 Type::Failure.into_id_with_location(loc.clone())
             }
         }
@@ -499,22 +499,21 @@ impl InferContext {
         };
         Ok(Type::Primitive(pt).into_id())
     }
-    fn infer_vec(&mut self, e: &[ExprNodeId]) -> Result<Vec<TypeNodeId>, Error> {
+    fn infer_vec(&mut self, e: &[ExprNodeId]) -> Result<Vec<TypeNodeId>, Vec<Error>> {
         e.iter().map(|e| self.infer_type(*e)).try_collect()
     }
-    fn infer_type_levelup(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
+    fn infer_type_levelup(&mut self, e: ExprNodeId) -> TypeNodeId {
         self.level += 1;
         let res = self.infer_type(e);
+        let r = self.unwrap_result(res);
         self.level -= 1;
-        res
+        r
     }
     fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Vec<Error>> {
         let loc = Location::new(e.to_span(), "".to_symbol()); //todo file
         let res: Result<TypeNodeId, Vec<Error>> = match &e.to_expr() {
             Expr::Literal(l) => Self::infer_type_literal(l).map_err(|e| vec![e]),
-            Expr::Tuple(e) => {
-                Ok(Type::Tuple(self.infer_vec(e.as_slice()).map_err(|e| vec![e])?).into_id())
-            }
+            Expr::Tuple(e) => Ok(Type::Tuple(self.infer_vec(e.as_slice())?).into_id()),
             Expr::Proj(e, idx) => {
                 let tup = self.infer_type(*e)?;
                 match tup.to_type() {
@@ -564,7 +563,7 @@ impl InferContext {
                     .collect();
                 let bty = if let Some(r) = rtype {
                     let bty = self.infer_type(*body)?;
-                    Self::unify_types(*r, bty, body.to_span())?
+                    Self::unify_types(*r, bty)?
                 } else {
                     self.infer_type(*body)?
                 };
@@ -572,9 +571,9 @@ impl InferContext {
                 Ok(Type::Function(ptypes, bty, None).into_id())
             }
             Expr::Let(tpat, body, then) => {
-                let bodyt = self.infer_type_levelup(*body)?;
+                let bodyt = self.infer_type_levelup(*body);
 
-                let _ = self.bind_pattern(bodyt, tpat, body.to_span())?;
+                let _ = self.bind_pattern(bodyt, tpat, loc)?;
 
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -588,14 +587,14 @@ impl InferContext {
                         self.convert_unknown_function(atypes, *rty, *s)
                     }
                     (false, _) => {
-                        return Err(Error(ErrorKind::NonFunctionForLetRec(t.clone()), span))
+                        return Err(vec![Error::NonFunctionForLetRec(id.ty, loc.clone())])
                     }
                     (true, _) => self.gen_intermediate_type(),
                 };
                 self.env.add_bind(&[(id.id, idt)]);
                 //polymorphic inference is not allowed in recursive function.
-                let bodyt = self.infer_type_levelup(*body)?;
-                let _ = Self::unify_types(idt, bodyt, body.to_span())?;
+                let bodyt = self.infer_type_levelup(*body);
+                let _res = Self::unify_types(idt, bodyt);
                 match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),
@@ -609,9 +608,10 @@ impl InferContext {
                     }
                     _ => unreachable!(),
                 };
-                let assignee_t = self.lookup(&name, &span)?;
-                let e_t = self.infer_type(*expr)?;
-                Self::unify_types(assignee_t, e_t, expr.to_span())?;
+                let assignee_t = self.unwrap_result(self.lookup(name, loc).map_err(|e| vec![e]));
+                let t = self.infer_type(*expr);
+                let e_t = self.unwrap_result(t);
+                Self::unify_types(assignee_t, e_t)?;
                 Ok(unit!())
             }
             Expr::Then(e, then) => {
@@ -619,7 +619,7 @@ impl InferContext {
                 then.map_or(Ok(unit!()), |t| self.infer_type(t))
             }
             Expr::Var(name) => {
-                let res = self.lookup(name, &span)?;
+                let res = self.unwrap_result(self.lookup(*name, loc).map_err(|e| vec![e]));
                 // log::debug!("{} {} /level{}", name.as_str(), res, self.level);
                 Ok(self.instantiate(res))
             }
@@ -628,31 +628,29 @@ impl InferContext {
                 let callee_t = self.infer_vec(callee.as_slice())?;
                 let res_t = self.gen_intermediate_type();
                 let fntype = Type::Function(callee_t, res_t, None).into_id();
-                let restype = Self::unify_types(fnl, fntype, span.clone())?;
+                let restype = Self::unify_types(fnl, fntype)?;
                 if let Type::Function(_, r, _) = restype.to_type() {
                     Ok(r)
                 } else {
-                    Err(Error(
-                        ErrorKind::NonFunctionForApply(restype.to_type().clone()),
-                        span.clone(),
-                    ))
+                    Err(vec![Error::NonFunctionForApply(
+                        restype,
+                        Location::new(fun.to_span(), loc.path),
+                    )])
                 }
             }
             Expr::If(cond, then, opt_else) => {
                 let condt = self.infer_type(*cond)?;
-                let cond_span = cond.to_span();
                 let _bt = Self::unify_types(
-                    Type::Primitive(PType::Numeric).into_id_with_span(cond_span.clone()),
+                    Type::Primitive(PType::Numeric)
+                        .into_id_with_location(Location::new(cond.to_span(), loc.path)),
                     condt,
-                    cond_span,
                 ); //todo:boolean type
                 let thent = self.infer_type(*then)?;
                 let elset = opt_else.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                     self.infer_type(e)
                 })?;
-                let else_span = opt_else.map_or(span.end..span.end, |e| e.to_span());
                 log::trace!("then: {}, else: {}", thent.to_type(), elset.to_type());
-                Self::unify_types(thent, elset, else_span)
+                Self::unify_types(thent, elset)
             }
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                 self.infer_type(e)
@@ -674,9 +672,9 @@ impl InferContext {
 pub fn infer_root(
     e: ExprNodeId,
     builtin_types: &[(Symbol, TypeNodeId)],
-) -> Result<InferContext, Error> {
+) -> InferContext {
     let mut ctx = InferContext::new(builtin_types);
-    let _ = ctx.infer_type(e)?;
+    let _t = ctx.infer_type(e).unwrap_or(Type::Failure.into_id());
     ctx.substitute_all_intermediates();
-    Ok(ctx)
+    ctx
 }
