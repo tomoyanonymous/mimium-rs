@@ -46,6 +46,8 @@ pub enum Type {
     Intermediate(Rc<RefCell<TypeVar>>),
     TypeScheme(u64),
     Instantiated(u64),
+    /// Failure type: it is bottom type that can be unified to any type and return bottom type.
+    Failure,
     Unknown,
 }
 
@@ -231,6 +233,7 @@ impl fmt::Display for Type {
             Type::Instantiated(id) => {
                 write!(f, "'{id}")
             }
+            Type::Failure => write!(f, "!"),
             Type::Unknown => write!(f, "unknown"),
         }
     }
