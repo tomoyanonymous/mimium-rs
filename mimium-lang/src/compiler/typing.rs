@@ -240,21 +240,8 @@ impl InferContext {
     fn convert_unknown_to_intermediate(&mut self, t: TypeNodeId) -> TypeNodeId {
         match t.to_type() {
             Type::Unknown => self.gen_intermediate_type(),
-            _ => t,
+            _ => t.apply_fn(|t| self.convert_unknown_to_intermediate(t)),
         }
-    }
-    fn convert_unknown_function(
-        &mut self,
-        atypes: &[TypeNodeId],
-        rty: TypeNodeId,
-        s: Option<TypeNodeId>,
-    ) -> TypeNodeId {
-        let a = atypes
-            .iter()
-            .map(|a| self.convert_unknown_to_intermediate(*a))
-            .collect();
-        let r = self.convert_unknown_to_intermediate(rty);
-        Type::Function(a, r, s).into_id()
     }
     // return true when the circular loop of intermediate variable exists.
     fn occur_check(id1: u64, t2: TypeNodeId) -> bool {
@@ -492,13 +479,9 @@ impl InferContext {
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-
-        if !matches!(ty.to_type(), Type::Unknown) {
-            let t2 = Self::unify_types((ty, loc_p.clone()), body.clone())?;
-            Self::unify_types((t2, loc_p), body)
-        } else {
-            Self::unify_types((pat_t, loc_p), body)
-        }
+        let ty = self.convert_unknown_to_intermediate(ty);
+        let t2 = Self::unify_types((ty, loc_p.clone()), (pat_t, loc_p.clone()))?;
+        Self::unify_types((t2, loc_p), body)
     }
 
     pub fn lookup(&self, name: Symbol, loc: Location) -> Result<TypeNodeId, Error> {
@@ -619,20 +602,11 @@ impl InferContext {
                 }
             }
             Expr::LetRec(id, body, then) => {
-                let t = id.ty.to_type();
                 let loc_id = Location {
                     span: id.to_span(),
                     path: self.file_path,
                 };
-                let idt = match (id.is_unknown(), &t) {
-                    (false, Type::Function(atypes, rty, s)) => {
-                        self.convert_unknown_function(atypes, *rty, *s)
-                    }
-                    (false, _) => {
-                        return Err(vec![Error::NonFunctionForLetRec(id.ty, loc.clone())])
-                    }
-                    (true, _) => self.gen_intermediate_type(),
-                };
+                let idt = self.convert_unknown_to_intermediate(id.ty);
                 self.env.add_bind(&[(id.id, idt)]);
                 //polymorphic inference is not allowed in recursive function.
                 let bodyt = self.infer_type_levelup(*body);

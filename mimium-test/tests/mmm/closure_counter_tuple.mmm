@@ -15,7 +15,7 @@ fn makecounter(){
     }
     (countup,0.0,countdown)
 }
-let (c1,_,c2) = makecounter()
+let (c1,_x,c2) = makecounter()
 fn dsp(){
     (c1(),c2())
 }
