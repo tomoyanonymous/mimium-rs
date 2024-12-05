@@ -535,10 +535,7 @@ impl InferContext {
             Expr::Feed(id, body) => {
                 //todo: add span to Feed expr for keeping the location of `self`.
                 let feedv = self.gen_intermediate_type();
-                let loc_b = Location {
-                    span: body.to_span(),
-                    path: loc.path,
-                };
+                let loc_b = Location::new(body.to_span(), loc.path);
                 self.env.add_bind(&[(*id, feedv)]);
                 let bty = self.infer_type(*body)?;
                 let res = Self::unify_types((bty, loc.clone()), (feedv, loc_b));
@@ -568,15 +565,9 @@ impl InferContext {
                     })
                     .collect();
                 let bty = if let Some(r) = rtype {
-                    let loc_r = Location {
-                        span: r.to_span(),
-                        path: self.file_path,
-                    };
+                    let loc_r = Location::new(r.to_span(), self.file_path);
                     let bty = self.infer_type(*body)?;
-                    let loc_b = Location {
-                        span: body.to_span(),
-                        path: self.file_path,
-                    };
+                    let loc_b = Location::new(body.to_span(), self.file_path);
                     Self::unify_types((*r, loc_r), (bty, loc_b))?
                 } else {
                     self.infer_type(*body)?
@@ -586,14 +577,8 @@ impl InferContext {
             }
             Expr::Let(tpat, body, then) => {
                 let bodyt = self.infer_type_levelup(*body);
-                let loc_p = Location {
-                    span: tpat.to_span(),
-                    path: self.file_path,
-                };
-                let loc_b = Location {
-                    span: body.to_span(),
-                    path: self.file_path,
-                };
+                let loc_p = Location::new(tpat.to_span(), self.file_path);
+                let loc_b = Location::new(body.to_span(), self.file_path);
                 let pat_t = self.bind_pattern((tpat.clone(), loc_p), (bodyt, loc_b));
                 let _pat_t = self.unwrap_result(pat_t);
                 match then {
@@ -602,18 +587,12 @@ impl InferContext {
                 }
             }
             Expr::LetRec(id, body, then) => {
-                let loc_id = Location {
-                    span: id.to_span(),
-                    path: self.file_path,
-                };
+                let loc_id = Location::new(id.to_span(), self.file_path);
                 let idt = self.convert_unknown_to_intermediate(id.ty);
                 self.env.add_bind(&[(id.id, idt)]);
                 //polymorphic inference is not allowed in recursive function.
                 let bodyt = self.infer_type_levelup(*body);
-                let loc_b = Location {
-                    span: body.to_span(),
-                    path: self.file_path,
-                };
+                let loc_b = Location::new(body.to_span(), self.file_path);
                 let _res = Self::unify_types((idt, loc_id), (bodyt, loc_b));
                 match then {
                     Some(e) => self.infer_type(*e),
@@ -628,14 +607,8 @@ impl InferContext {
                     }
                     _ => unreachable!(),
                 };
-                let loc_a = Location {
-                    span: assignee.to_span(),
-                    path: self.file_path,
-                };
-                let loc_e = Location {
-                    span: expr.to_span(),
-                    path: self.file_path,
-                };
+                let loc_a = Location::new(assignee.to_span(), self.file_path);
+                let loc_e = Location::new(expr.to_span(), self.file_path);
                 let assignee_t = self.unwrap_result(self.lookup(name, loc).map_err(|e| vec![e]));
                 let t = self.infer_type(*expr);
                 let e_t = self.unwrap_result(t);
@@ -654,10 +627,7 @@ impl InferContext {
             Expr::Apply(fun, callee) => {
                 let fnl = self.infer_type(*fun);
                 let fnl = self.unwrap_result(fnl);
-                let loc_f = Location {
-                    span: fun.to_span(),
-                    path: self.file_path,
-                };
+                let loc_f = Location::new(fun.to_span(), self.file_path);
                 let callee_t = self.infer_vec(callee.as_slice())?;
                 let res_t = self.gen_intermediate_type();
                 let fntype = Type::Function(callee_t, res_t, None).into_id();
@@ -692,10 +662,7 @@ impl InferContext {
             Expr::Block(expr) => expr.map_or(Ok(Type::Primitive(PType::Unit).into_id()), |e| {
                 self.infer_type(e)
             }),
-            _ => {
-                // todo!();
-                Ok(Type::Primitive(PType::Unit).into_id())
-            }
+            _ => Ok(Type::Primitive(PType::Unit).into_id()),
         };
         res.inspect(|ty| {
             self.result_map.insert(e.0, *ty);
