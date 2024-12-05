@@ -335,6 +335,8 @@ impl InferContext {
         let t1r = t1.get_root();
         let t2r = t2.get_root();
         match &(t1r.to_type(), t2r.to_type()) {
+            (Type::Intermediate(i1), Type::Intermediate(i2)) if i1 == i2 => Ok(t1),
+
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
                 if Self::occur_check(tv1.var, t2) {
@@ -669,10 +671,7 @@ impl InferContext {
     }
 }
 
-pub fn infer_root(
-    e: ExprNodeId,
-    builtin_types: &[(Symbol, TypeNodeId)],
-) -> InferContext {
+pub fn infer_root(e: ExprNodeId, builtin_types: &[(Symbol, TypeNodeId)]) -> InferContext {
     let mut ctx = InferContext::new(builtin_types);
     let _t = ctx.infer_type(e).unwrap_or(Type::Failure.into_id());
     ctx.substitute_all_intermediates();
