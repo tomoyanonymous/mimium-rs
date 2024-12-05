@@ -85,8 +85,8 @@ pub struct Context {
     pub history: (u64, Vec<PValue>),
     pub extern_syms: Vec<Symbol>,
 }
-impl Context {
-    pub fn new() -> Self {
+impl Default for Context {
+     fn default() -> Self {
         let extern_syms = EXTERN_SYMS
             .iter()
             .map(|s| s.to_symbol())
@@ -330,7 +330,7 @@ pub fn eval_ast(e_meta: ExprNodeId, ctx: &mut Context) -> Result<Value, CompileE
         )),
         ast::Expr::Feed(a, e) => {
             let cellv = *getcell(ctx);
-            let res = eval_with_new_env(*e, ctx, &mut vec![(a.clone(), Value::Primitive(cellv))])?;
+            let res = eval_with_new_env(*e, ctx, &mut vec![(*a, Value::Primitive(cellv))])?;
             let pres = match res {
                 Value::Primitive(p) => Ok(p),
                 _ => Err(CompileError(ErrorKind::NonPrimitiveInFeed, span.clone())),

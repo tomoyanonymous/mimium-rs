@@ -1,10 +1,10 @@
 use crate::{
-    ast_interpreter::{self, PValue, Value}, compiler::{self, interpret_top}, interner::ToSymbol, utils::{error, miniprint::MiniPrint}
+    ast_interpreter::{self, PValue, Value},
+    compiler::{self, interpret_top},
+    interner::ToSymbol,
+    utils::{error, miniprint::MiniPrint},
 };
-use std::{
-    io::{stdin, stdout, Write},
-    path::PathBuf,
-};
+use std::io::{stdin, stdout, Write};
 
 pub enum ReplMode {
     Eval,
@@ -16,11 +16,11 @@ pub struct ReplAppData {
     global_ctx: ast_interpreter::Context,
     mode: ReplMode,
 }
-impl ReplAppData {
-    pub fn new() -> Self {
+impl Default for ReplAppData {
+    fn default() -> Self {
         Self {
             line_count: 0,
-            global_ctx: ast_interpreter::Context::new(),
+            global_ctx: ast_interpreter::Context::default(),
             mode: ReplMode::Eval,
         }
     }
@@ -97,5 +97,5 @@ fn repl(data: &mut ReplAppData) -> ! {
 }
 
 pub fn run_repl() {
-    repl(&mut ReplAppData::new())
+    repl(&mut ReplAppData::default())
 }

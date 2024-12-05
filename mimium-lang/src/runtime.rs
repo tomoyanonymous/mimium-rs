@@ -1,4 +1,4 @@
-use crate::utils::{error::ReportableError, metadata::{Location, Span}};
+use crate::utils::{error::ReportableError, metadata::Location};
 
 // pub mod scheduler;
 // pub mod hir_interpreter;
@@ -33,6 +33,6 @@ impl std::error::Error for Error {}
 
 impl ReportableError for Error {
     fn get_labels(&self) -> Vec<(crate::utils::metadata::Location, String)> {
-        vec![(self.1.clone(),self.0.to_string())]
+        vec![(self.1.clone(), self.0.to_string())]
     }
 }

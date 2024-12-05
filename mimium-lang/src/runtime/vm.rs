@@ -51,10 +51,10 @@ impl StateStorage {
         Ringbuffer::new(data_head, size_in_samples)
     }
     fn push_pos(&mut self, offset: StateOffset) {
-        self.pos = (self.pos as u64 + (std::convert::Into::<u64>::into(offset))) as usize ;
+        self.pos = (self.pos as u64 + (std::convert::Into::<u64>::into(offset))) as usize;
     }
     fn pop_pos(&mut self, offset: StateOffset) {
-        self.pos = (self.pos as u64 - (std::convert::Into::<u64>::into(offset))) as usize ;
+        self.pos = (self.pos as u64 - (std::convert::Into::<u64>::into(offset))) as usize;
     }
 }
 
@@ -79,14 +79,6 @@ impl StateStorageStack {
 enum UpValue {
     Open(OpenUpValue),
     Closed(Vec<RawVal>, bool),
-}
-impl UpValue {
-    pub fn is_closure(&self) -> bool {
-        match self {
-            UpValue::Open(OpenUpValue { is_closure, .. }) => *is_closure,
-            UpValue::Closed(_, is_closure) => *is_closure,
-        }
-    }
 }
 type SharedUpValue = Rc<RefCell<UpValue>>;
 impl From<OpenUpValue> for UpValue {
@@ -175,17 +167,14 @@ pub fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy,Default)]
 enum RawValType {
     Float,
+    #[default]
     Int,
-    UInt,
+    // UInt,
 }
-impl Default for RawValType {
-    fn default() -> Self {
-        RawValType::Int
-    }
-}
+
 enum ExtFnIdx {
     Fun(usize),
     Cls(usize),
@@ -266,7 +255,10 @@ macro_rules! uniop {
 }
 macro_rules! uniop_bool {
     ($op:tt, $dst:expr,$src:expr,$self:ident) => {{
-        let bres: bool = $op(Self::get_as::<f64>($self.get_stack($src as i64)) > 0.0);
+        let bres: bool = $op(matches!(
+            Self::get_as::<f64>($self.get_stack($src as i64)).partial_cmp(&0.0),
+            Some(std::cmp::Ordering::Greater)
+        ));
         let fres = if bres { 1.0f64 } else { 0.0f64 };
         $self.set_stack($dst as i64, Self::to_value::<f64>(fres))
     }};
@@ -318,7 +310,7 @@ where
 }
 
 impl Machine {
-    pub fn new<'a>(
+    pub fn new(
         prog: Program,
         extfns: impl Iterator<Item = ExtFnInfo>,
         extcls: impl Iterator<Item = ExtClsInfo>,
@@ -941,7 +933,7 @@ impl Machine {
         if !func.bytecodes.is_empty() {
             self.global_states.resize(func.state_size as usize);
             // 0 is always base pointer to the main function
-            if self.stack.len() > 0 {
+            if !self.stack.is_empty() {
                 self.stack[0] = 0;
             }
             self.base_pointer = 1;

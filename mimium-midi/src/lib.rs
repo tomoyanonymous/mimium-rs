@@ -130,7 +130,7 @@ impl SystemPlugin for MidiPlugin {
             }),
             (None, false) => {
                 log::info!("trying to connect default MIDI input device...");
-                ports.iter().next()
+                ports.first()
             }
             (_, true) => None,
         };
