@@ -6,7 +6,7 @@ use crate::types::{PType, Type, TypeVar};
 use crate::utils::metadata::Location;
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, integer, numeric, unit};
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,13 +15,17 @@ use std::rc::Rc;
 #[derive(Clone, Debug)]
 pub enum Error {
     TypeMismatch {
-        left: (Type, Location),
-        right: (Type, Location),
+        left: (TypeNodeId, Location),
+        right: (TypeNodeId, Location),
     },
-    PatternMismatch((Type, Location), (Pattern, Location)),
-    NonFunctionForLetRec(Type, Location),
-    NonFunctionForApply(Type, Location),
-    CircularType(Location),
+    LengthMismatch {
+        left: (usize, Location),
+        right: (usize, Location),
+    },
+    PatternMismatch((TypeNodeId, Location), (Pattern, Location)),
+    NonFunctionForLetRec(TypeNodeId, Location),
+    NonFunctionForApply(TypeNodeId, Location),
+    CircularType(Location, Location),
     IndexOutOfRange {
         len: u16,
         idx: u16,
@@ -43,11 +47,12 @@ impl ReportableError for Error {
         match self {
             Error::TypeMismatch { .. } => format!("Type mismatch"),
             Error::PatternMismatch(..) => format!("Pattern mismatch"),
+            Error::LengthMismatch { .. } => format!("Length of the elements are different"),
             Error::NonFunctionForLetRec(_, _) => format!("`letrec` can take only function type."),
             Error::NonFunctionForApply(_, _) => {
                 format!("This is not applicable because it is not a function type.")
             }
-            Error::CircularType(_) => format!("Circular loop of type definition detected."),
+            Error::CircularType(_, _) => format!("Circular loop of type definition detected."),
             Error::IndexOutOfRange { len, idx, .. } => {
                 format!("Length of tuple elements is {len} but index was {idx}")
             }
@@ -66,16 +71,30 @@ impl ReportableError for Error {
                 left: (lty, locl),
                 right: (rty, locr),
             } => vec![
-                (locl.clone(), lty.to_string_for_error()),
-                (locr.clone(), rty.to_string_for_error()),
+                (locl.clone(), lty.to_type().to_string_for_error()),
+                (locr.clone(), rty.to_type().to_string_for_error()),
             ],
             Error::PatternMismatch((ty, loct), (pat, locp)) => vec![
-                (loct.clone(), ty.to_string_for_error()),
+                (loct.clone(), ty.to_type().to_string_for_error()),
                 (locp.clone(), pat.to_string()),
             ],
-            Error::NonFunctionForLetRec(ty, loc) => vec![(loc.clone(), ty.to_string_for_error())],
-            Error::NonFunctionForApply(ty, loc) => vec![(loc.clone(), ty.to_string_for_error())],
-            Error::CircularType(loc) => vec![(loc.clone(), format!("Circular type happens here"))],
+            Error::LengthMismatch {
+                left: (l, locl),
+                right: (r, locr),
+            } => vec![
+                (locl.clone(), format!("The length is {l}")),
+                (locr.clone(), format!("but the length for here is {r}")),
+            ],
+            Error::NonFunctionForLetRec(ty, loc) => {
+                vec![(loc.clone(), ty.to_type().to_string_for_error())]
+            }
+            Error::NonFunctionForApply(ty, loc) => {
+                vec![(loc.clone(), ty.to_type().to_string_for_error())]
+            }
+            Error::CircularType(loc1, loc2) => vec![
+                (loc1.clone(), format!("Circular type happens here")),
+                (loc2.clone(), format!("and here")),
+            ],
             Error::IndexOutOfRange { loc, len, .. } => {
                 vec![(loc.clone(), format!("Length for this tuple is {len}"))]
             }
@@ -95,7 +114,7 @@ pub struct InferResult {
     errs: Vec<Error>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct InferContext {
     interm_idx: u64,
     typescheme_idx: u64,
@@ -106,19 +125,21 @@ pub struct InferContext {
     instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>,
+    errors: Vec<Error>,
 }
 impl InferContext {
     fn new(builtins: &[(Symbol, TypeNodeId)]) -> Self {
         let mut res = Self {
-            interm_idx: 0,
-            typescheme_idx: 0,
-            instantiated_idx: 0,
-            level: 0,
+            interm_idx: Default::default(),
+            typescheme_idx: Default::default(),
+            instantiated_idx: Default::default(),
+            level: Default::default(),
             subst_map: Default::default(),
             generalize_map: Default::default(),
             instantiate_map: Default::default(),
             result_map: Default::default(),
-            env: Environment::<TypeNodeId>::new(),
+            env: Environment::<TypeNodeId>::default(),
+            errors: Default::default(),
         };
         res.env.extend();
         res.env.add_bind(&Self::intrinsic_types());
@@ -153,8 +174,8 @@ impl InferContext {
             intrinsics::SQRT,
         ];
 
-        let binds = binop_names.iter().map(|n| (n.to_symbol(), binop_ty));
-        let unibinds = uniop_names.iter().map(|n| (n.to_symbol(), uniop_ty));
+        let binds = binop_names.map(|n| (n.to_symbol(), binop_ty));
+        let unibinds = uniop_names.map(|n| (n.to_symbol(), uniop_ty));
         [
             (
                 intrinsics::DELAY.to_symbol(),
@@ -169,6 +190,16 @@ impl InferContext {
         .chain(binds)
         .chain(unibinds)
         .collect()
+    }
+    fn unwrap_result(&mut self, res: Result<TypeNodeId, Error>) -> TypeNodeId {
+        match res {
+            Ok(t) => t,
+            Err(e) => {
+                self.errors.push(e.clone());
+                let loc = &e.get_labels()[0].0;
+                Type::Failure.into_id_with_location(loc.clone())
+            }
+        }
     }
     fn gen_intermediate_type(&mut self) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
@@ -195,12 +226,12 @@ impl InferContext {
         self.instantiated_idx += 1;
         res
     }
-    fn gen_intermediate_type_with_span(&mut self, span: Span) -> TypeNodeId {
+    fn gen_intermediate_type_with_location(&mut self, loc: Location) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
             self.interm_idx,
             self.level,
         ))))
-        .into_id_with_span(span);
+        .into_id_with_location(loc);
         self.interm_idx += 1;
         res
     }
@@ -273,21 +304,33 @@ impl InferContext {
             let _old = self.result_map.insert(*e, *t);
         })
     }
+    fn unify_vec(
+        a1: &[TypeNodeId],
+        loc1: Location,
+        a2: &[TypeNodeId],
+        loc2: Location,
+    ) -> (Vec<TypeNodeId>, Vec<Error>) {
+        let (res, errs): (Vec<_>, Vec<_>) = a1
+            .into_iter()
+            .zip_longest(a2.into_iter())
+            .map(|pair| match pair {
+                EitherOrBoth::Both(a1, a2) => Self::unify_types(a1.clone(), a2.clone()),
+                EitherOrBoth::Left(t) | EitherOrBoth::Right(t) => Ok(t.clone()),
+            })
+            .partition_result();
+        let mut errs: Vec<_> = errs.into_iter().flatten().collect();
+        if a1.len() != a2.len() {
+            errs.push(Error::LengthMismatch {
+                left: (a1.len(), loc1.clone()),
+                right: (a2.len(), loc2.clone()),
+            });
+        }
+        (res, errs)
+    }
+    fn unify_types(t1: TypeNodeId, t2: TypeNodeId) -> Result<TypeNodeId, Vec<Error>> {
+        let loc1 = Location::new(t1.to_span(), "".to_symbol()); //todo file
+        let loc2 = Location::new(t2.to_span(), "".to_symbol());
 
-    fn unify_types(t1: TypeNodeId, t2: TypeNodeId, span: Span) -> Result<TypeNodeId, Error> {
-        let unify_vec = |a1: &[TypeNodeId], a2: &[TypeNodeId]| -> Result<Vec<_>, Error> {
-            if a1.len() != a2.len() {
-                return Err(Error(
-                    ErrorKind::TypeMismatch(t1.to_type(), t2.to_type()),
-                    span.clone(),
-                ));
-            }
-
-            a1.iter()
-                .zip(a2.iter())
-                .map(|(v1, v2)| Self::unify_types(*v1, *v2, span.clone()))
-                .try_collect()
-        };
         log::trace!("unify {} and {}", t1.to_type(), t2.to_type());
         let t1r = t1.get_root();
         let t2r = t2.get_root();
@@ -295,7 +338,7 @@ impl InferContext {
             (Type::Intermediate(i1), Type::Intermediate(i2)) => {
                 let tv1 = &mut i1.borrow_mut() as &mut TypeVar;
                 if Self::occur_check(tv1.var, t2) {
-                    return Ok(t1r);
+                    return Err(vec![Error::CircularType(loc1, loc2)]);
                 }
                 let tv2 = &mut i2.borrow_mut() as &mut TypeVar;
                 if tv1.level != tv2.level {
@@ -333,36 +376,42 @@ impl InferContext {
                 tv2.parent = Some(t1r);
                 Ok(t1r)
             }
-            (t1, Type::Instantiated(_)) => Ok(t1.clone().into_id_with_span(span)),
-            (Type::Instantiated(_), t2) => Ok(t2.clone().into_id_with_span(span)),
+            //currently monomorphize all generic types.
+            (t1, Type::Instantiated(_)) => Ok(t1.clone().into_id()),
+            (Type::Instantiated(_), t2) => Ok(t2.clone().into_id()),
             (Type::Array(a1), Type::Array(a2)) => {
-                Ok(Type::Array(Self::unify_types(*a1, *a2, span)?).into_id())
+                Ok(Type::Array(Self::unify_types(*a1, *a2)?).into_id())
             }
-            (Type::Ref(x1), Type::Ref(x2)) => {
-                Ok(Type::Ref(Self::unify_types(*x1, *x2, span)?).into_id())
-            }
+            (Type::Ref(x1), Type::Ref(x2)) => Ok(Type::Ref(Self::unify_types(*x1, *x2)?).into_id()),
             (Type::Tuple(a1), Type::Tuple(a2)) => {
-                Ok(Type::Tuple(unify_vec(a1, a2)?).into_id_with_span(span))
+                let (vec, err) = Self::unify_vec(&a1, loc1, &a2, loc2);
+                if err.is_empty() {
+                    Ok(Type::Tuple(vec).into_id())
+                } else {
+                    Err(err) //todo:return both partial result and err
+                }
             }
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
-            (Type::Function(p1, r1, s1), Type::Function(p2, r2, s2)) => Ok(Type::Function(
-                unify_vec(p1, p2)?,
-                Self::unify_types(*r1, *r2, span.clone())?,
-                match (s1, s2) {
-                    (Some(e1), Some(e2)) => Some(Self::unify_types(*e1, *e2, span)?),
-                    (None, None) => None,
-                    (_, _) => todo!("error handling"),
-                },
-            )
-            .into_id()),
+            (Type::Function(p1, r1, _s1), Type::Function(p2, r2, _s2)) => {
+                let (param, mut errs) = Self::unify_vec(p1, loc1, p2, loc2);
+                let ret = Self::unify_types(*r1, *r2).map_err(|mut e| {
+                    errs.append(&mut e);
+                    errs
+                })?;
+                Ok(Type::Function(param, ret, None).into_id())
+            }
             (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => {
                 Ok(Type::Primitive(p1.clone()).into_id())
             }
-
+            (Type::Failure, t) => Ok(t.clone().into_id_with_location(loc1.clone())),
+            (t, Type::Failure) => Ok(t.clone().into_id_with_location(loc2.clone())),
             (Type::Code(_p1), Type::Code(_p2)) => {
                 todo!("type system for multi-stage computation has not implemented yet")
             }
-            (p1, p2) => Err(Error(ErrorKind::TypeMismatch(p1.clone(), p2.clone()), span)),
+            (_p1, _p2) => Err(vec![Error::TypeMismatch {
+                left: (t1, loc1),
+                right: (t2, loc2),
+            }]),
         }
     }
     fn generalize(&mut self, t: TypeNodeId) -> TypeNodeId {
@@ -404,41 +453,39 @@ impl InferContext {
         &mut self,
         t: TypeNodeId,
         ty_pat: &TypedPattern,
-        span: Span,
-    ) -> Result<TypeNodeId, Error> {
+        loc: Location,
+    ) -> Result<TypeNodeId, Vec<Error>> {
         let TypedPattern { pat, .. } = ty_pat;
         let pat_t = match pat {
             Pattern::Single(id) => {
                 let gt = self.generalize(t);
                 self.env.add_bind(&[(*id, gt)]);
-                Ok(t)
+                Ok::<TypeNodeId, Vec<Error>>(t)
             }
             Pattern::Tuple(pats) => {
                 let res = pats
                     .iter()
                     .map(|p| {
-                        let ity = self.gen_intermediate_type_with_span(ty_pat.to_span());
+                        let ity = self.gen_intermediate_type_with_location(Location::new(
+                            ty_pat.to_span(),
+                            loc.path,
+                        ));
                         let p = TypedPattern {
                             pat: p.clone(),
                             ty: ity,
                         };
-                        self.bind_pattern(ity, &p, span.clone())
+                        self.bind_pattern(ity, &p, loc.clone())
                     })
-                    .try_collect()?;
+                    .try_collect()?; //todo
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-        Self::unify_types(t, pat_t, span)
+        Self::unify_types(t, pat_t)
     }
 
-    pub fn lookup(&self, name: &Symbol, span: &Span) -> Result<TypeNodeId, Error> {
-        self.env.lookup(name).map_or_else(
-            || {
-                Err(Error(
-                    ErrorKind::VariableNotFound(name.to_string()),
-                    span.clone(),
-                ))
-            }, //todo:Span
+    pub fn lookup(&self, name: Symbol, loc: Location) -> Result<TypeNodeId, Error> {
+        self.env.lookup(&name).map_or_else(
+            || Err(Error::VariableNotFound(name, loc)), //todo:Span
             |v| Ok(*v),
         )
     }
@@ -461,36 +508,44 @@ impl InferContext {
         self.level -= 1;
         res
     }
-    fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Error> {
-        let span = e.to_span().clone();
-        let res = match &e.to_expr() {
-            Expr::Literal(l) => Self::infer_type_literal(l),
-            Expr::Tuple(e) => Ok(Type::Tuple(self.infer_vec(e.as_slice())?).into_id()),
+    fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Vec<Error>> {
+        let loc = Location::new(e.to_span(), "".to_symbol()); //todo file
+        let res: Result<TypeNodeId, Vec<Error>> = match &e.to_expr() {
+            Expr::Literal(l) => Self::infer_type_literal(l).map_err(|e| vec![e]),
+            Expr::Tuple(e) => {
+                Ok(Type::Tuple(self.infer_vec(e.as_slice()).map_err(|e| vec![e])?).into_id())
+            }
             Expr::Proj(e, idx) => {
                 let tup = self.infer_type(*e)?;
                 match tup.to_type() {
                     Type::Tuple(vec) => {
                         if vec.len() < *idx as usize {
-                            Err(Error(
-                                ErrorKind::IndexOutOfRange(vec.len() as u16, *idx as u16),
-                                e.to_span().clone(),
-                            ))
+                            Err(vec![Error::IndexOutOfRange {
+                                len: vec.len() as u16,
+                                idx: *idx as u16,
+                                loc,
+                            }])
                         } else {
                             Ok(vec[*idx as usize])
                         }
                     }
-                    _ => Err(Error(ErrorKind::IndexForNonTuple, e.to_span().clone())),
+                    _ => Err(vec![Error::IndexForNonTuple(loc)]),
                 }
             }
             Expr::Feed(id, body) => {
                 let feedv = self.gen_intermediate_type();
                 self.env.add_bind(&[(*id, feedv)]);
                 let b = self.infer_type(*body)?;
-                let res = Self::unify_types(b, feedv, span)?;
-                if res.to_type().contains_function() {
-                    Err(Error(ErrorKind::NonPrimitiveInFeed, body.to_span().clone()))
-                } else {
-                    Ok(res)
+                let res = Self::unify_types(b, feedv);
+                match res {
+                    Ok(res) if res.to_type().contains_function() => {
+                        Err(vec![Error::NonPrimitiveInFeed(Location::new(
+                            body.to_span().clone(),
+                            loc.path,
+                        ))])
+                    }
+                    Ok(r) => Ok(r),
+                    Err(e) => Err(e),
                 }
             }
             Expr::Lambda(p, rtype, body) => {
