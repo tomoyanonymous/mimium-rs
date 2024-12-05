@@ -80,6 +80,11 @@ impl ReportableError for Error {
     }
 }
 
+pub struct InferResult {
+    ty: TypeNodeId,
+    errs: Vec<Error>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferContext {
     interm_idx: u64,
@@ -90,7 +95,7 @@ pub struct InferContext {
     generalize_map: BTreeMap<u64, u64>,
     instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
-    pub env: Environment<TypeNodeId>, // interm_map:HashMap<i64,Type>
+    pub env: Environment<TypeNodeId>,
 }
 impl InferContext {
     fn new(builtins: &[(Symbol, TypeNodeId)]) -> Self {

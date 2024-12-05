@@ -2,9 +2,8 @@ use ariadne::{Color, ColorGenerator, Label, Report, ReportKind, Source};
 use std::path;
 
 pub trait ReportableError: std::error::Error {
-    /// message is used for reporting verbose message for ariadne.
-    ///
     fn get_span(&self) -> std::ops::Range<usize>;
+    /// message is used for reporting verbose message for ariadne.
     fn get_message(&self, _color: Color) -> String {
         self.to_string()
     }
@@ -31,7 +30,7 @@ impl ReportableError for ReportableErrorDyn {
     }
 }
 
-pub fn report<T>(src: &String, srcpath: T, errs: &Vec<Box<dyn ReportableError>>)
+pub fn report<T>(src: &String, srcpath: T, errs: &[Box<dyn ReportableError>])
 where
     T: AsRef<path::Path>,
 {
@@ -52,7 +51,7 @@ where
     }
 }
 
-pub fn dump_to_string(errs: &Vec<Box<dyn ReportableError>>) -> String {
+pub fn dump_to_string(errs: &[Box<dyn ReportableError>]) -> String {
     let mut res = String::new();
     for e in errs {
         res += e.get_message(Color::Green).as_str();
