@@ -594,8 +594,8 @@ impl InferContext {
                     span: body.to_span(),
                     path: self.file_path,
                 };
-                let _ = self.bind_pattern((tpat.clone(), loc_p), (bodyt, loc_b))?;
-
+                let pat_t = self.bind_pattern((tpat.clone(), loc_p), (bodyt, loc_b));
+                let _pat_t = self.unwrap_result(pat_t);
                 match then {
                     Some(e) => self.infer_type(*e),
                     None => Ok(Type::Primitive(PType::Unit).into_id()),

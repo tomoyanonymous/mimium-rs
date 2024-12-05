@@ -476,6 +476,7 @@ fn statements_parser(
         .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
         .allow_leading()
         .allow_trailing()
+        .recover_with(skip_until([Token::LineBreak, Token::SemiColon], |_| vec![]))
         .map(|stmts| into_then_expr(&stmts))
 }
 
@@ -492,6 +493,12 @@ fn block_parser(
                 path: ctx.file_path,
             })
         })
+        .recover_with(nested_delimiters(
+            Token::BlockBegin,
+            Token::BlockEnd,
+            [],
+            |_| Expr::Error.into_id_without_span(),
+        ))
 }
 // expr_group contains let statement, assignment statement, function definiton,... they cannot be placed as an argument for apply directly.
 fn exprgroup_parser<'a>(ctx: ParseContext) -> ExprParser<'a> {
@@ -620,27 +627,21 @@ fn func_parser(ctx: ParseContext) -> impl Parser<Token, ExprNodeId, Error = Simp
         .labelled("macro definition");
     let global_stmt = statement_parser(exprgroup.clone(), ctx.clone());
     let stmt = function_s.or(macro_s).or(global_stmt);
+    let separator = just(Token::LineBreak).or(just(Token::SemiColon)).repeated();
     let stmts = stmt
         .map(|s: (Statement, Location)| vec![s])
         .or(
             preprocess_parser(ctx.clone()).map_with_span(move |e, span| {
                 stmt_from_expr_top(e)
                     .into_iter()
-                    .map(|st| {
-                        (
-                            st,
-                            Location {
-                                span: span.clone(),
-                                path: ctx.file_path,
-                            },
-                        )
-                    })
+                    .map(|st| (st, Location::new(span.clone(), ctx.file_path)))
                     .collect()
             }),
         )
-        .separated_by(just(Token::LineBreak).or(just(Token::SemiColon)).repeated())
+        .separated_by(separator)
         .allow_leading()
         .allow_trailing()
+        .recover_with(skip_until([Token::LineBreak, Token::SemiColon], |_| vec![]))
         .flatten()
         .map(|stmt| into_then_expr(&stmt));
     stmts.try_map(|e: Option<ExprNodeId>, span| e.ok_or(Simple::custom(span, "empty expressions")))
