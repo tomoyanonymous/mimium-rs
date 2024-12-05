@@ -27,7 +27,7 @@ impl FuncProto {
     pub fn add_new_constant(&mut self, cval: RawVal) -> ConstPos {
         self.constants.binary_search(&cval).unwrap_or_else(|_err| {
             self.constants.push(cval);
-            self.constants.len() - 1 
+            self.constants.len() - 1
         }) as _
     }
 }
@@ -65,14 +65,14 @@ impl Program {
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for fns in self.global_fn_table.iter() {
-            let _ = write!(f, "{}\n", fns.0);
-            let _ = write!(f, "nparams:{} nret: {}\n", fns.1.nparam, fns.1.nret);
+            let _ = writeln!(f, "{}", fns.0);
+            let _ = writeln!(f, "nparams:{} nret: {}", fns.1.nparam, fns.1.nret);
             let _ = write!(f, "upindexes: {:?}  ", fns.1.upindexes);
-            let _ = write!(f, "state_size: {}  \n", fns.1.state_size);
-            let _ = write!(f, "constants:  {:?}\n", fns.1.constants);
-            let _ = write!(f, "instructions:\n");
+            let _ = writeln!(f, "state_size: {}  ", fns.1.state_size);
+            let _ = writeln!(f, "constants:  {:?}", fns.1.constants);
+            let _ = writeln!(f, "instructions:");
             for inst in fns.1.bytecodes.iter() {
-                let _ = write!(f, "  {}\n", inst);
+                let _ = writeln!(f, "  {}", inst);
             }
         }
         let _ = write!(
@@ -87,9 +87,9 @@ impl std::fmt::Display for Program {
                 })
         );
         let _ = write!(f, "globals:\n{:?}", self.global_vals);
-        write!(
+        writeln!(
             f,
-            "strings:  {:?}\n",
+            "strings:  {:?}",
             self.strings
                 .iter()
                 .map(|s| s.to_string())

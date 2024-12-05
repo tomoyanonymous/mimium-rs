@@ -1,7 +1,6 @@
 use super::*;
 use crate::pattern::TypedId;
 use crate::utils;
-use std::path::PathBuf;
 
 macro_rules! test_string {
     ($src:literal, $ans:expr) => {

@@ -1,5 +1,5 @@
 use crate::compiler::ExtFunTypeInfo;
-use crate::interner::{Symbol, ToSymbol, TypeNodeId};
+use crate::interner::ToSymbol;
 use crate::types::{PType, Type};
 use crate::{function, numeric};
 

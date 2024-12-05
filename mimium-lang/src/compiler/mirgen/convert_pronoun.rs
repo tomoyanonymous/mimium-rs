@@ -170,9 +170,8 @@ fn convert_self(
     feedctx: FeedId,
     file_path: Symbol,
 ) -> (ConvertResult, Vec<Error>) {
-    let conversion = |e: ExprNodeId| -> (ConvertResult, Vec<Error>) {
-        convert_self(e, feedctx, file_path.clone())
-    };
+    let conversion =
+        |e: ExprNodeId| -> (ConvertResult, Vec<Error>) { convert_self(e, feedctx, file_path) };
     let loc = Location::new(e_id.to_span().clone(), file_path);
 
     match e_id.to_expr().clone() {
@@ -222,7 +221,7 @@ fn convert_self(
             "Feed should not be shown before conversion at {}..{}",
             loc.span.start, loc.span.end
         ),
-        _ => convert_recursively(e_id, conversion, file_path.clone()),
+        _ => convert_recursively(e_id, conversion, file_path),
     }
 }
 
@@ -253,7 +252,7 @@ fn convert_placeholder(e_id: ExprNodeId, file_path: Symbol) -> ExprNodeId {
                     }
                 })
                 .unzip();
-            let lambda_args = lambda_args_sparse.into_iter().filter_map(|e| e).collect();
+            let lambda_args = lambda_args_sparse.into_iter().flatten().collect();
             let body = Expr::Apply(fun, new_args).into_id(loc.clone());
             Expr::Lambda(lambda_args, None, body).into_id(loc.clone())
         }

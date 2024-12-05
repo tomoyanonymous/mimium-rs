@@ -178,7 +178,7 @@ impl NativeDriver {
                     let config_builder = device
                         .supported_output_configs()
                         .unwrap()
-                        .max_by(|x, y| x.cmp_default_heuristics(&y))
+                        .max_by(|x, y| x.cmp_default_heuristics(y))
                         .expect("no supported config");
                     config_builder.try_with_sample_rate(cpal::SampleRate(sr.get()))
                 } else {

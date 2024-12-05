@@ -35,12 +35,7 @@ fn type_parser(ctx: ParseContext) -> impl Parser<Token, TypeNodeId, Error = Simp
            Token::IntegerType => Type::Primitive(PType::Int),
            Token::StringType => Type::Primitive(PType::String)
         }
-        .map_with_span(move |t, span| {
-            t.into_id_with_location(Location {
-                span,
-                path: path.clone(),
-            })
-        });
+        .map_with_span(move |t, span| t.into_id_with_location(Location::new(span, path)));
 
         let tuple = ty
             .clone()
@@ -48,10 +43,7 @@ fn type_parser(ctx: ParseContext) -> impl Parser<Token, TypeNodeId, Error = Simp
             .allow_trailing()
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .map_with_span(move |t: Vec<TypeNodeId>, span: Span| {
-                Type::Tuple(t).into_id_with_location(Location {
-                    span,
-                    path: path.clone(),
-                })
+                Type::Tuple(t).into_id_with_location(Location::new(span, path))
             })
             .boxed()
             .labelled("Tuple");
@@ -64,10 +56,7 @@ fn type_parser(ctx: ParseContext) -> impl Parser<Token, TypeNodeId, Error = Simp
             .delimited_by(just(Token::ParenBegin), just(Token::ParenEnd))
             .then(just(Token::Arrow).ignore_then(ty.clone()))
             .map_with_span(move |(a, e), span| {
-                Type::Function(a, e, None).into_id_with_location(Location {
-                    span,
-                    path: path.clone(),
-                })
+                Type::Function(a, e, None).into_id_with_location(Location::new(span, path))
             })
             .boxed()
             .labelled("function");

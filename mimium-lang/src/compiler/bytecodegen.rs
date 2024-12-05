@@ -217,7 +217,7 @@ impl ByteCodeGenerator {
     ) -> (Reg, TypeSize) {
         let mut aoffsets = vec![];
         let mut offset = 0;
-        for (_i, (a, ty)) in args.iter().enumerate() {
+        for (a, ty) in args.iter() {
             let src = self.find(a);
             let size = Self::word_size_for_type(*ty);
             aoffsets.push((offset, src, size));
@@ -303,7 +303,6 @@ impl ByteCodeGenerator {
         &mut self,
         funcproto: &mut vm::FuncProto,
         bytecodes_dst: Option<&mut Vec<VmInstruction>>,
-        fidx: usize,
         mirfunc: &mir::Function,
         dst: Arc<mir::Value>,
         mirinst: &mir::Instruction,
@@ -552,7 +551,6 @@ impl ByteCodeGenerator {
                         if let Some(inst) = self.emit_instruction(
                             funcproto,
                             Some(&mut then_bytecodes),
-                            fidx,
                             mirfunc,
                             dst.clone(),
                             t_inst,
@@ -568,7 +566,6 @@ impl ByteCodeGenerator {
                         if let Some(inst) = self.emit_instruction(
                             funcproto,
                             Some(&mut else_bytecodes),
-                            fidx,
                             mirfunc,
                             dst.clone(),
                             t_inst,
@@ -608,7 +605,7 @@ impl ByteCodeGenerator {
 
                 phiblock.iter().skip(1).for_each(|(dst, p_inst)| {
                     if let Some(inst) =
-                        self.emit_instruction(funcproto, None, fidx, mirfunc, dst.clone(), p_inst)
+                        self.emit_instruction(funcproto, None, mirfunc, dst.clone(), p_inst)
                     {
                         match &mut bytecodes_dst {
                             Some(dst) => dst.push(inst),
@@ -646,7 +643,7 @@ impl ByteCodeGenerator {
                 let t = self.find(time);
 
                 let dst = self.vregister.add_newvalue(&dst);
-                funcproto.delay_sizes.push(*max as u64);
+                funcproto.delay_sizes.push(*max);
                 Some(VmInstruction::Delay(dst, s, t))
             }
             mir::Instruction::Mem(src) => {
@@ -711,7 +708,7 @@ impl ByteCodeGenerator {
         // succeeding block will be compiled recursively
         let block = &mirfunc.body[0];
         block.0.iter().for_each(|(dst, inst)| {
-            let newinst = self.emit_instruction(&mut func, None, fidx, mirfunc, dst.clone(), inst);
+            let newinst = self.emit_instruction(&mut func, None, mirfunc, dst.clone(), inst);
             if let Some(i) = newinst {
                 func.bytecodes.push(i);
             }

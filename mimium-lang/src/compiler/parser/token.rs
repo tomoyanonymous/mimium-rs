@@ -63,8 +63,6 @@ pub enum Token {
     LetRec,
     Assign,
 
-    Reference, //?
-
     ParenBegin,
     ParenEnd,
     ArrayBegin,
@@ -81,17 +79,14 @@ pub enum Token {
     If,
     Else,
 
-    Return,
-    Type,
-    Alias,
+    // Type,
+    // Alias,
 
     Include,
 
     LineBreak,
 
     Comment(Comment),
-
-    EndOfInput,
 }
 impl Op {
     pub fn get_associated_fn_name(&self) -> Symbol {
@@ -165,7 +160,6 @@ impl fmt::Display for Token {
             Token::Let => write!(f, "let"),
             Token::LetRec => write!(f, "letrec"),
             Token::Assign => write!(f, "="),
-            Token::Reference => write!(f, "&"),
             Token::ParenBegin => write!(f, "("),
             Token::ParenEnd => write!(f, ")"),
             Token::ArrayBegin => write!(f, "["),
@@ -182,13 +176,11 @@ impl fmt::Display for Token {
             Token::If => write!(f, "if"),
             Token::Else => write!(f, "else"),
 
-            Token::Return => write!(f, "return"),
-            Token::Type => write!(f, "type"),
-            Token::Alias => write!(f, "newtype"),
+            // Token::Type => write!(f, "type"),
+            // Token::Alias => write!(f, "newtype"),
             Token::Include => write!(f, "include"),
             Token::LineBreak => write!(f, "linebreak"),
             Token::Comment(_) => write!(f, "comment"),
-            Token::EndOfInput => write!(f, "endofinput"),
         }
     }
 }

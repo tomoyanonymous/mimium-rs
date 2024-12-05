@@ -58,7 +58,7 @@ fn lib_printi(state: &mut Machine) -> i64 {
     let v = state.get_top_n(1)[0];
     let i = Machine::get_as::<i64>(v);
     println!("{}", i);
-    return 1;
+    1
 }
 
 #[test]

@@ -41,7 +41,7 @@ fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let driverplug: Box<dyn Plugin> = Box::new(driver.get_as_plugin());
     let mut ctx = ExecContext::new([driverplug].into_iter(), None);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
-    let _ = ctx.prepare_machine(&src);
+    let _ = ctx.prepare_machine(src);
     let _ = ctx.run_main();
     driver.init(ctx, None);
     driver
