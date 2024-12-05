@@ -3,6 +3,7 @@ use crate::compiler::intrinsics;
 use crate::interner::{ExprKey, ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedPattern};
 use crate::types::{PType, Type, TypeVar};
+use crate::utils::metadata::Location;
 use crate::utils::{environment::Environment, error::ReportableError, metadata::Span};
 use crate::{function, integer, numeric, unit};
 use itertools::Itertools;
@@ -11,72 +12,81 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
-//todo: span for 2 different locations
-#[derive(Clone, Debug, PartialEq)]
-pub enum ErrorKind {
-    TypeMismatch(Type, Type),
-    PatternMismatch(Type, Pattern),
-    NonFunctionForLetRec(Type),
-    NonFunctionForApply(Type),
-    CircularType,
-    IndexOutOfRange(u16, u16),
-    IndexForNonTuple,
-    VariableNotFound(String),
-    NonPrimitiveInFeed,
-}
-#[derive(Clone, Debug, PartialEq)]
-pub struct Error(pub ErrorKind, pub Span);
-
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self {
-            ErrorKind::TypeMismatch(e, a) => write!(
-                f,
-                "Type Mismatch, between {} and {}",
-                e.to_string_for_error(),
-                a.to_string_for_error()
-            ),
-            ErrorKind::PatternMismatch(e, p) => write!(
-                f,
-                "Pattern {p} cannot have {} type.",
-                e.to_string_for_error()
-            ),
-
-            ErrorKind::CircularType => write!(f, "Circular loop of type definition"),
-            ErrorKind::IndexOutOfRange(len, idx) => write!(
-                f,
-                "Length of tuple elements is {} but index was {}",
-                len, idx
-            ),
-            ErrorKind::IndexForNonTuple => write!(f, "Index access for non-tuple variable"),
-            ErrorKind::VariableNotFound(v) => {
-                write!(f, "Variable {} not found in this scope", v)
-            }
-            ErrorKind::NonPrimitiveInFeed => {
-                write!(f, "Function that uses self cannot be return function type.")
-            }
-            ErrorKind::NonFunctionForApply(t) => write!(
-                f,
-                "{} is not applicable because it is not a function type.",
-                t.to_string_for_error()
-            ),
-            ErrorKind::NonFunctionForLetRec(t) => write!(
-                f,
-                "\"letrec\" requires the expression to be function type but it was {} type.",
-                t.to_string_for_error()
-            ),
-        }
-    }
+#[derive(Clone, Debug)]
+pub enum Error {
+    TypeMismatch {
+        left: (Type, Location),
+        right: (Type, Location),
+    },
+    PatternMismatch((Type, Location), (Pattern, Location)),
+    NonFunctionForLetRec(Type, Location),
+    NonFunctionForApply(Type, Location),
+    CircularType(Location),
+    IndexOutOfRange {
+        len: u16,
+        idx: u16,
+        loc: Location,
+    },
+    IndexForNonTuple(Location),
+    VariableNotFound(Symbol, Location),
+    NonPrimitiveInFeed(Location),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        write!(f, "Type Inference Error")
     }
 }
+
 impl std::error::Error for Error {}
 impl ReportableError for Error {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        self.1.clone()
+    fn get_message(&self) -> String {
+        match self {
+            Error::TypeMismatch { .. } => format!("Type mismatch"),
+            Error::PatternMismatch(..) => format!("Pattern mismatch"),
+            Error::NonFunctionForLetRec(_, _) => format!("`letrec` can take only function type."),
+            Error::NonFunctionForApply(_, _) => {
+                format!("This is not applicable because it is not a function type.")
+            }
+            Error::CircularType(_) => format!("Circular loop of type definition detected."),
+            Error::IndexOutOfRange { len, idx, .. } => {
+                format!("Length of tuple elements is {len} but index was {idx}")
+            }
+            Error::IndexForNonTuple(_) => format!("Index access for non-tuple variable."),
+            Error::VariableNotFound(symbol, _) => {
+                format!("Variable {} not found in this scope", symbol.to_string())
+            }
+            Error::NonPrimitiveInFeed(_) => {
+                format!("Function that uses `self` cannot return function type.")
+            }
+        }
+    }
+    fn get_labels(&self) -> Vec<(Location, String)> {
+        match self {
+            Error::TypeMismatch {
+                left: (lty, locl),
+                right: (rty, locr),
+            } => vec![
+                (locl.clone(), lty.to_string_for_error()),
+                (locr.clone(), rty.to_string_for_error()),
+            ],
+            Error::PatternMismatch((ty, loct), (pat, locp)) => vec![
+                (loct.clone(), ty.to_string_for_error()),
+                (locp.clone(), pat.to_string()),
+            ],
+            Error::NonFunctionForLetRec(ty, loc) => vec![(loc.clone(), ty.to_string_for_error())],
+            Error::NonFunctionForApply(ty, loc) => vec![(loc.clone(), ty.to_string_for_error())],
+            Error::CircularType(loc) => vec![(loc.clone(), format!("Circular type happens here"))],
+            Error::IndexOutOfRange { loc, len, .. } => {
+                vec![(loc.clone(), format!("Length for this tuple is {len}"))]
+            }
+            Error::IndexForNonTuple(loc) => vec![(loc.clone(), format!("This is not tuple type."))],
+            Error::VariableNotFound(symbol, loc) => {
+                vec![(loc.clone(), format!("{} is not defined", symbol))]
+            }
+            Error::NonPrimitiveInFeed(loc) => {
+                vec![(loc.clone(), format!("This cannot be function type."))]
+            }
+        }
     }
 }
 
