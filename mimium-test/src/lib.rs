@@ -9,6 +9,7 @@ use mimium_lang::{
     utils::{
         error::{report, ReportableError},
         fileloader,
+        metadata::Location,
     },
     ExecContext,
 };
@@ -23,7 +24,7 @@ pub fn run_bytecode_test(
     } else {
         Err(vec![Box::new(runtime::Error(
             runtime::ErrorKind::Unknown,
-            0..0,
+            Location::default(),
         ))])
     }
 }
@@ -34,7 +35,7 @@ pub fn run_bytecode_test_multiple(
     stereo: bool,
 ) -> Result<Vec<f64>, Vec<Box<dyn ReportableError>>> {
     let mut ctx = ExecContext::new([].into_iter(), None);
-    let _ = ctx.prepare_machine_with_bytecode(bytecodes);
+    ctx.prepare_machine_with_bytecode(bytecodes);
     let mut machine = ctx.vm.unwrap();
     let _retcode = machine.execute_main();
     let n = if stereo { 2 } else { 1 };
@@ -96,7 +97,7 @@ pub fn run_file_with_plugins(
     times: u64,
     plugins: impl Iterator<Item = Box<dyn Plugin>>,
     with_scheduler: bool,
-) -> Result<Vec<f64>, ()> {
+) -> Option<Vec<f64>> {
     let (file, src) = load_src(path);
     let res = run_source_with_plugins(
         &src,
@@ -106,26 +107,38 @@ pub fn run_file_with_plugins(
         with_scheduler,
     );
     match res {
-        Ok(res) => Ok(res),
+        Ok(res) => Some(res),
         Err(errs) => {
-            report(&src, file, &errs);
-            Err(())
+            report(&src, file.to_string_lossy().to_symbol(), &errs);
+            None
         }
     }
 }
-pub fn run_file_with_scheduler(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_with_scheduler(path: &str, times: u64) -> Option<Vec<f64>> {
     run_file_with_plugins(path, times, [].into_iter(), true)
 }
-pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Result<Vec<f64>, ()> {
+pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Option<Vec<f64>> {
     let (file, src) = load_src(path);
     let path_sym = file.to_string_lossy().to_symbol();
     let res = run_source_test(&src, times, stereo, Some(path_sym));
     match res {
-        Ok(res) => Ok(res),
+        Ok(res) => Some(res),
         Err(errs) => {
-            report(&src, file, &errs);
-            Err(())
+            report(&src, path_sym, &errs);
+            None
         }
+    }
+}
+
+pub fn run_error_test(path: &str, stereo: bool) -> Vec<Box<dyn ReportableError>> {
+    let (file, src) = load_src(path);
+    let path_sym = file.to_string_lossy().to_symbol();
+    let res = run_source_test(&src, 1, stereo, Some(path_sym));
+    match res {
+        Ok(_res) => {
+            panic!("this test should emit errors")
+        }
+        Err(errs) => errs,
     }
 }
 
@@ -149,11 +162,11 @@ fn main() {
     (file, src)
 }
 
-pub fn run_file_test_mono(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_mono(path: &str, times: u64) -> Option<Vec<f64>> {
     run_file_test(path, times, false)
 }
 
-pub fn run_file_test_stereo(path: &str, times: u64) -> Result<Vec<f64>, ()> {
+pub fn run_file_test_stereo(path: &str, times: u64) -> Option<Vec<f64>> {
     run_file_test(path, times, true)
 }
 

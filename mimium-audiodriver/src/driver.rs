@@ -10,7 +10,6 @@ use mimium_lang::{
         vm::{self, ExtClsInfo, FuncProto, ReturnCode},
         Time,
     },
-    utils::error::ReportableError,
     ExecContext,
 };
 use num_traits::Float;
@@ -52,23 +51,7 @@ impl SampleRate {
         self.0.load(Ordering::Relaxed)
     }
 }
-#[derive(Debug)]
-pub enum Error {
-    Unknown,
-}
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Unknown => write!(f, "unknown runtime error"),
-        }
-    }
-}
-impl std::error::Error for Error {}
-impl ReportableError for Error {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        0..0 //todo!
-    }
-}
+
 
 /// Note: `Driver` trait doesn't have `new()` so that the struct can have its own
 /// `new()` with any parameters specific to the type. With this in mind, `init()`

@@ -112,17 +112,15 @@ impl NativeAudioData {
 }
 struct NativeAudioReceiver {
     dsp_ichannels: usize,
-    adjusted_ichannels: usize,
     localbuffer: Vec<f64>,
     buffer: HeapProd<f64>,
     count: u64,
 }
 unsafe impl Send for NativeAudioReceiver {}
 impl NativeAudioReceiver {
-    pub fn new(dsp_ichannels: usize, adjusted_ichannels: usize, buffer: HeapProd<f64>) -> Self {
+    pub fn new(dsp_ichannels: usize, buffer: HeapProd<f64>) -> Self {
         Self {
             dsp_ichannels,
-            adjusted_ichannels,
             localbuffer: vec![0f64; 4096 * dsp_ichannels],
             buffer,
             count: 0,
@@ -219,9 +217,7 @@ impl Driver for NativeDriver {
     fn init(&mut self, ctx: ExecContext, sample_rate: Option<SampleRate>) -> bool {
         let host = cpal::default_host();
         let dsp_ichannels = 1; //todo
-        let adjusted_ichannels = 1; //todo: calculate similarly to adjusted_ochannels
-        let (prod, cons) =
-            HeapRb::<Self::Sample>::new(adjusted_ichannels * self.buffer_size).split();
+        let (prod, cons) = HeapRb::<Self::Sample>::new(dsp_ichannels * self.buffer_size).split();
 
         let idevice = host.default_input_device();
         let in_stream = if let Some(idevice) = idevice {
@@ -232,7 +228,7 @@ impl Driver for NativeDriver {
                 idevice.name().unwrap_or_default(),
                 iconfig.buffer_size
             );
-            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, adjusted_ichannels, prod);
+            let mut receiver = NativeAudioReceiver::new(dsp_ichannels, prod);
             self.hardware_ichannels = iconfig.channels as usize;
             let h_ichannels = self.hardware_ichannels;
             let in_stream = idevice.build_input_stream(

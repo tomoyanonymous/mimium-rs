@@ -142,12 +142,18 @@ impl RunOptions {
 }
 
 fn emit_ast_local(src: &str, filepath: &Path) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast1 = emit_ast(src, Some(filepath.to_str().unwrap().to_symbol()))?;
+    let path = filepath.to_str().unwrap().to_symbol();
+    let ast1 = emit_ast(src, Some(path))?;
 
-    convert_pronoun::convert_pronoun(ast1).map_err(|e| {
-        let eb: Vec<Box<dyn ReportableError>> = vec![Box::new(e)];
-        eb
-    })
+    let (ast, errs) = convert_pronoun::convert_pronoun(ast1, path);
+    if errs.is_empty() {
+        Ok(ast)
+    } else {
+        Err(errs
+            .into_iter()
+            .map(|e| -> Box<dyn ReportableError> { Box::new(e) })
+            .collect())
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -162,7 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     match &args.file {
         Some(file) => {
-            let fullpath = fileloader::get_canonical_path(".", &file)?;
+            let fullpath = fileloader::get_canonical_path(".", file)?;
             let content = fileloader::load(fullpath.to_str().unwrap())?;
             let options = RunOptions::from_args(&args);
             match run_file(options, &content, &fullpath) {
@@ -172,7 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // struct around ReportableError and directly return it,
                     // however, std::error::Error cannot be so color-rich as
                     // ariadne because it just uses std::fmt::Display.
-                    report(&content, fullpath, &e);
+                    report(&content, fullpath.to_string_lossy().to_symbol(), &e);
                     return Err(format!("Failed to process {file}").into());
                 }
             }
@@ -210,12 +216,14 @@ fn run_file(
     match options.mode {
         RunMode::EmitAst => {
             let ast = emit_ast_local(content, fullpath)?;
-            println!("{}", ast.pretty_print());
+            Ok(println!("{}", ast.pretty_print()))
         }
         RunMode::EmitMir => {
             ctx.prepare_compiler();
-            let mir = ctx.compiler.as_ref().unwrap().emit_mir(content)?;
-            println!("{mir}");
+            let res = ctx.compiler.as_ref().unwrap().emit_mir(content);
+            res.map(|r| {
+                println!("{r}");
+            })
         }
         RunMode::EmitByteCode => {
             // need to prepare dummy audio plugin to link `now` and `samplerate`
@@ -223,7 +231,7 @@ fn run_file(
             let plug = localdriver.get_as_plugin();
             ctx.add_plugin(plug);
             ctx.prepare_machine(content)?;
-            println!("{}", ctx.vm.unwrap().prog);
+            Ok(println!("{}", ctx.vm.unwrap().prog))
         }
         _ => {
             let mut driver = options.get_driver();
@@ -239,9 +247,8 @@ fn run_file(
             }));
             driver.init(ctx, Some(SampleRate::from(48000)));
             driver.play();
-            mainloop()
+            mainloop();
+            Ok(())
         }
     }
-
-    Ok(())
 }

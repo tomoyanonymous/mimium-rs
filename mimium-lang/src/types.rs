@@ -3,7 +3,7 @@ use std::{cell::RefCell, fmt, rc::Rc};
 use crate::{
     format_vec,
     interner::{with_session_globals, Symbol, TypeNodeId},
-    utils::metadata::Span,
+    utils::metadata::Location,
 };
 
 /// Basic types that are not boxed.
@@ -46,6 +46,8 @@ pub enum Type {
     Intermediate(Rc<RefCell<TypeVar>>),
     TypeScheme(u64),
     Instantiated(u64),
+    /// Failure type: it is bottom type that can be unified to any type and return bottom type.
+    Failure,
     Unknown,
 }
 
@@ -84,8 +86,8 @@ impl Type {
         with_session_globals(|session_globals| session_globals.store_type(self))
     }
 
-    pub fn into_id_with_span(self, span: Span) -> TypeNodeId {
-        with_session_globals(|session_globals| session_globals.store_type_with_span(self, span))
+    pub fn into_id_with_location(self, loc: Location) -> TypeNodeId {
+        with_session_globals(|session_globals| session_globals.store_type_with_location(self, loc))
     }
 
     pub fn to_string_for_error(&self) -> String {
@@ -231,6 +233,7 @@ impl fmt::Display for Type {
             Type::Instantiated(id) => {
                 write!(f, "'{id}")
             }
+            Type::Failure => write!(f, "!"),
             Type::Unknown => write!(f, "unknown"),
         }
     }

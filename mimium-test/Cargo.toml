@@ -9,6 +9,9 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 # [lib]
 
+# do not need to publish this crate on crate.io (config for `cargo release`)
+[package.metadata.release]
+release = false
 
 [dependencies]
 

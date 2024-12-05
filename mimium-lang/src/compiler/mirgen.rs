@@ -1,5 +1,5 @@
 use super::intrinsics;
-use super::typing::{self, infer_root, InferContext};
+use super::typing::{infer_root, InferContext};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol, TypeNodeId};
 use crate::pattern::{Pattern, TypedId, TypedPattern};
 use crate::{function, numeric, unit};
@@ -12,10 +12,9 @@ use std::sync::Arc;
 use crate::types::{PType, Type};
 use crate::utils::environment::{Environment, LookupRes};
 use crate::utils::error::ReportableError;
-use crate::utils::metadata::Span;
+use crate::utils::metadata::{Location, Span};
 
 use crate::ast::{Expr, Literal};
-use itertools::Itertools;
 
 // pub mod closure_convert;
 // pub mod feedconvert;
@@ -33,7 +32,7 @@ struct ContextData {
 }
 
 #[derive(Debug)]
-pub struct Context {
+struct Context {
     typeenv: InferContext,
     valenv: Environment<VPtr>,
     fn_label: Option<Symbol>,
@@ -45,17 +44,20 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(typeenv: InferContext) -> Self {
+    pub fn new(typeenv: InferContext, file_path: Option<Symbol>) -> Self {
         Self {
             typeenv,
             valenv: Environment::new(),
-            program: Default::default(),
+            program: Mir::new(file_path),
             reg_count: 0,
             fn_label: None,
             anonymous_fncount: 0,
             data: vec![ContextData::default()],
             data_i: 0,
         }
+    }
+    fn get_loc_from_span(&self, span: &Span) -> Location {
+        Location::new(span.clone(), self.program.file_path.unwrap_or_default())
     }
     fn get_ctxdata(&mut self) -> &mut ContextData {
         self.data.get_mut(self.data_i).unwrap()
@@ -75,20 +77,20 @@ impl Context {
         let i = self.get_ctxdata().func_i;
         &mut self.program.functions[i]
     }
-    fn make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Result<Option<VPtr>, CompileError> {
+    fn try_make_delay(&mut self, f: &VPtr, args: &[ExprNodeId]) -> Option<VPtr> {
         let rt = match f.as_ref() {
             Value::ExtFunction(name, ft) if *name == "delay".to_symbol() => ft,
-            _ => return Ok(None),
+            _ => return None,
         };
 
         let (max, src, time) = match args {
             [max, src, time] => (max, src, time),
-            _ => return Ok(None),
+            _ => return None,
         };
         match max.to_expr() {
             Expr::Literal(Literal::Float(max)) => {
                 //need to evaluate args first before calculate state offset because the argument for time contains stateful function call.
-                let args = self.eval_args(&[*src, *time])?;
+                let args = self.eval_args(&[*src, *time]);
                 let max_time = max.as_str().parse::<f64>().unwrap();
                 let shift_size = max_time as u64 + DELAY_ADDITIONAL_OFFSET;
                 self.get_current_fn().state_sizes.push(StateSize {
@@ -103,16 +105,13 @@ impl Context {
                         .push((Arc::new(Value::None), Instruction::PushStateOffset(coffset)));
                 }
                 let (args, _types): (Vec<VPtr>, Vec<TypeNodeId>) = args.into_iter().unzip();
-                Ok(Some(self.push_inst(Instruction::Delay(
+                Some(self.push_inst(Instruction::Delay(
                     max_time as u64,
                     args[0].clone(),
                     args[1].clone(),
-                ))))
+                )))
             }
-            _ => Err(CompileError(
-                CompileErrorKind::UnboundedDelay,
-                max.to_span().clone(),
-            )),
+            _ => unreachable!("unbounded delay access, should be an error at typing stage."),
         }
     }
     fn make_binop_intrinsic(
@@ -166,17 +165,13 @@ impl Context {
         }
     }
 
-    fn make_intrinsics(
-        &mut self,
-        label: Symbol,
-        args: &[(VPtr, TypeNodeId)],
-    ) -> Result<Option<VPtr>, CompileError> {
+    fn make_intrinsics(&mut self, label: Symbol, args: &[(VPtr, TypeNodeId)]) -> Option<VPtr> {
         let inst = match args.len() {
             1 => self.make_uniop_intrinsic(label, args),
             2 => self.make_binop_intrinsic(label, args),
-            _ => return Ok(None),
+            _ => return None,
         };
-        Ok(inst.map(|i| self.push_inst(i)))
+        inst.map(|i| self.push_inst(i))
     }
     fn get_current_basicblock(&mut self) -> &mut mir::Block {
         let bbid = self.get_ctxdata().current_bb;
@@ -208,7 +203,7 @@ impl Context {
         v: VPtr,
         ty: TypeNodeId,
         is_global: bool,
-    ) -> Result<(), CompileError> {
+    ) {
         let TypedPattern { pat, .. } = pattern;
         let span = pattern.to_span();
         match (pat, ty.to_type()) {
@@ -233,19 +228,18 @@ impl Context {
                         array_idx: 0,
                         tuple_offset: i as u64,
                     });
-                    let tid = Type::Unknown.into_id_with_span(span.clone());
+                    let tid = Type::Unknown.into_id_with_location(self.get_loc_from_span(&span));
                     let tpat = TypedPattern {
                         pat: pat.clone(),
                         ty: tid,
                     };
-                    self.add_bind_pattern(&tpat, elem_v, *cty, is_global)?;
+                    self.add_bind_pattern(&tpat, elem_v, *cty, is_global);
                 }
             }
             _ => {
                 panic!("typing error in the previous stage")
             }
         }
-        Ok(())
     }
     fn make_new_function(
         &mut self,
@@ -259,13 +253,13 @@ impl Context {
         self.program.functions.push(newf);
         index
     }
-    fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> Result<(VPtr, TypeNodeId), CompileError>>(
+    fn do_in_child_ctx<F: FnMut(&mut Self, usize) -> (VPtr, TypeNodeId)>(
         &mut self,
         fname: Symbol,
         abinds: &[(Symbol, VPtr)],
         types: &[TypeNodeId],
         mut action: F,
-    ) -> Result<(usize, VPtr), CompileError> {
+    ) -> (usize, VPtr) {
         self.valenv.extend();
         self.valenv.add_bind(abinds);
         let args = abinds.iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
@@ -278,7 +272,7 @@ impl Context {
         });
         self.data_i += 1;
         //do action
-        let (fptr, ty) = action(self, c_idx)?;
+        let (fptr, ty) = action(self, c_idx);
 
         // TODO: ideally, type should be infered before the actual action
         let f = self.program.functions.get_mut(c_idx).unwrap();
@@ -288,7 +282,7 @@ impl Context {
         let _ = self.data.pop();
         self.data_i -= 1;
         self.valenv.to_outer();
-        Ok((c_idx, fptr))
+        (c_idx, fptr)
     }
     fn lookup(&self, key: &Symbol) -> LookupRes<VPtr> {
         match self.valenv.lookup_cls(key) {
@@ -299,7 +293,7 @@ impl Context {
         }
     }
 
-    pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> Result<VPtr, CompileError> {
+    pub fn eval_literal(&mut self, lit: &Literal, _span: &Span) -> VPtr {
         let v = match lit {
             Literal::String(s) => self.push_inst(Instruction::String(*s)),
             Literal::Int(i) => self.push_inst(Instruction::Integer(*i)),
@@ -323,14 +317,10 @@ impl Context {
             }
             Literal::SelfLit | Literal::PlaceHolder => unreachable!(),
         };
-        Ok(v)
+        v
     }
-    fn eval_rvar(
-        &mut self,
-        name: Symbol,
-        t: TypeNodeId,
-        span: &Span,
-    ) -> Result<VPtr, CompileError> {
+    fn eval_rvar(&mut self, name: Symbol, t: TypeNodeId, span: &Span) -> VPtr {
+        let loc = self.get_loc_from_span(span);
         log::trace!("rv t:{} {}", name.to_string(), t.to_type());
         let v = match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
@@ -366,20 +356,14 @@ impl Context {
             LookupRes::None => {
                 let ty = self
                     .typeenv
-                    .lookup(&name, span)
-                    .map_err(CompileError::from)?;
+                    .lookup(name, loc)
+                    .expect("variable not found. it should be detected at type checking stage");
                 Arc::new(Value::ExtFunction(name, ty))
             }
         };
-        Ok(v)
+        v
     }
-    fn eval_assign(
-        &mut self,
-        assignee: ExprNodeId,
-        src: VPtr,
-        t: TypeNodeId,
-        span: &Span,
-    ) -> Result<(), CompileError> {
+    fn eval_assign(&mut self, assignee: ExprNodeId, src: VPtr, t: TypeNodeId, _span: &Span) {
         let name = match assignee.to_expr() {
             Expr::Var(v) => v,
             Expr::ArrayAccess(_, _) => {
@@ -389,13 +373,13 @@ impl Context {
         };
         match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
-                Value::Argument(_i, _a) => Err(CompileError(
-                    CompileErrorKind::AssignmentToArg,
-                    span.clone(),
-                )),
+                Value::Argument(_i, _a) => {
+                    //todo: collect warning for the language server
+                    log::warn!("assignment to argument {name} does not affect to the external environments.");
+                    self.push_inst(Instruction::Store(v.clone(), src, t));
+                }
                 _ => {
                     self.push_inst(Instruction::Store(v.clone(), src, t));
-                    Ok(())
                 }
             },
             LookupRes::UpValue(_level, upv) => {
@@ -403,12 +387,10 @@ impl Context {
                 let currentf = self.get_current_fn();
                 let upi = currentf.get_or_insert_upvalue(&upv) as _;
                 self.push_inst(Instruction::SetUpValue(upi, src, t));
-                Ok(())
             }
             LookupRes::Global(dst) => match dst.as_ref() {
                 Value::Global(_gv) => {
                     self.push_inst(Instruction::SetGlobal(dst.clone(), src.clone(), t));
-                    Ok(())
                 }
                 _ => unreachable!("non global_value"),
             },
@@ -448,10 +430,10 @@ impl Context {
 
         res
     }
-    fn eval_args(&mut self, args: &[ExprNodeId]) -> Result<Vec<(VPtr, TypeNodeId)>, CompileError> {
+    fn eval_args(&mut self, args: &[ExprNodeId]) -> Vec<(VPtr, TypeNodeId)> {
         args.iter()
-            .map(|a_meta| -> Result<_, CompileError> {
-                let (v, t) = self.eval_expr(*a_meta)?;
+            .map(|a_meta| {
+                let (v, t) = self.eval_expr(*a_meta);
                 let res = match v.as_ref() {
                     Value::Function(idx) => {
                         let f = self.push_inst(Instruction::Uinteger(*idx as u64));
@@ -463,19 +445,16 @@ impl Context {
                     //higher-order function need to close immidiately
                     self.push_inst(Instruction::CloseUpValues(res.clone(), t));
                 }
-                Ok((res, t))
+                (res, t)
             })
-            .try_collect()
+            .collect()
     }
-    fn eval_block(
-        &mut self,
-        block: Option<ExprNodeId>,
-    ) -> Result<(VPtr, TypeNodeId), CompileError> {
+    fn eval_block(&mut self, block: Option<ExprNodeId>) -> (VPtr, TypeNodeId) {
         self.add_new_basicblock();
         let (e, rt) = match block {
             Some(e) => self.eval_expr(e),
-            None => Ok((Arc::new(Value::None), unit!())),
-        }?;
+            None => (Arc::new(Value::None), unit!()),
+        };
         //if returning non-closure function, make closure
         let e = match e.as_ref() {
             Value::Function(idx) => {
@@ -484,23 +463,24 @@ impl Context {
             }
             _ => e,
         };
-        Ok((e, rt))
+        (e, rt)
     }
-    pub fn eval_expr(&mut self, e: ExprNodeId) -> Result<(VPtr, TypeNodeId), CompileError> {
+    pub fn eval_expr(&mut self, e: ExprNodeId) -> (VPtr, TypeNodeId) {
         let span = e.to_span();
         let ty = self.typeenv.lookup_res(e);
         match &e.to_expr() {
             Expr::Literal(lit) => {
-                let v = self.eval_literal(lit, &span)?;
-                let t = InferContext::infer_type_literal(lit).map_err(CompileError::from)?;
-                Ok((v, t))
+                let v = self.eval_literal(lit, &span);
+                let t = InferContext::infer_type_literal(lit)
+                    .expect("should be an error at type checker stage");
+                (v, t)
             }
-            Expr::Var(name) => Ok((self.eval_rvar(*name, ty, &span)?, ty)),
+            Expr::Var(name) => (self.eval_rvar(*name, ty, &span), ty),
             Expr::Block(b) => {
                 if let Some(block) = b {
                     self.eval_expr(*block)
                 } else {
-                    Ok((Arc::new(Value::None), unit!()))
+                    (Arc::new(Value::None), unit!())
                 }
             }
             Expr::Tuple(items) => {
@@ -511,7 +491,7 @@ impl Context {
                 let alloc_insert_point = self.get_current_basicblock().0.len();
                 let dst = self.gen_new_register();
                 for (i, e) in items.iter().enumerate() {
-                    let (v, elem_ty) = self.eval_expr(*e)?;
+                    let (v, elem_ty) = self.eval_expr(*e);
                     let ptr = self.push_inst(Instruction::GetElement {
                         value: dst.clone(),
                         ty, // lazyly set after loops
@@ -527,18 +507,18 @@ impl Context {
 
                 // pass only the head of the tuple, and the length can be known
                 // from the type information.
-                Ok((dst, ty))
+                (dst, ty)
             }
             Expr::Proj(_, _) => todo!(),
             Expr::ArrayAccess(_, _) => todo!(),
 
             Expr::Apply(f, args) => {
-                let (f, ft) = self.eval_expr(*f)?;
-                let del = self.make_delay(&f, args)?;
+                let (f, ft) = self.eval_expr(*f);
+                let del = self.try_make_delay(&f, args);
                 if let Some(d) = del {
-                    Ok((d, numeric!()))
+                    (d, numeric!())
                 } else {
-                    let atvvec = self.eval_args(args)?;
+                    let atvvec = self.eval_args(args);
                     let rt = if let Type::Function(_, rt, _) = ft.to_type() {
                         rt
                     } else {
@@ -563,7 +543,7 @@ impl Context {
                         }
                         Value::Function(idx) => self.emit_fncall(*idx as u64, atvvec.clone(), rt),
                         Value::ExtFunction(label, _ty) => {
-                            if let Some(res) = self.make_intrinsics(*label, &atvvec)? {
+                            if let Some(res) = self.make_intrinsics(*label, &atvvec) {
                                 res
                             } else {
                                 self.push_inst(Instruction::Call(f.clone(), atvvec.clone(), rt))
@@ -573,7 +553,7 @@ impl Context {
                         Value::None => unreachable!(),
                         _ => todo!(),
                     };
-                    Ok((res, rt))
+                    (res, rt)
                 }
             }
             Expr::PipeApply(_, _) => unreachable!(),
@@ -595,7 +575,7 @@ impl Context {
 
                 let name = self.consume_fnlabel();
                 let (c_idx, f) = self.do_in_child_ctx(name, &binds, &atypes, |ctx, c_idx| {
-                    let (res, _) = ctx.eval_expr(*body)?;
+                    let (res, _) = ctx.eval_expr(*body);
 
                     let push_sum = ctx.get_ctxdata().push_sum.clone();
                     if !push_sum.is_empty() {
@@ -628,8 +608,8 @@ impl Context {
                     };
 
                     let f = Arc::new(Value::Function(c_idx));
-                    Ok((f, rt))
-                })?;
+                    (f, rt)
+                });
                 let child = self.program.functions.get_mut(c_idx).unwrap();
                 let res = if child.upindexes.is_empty() {
                     //todo:make Closure
@@ -638,7 +618,7 @@ impl Context {
                     let idxcell = self.push_inst(Instruction::Uinteger(c_idx as u64));
                     self.push_inst(Instruction::Closure(idxcell))
                 };
-                Ok((res, ty))
+                (res, ty)
             }
             Expr::Feed(id, expr) => {
                 //set typesize lazily
@@ -647,9 +627,9 @@ impl Context {
                 self.get_ctxdata().cur_state_pos.push(statesize);
                 self.add_bind((*id, res.clone()));
                 self.get_ctxdata().next_state_offset = Some(vec![statesize]);
-                let (retv, _t) = self.eval_expr(*expr)?;
+                let (retv, _t) = self.eval_expr(*expr);
                 self.get_current_fn().state_sizes.push(statesize);
-                Ok((Arc::new(Value::State(retv)), ty))
+                (Arc::new(Value::State(retv)), ty)
             }
             Expr::Let(pat, body, then) => {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
@@ -665,7 +645,7 @@ impl Context {
                 } else {
                     self.get_current_basicblock().0.len()
                 };
-                let (bodyv, t) = self.eval_expr(*body)?;
+                let (bodyv, t) = self.eval_expr(*body);
                 //todo:need to boolean and insert cast
                 self.fn_label = None;
 
@@ -680,14 +660,14 @@ impl Context {
                         block.insert(insert_pos, (alloc_res.clone(), Instruction::Alloc(t)));
                         let _ =
                             self.push_inst(Instruction::Store(alloc_res.clone(), bodyv.clone(), t));
-                        self.add_bind_pattern(pat, alloc_res, t, false)?;
+                        self.add_bind_pattern(pat, alloc_res, t, false);
                         self.eval_expr(*then_e)
                     }
                     (is_global, _, Some(then_e)) => {
-                        self.add_bind_pattern(pat, bodyv, t, is_global)?;
+                        self.add_bind_pattern(pat, bodyv, t, is_global);
                         self.eval_expr(*then_e)
                     }
-                    (_, _, None) => Ok((Arc::new(Value::None), unit!())),
+                    (_, _, None) => (Arc::new(Value::None), unit!()),
                 }
             }
             Expr::LetRec(id, body, then) => {
@@ -698,35 +678,34 @@ impl Context {
                 let v = if is_global {
                     Arc::new(Value::Function(nextfunid))
                 } else {
-                    let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                    alloc
+                    self.push_inst(Instruction::Alloc(t))
                 };
                 let bind = (id.id, v.clone());
                 self.add_bind(bind);
-                let (b, _bt) = self.eval_expr(*body)?;
+                let (b, _bt) = self.eval_expr(*body);
                 if !is_global {
                     let _ = self.push_inst(Instruction::Store(v.clone(), b.clone(), t));
                 }
                 if let Some(then_e) = then {
                     self.eval_expr(*then_e)
                 } else {
-                    Ok((Arc::new(Value::None), unit!()))
+                    (Arc::new(Value::None), unit!())
                 }
             }
             Expr::Assign(assignee, body) => {
-                let (src, ty) = self.eval_expr(*body)?;
-                self.eval_assign(*assignee, src, ty, &span)?;
-                Ok((Arc::new(Value::None), unit!()))
+                let (src, ty) = self.eval_expr(*body);
+                self.eval_assign(*assignee, src, ty, &span);
+                (Arc::new(Value::None), unit!())
             }
             Expr::Then(body, then) => {
-                let _ = self.eval_expr(*body)?;
+                let _ = self.eval_expr(*body);
                 match then {
                     Some(t) => self.eval_expr(*t),
-                    None => Ok((Arc::new(Value::None), unit!())),
+                    None => (Arc::new(Value::None), unit!()),
                 }
             }
             Expr::If(cond, then, else_) => {
-                let (c, _) = self.eval_expr(*cond)?;
+                let (c, _) = self.eval_expr(*cond);
                 let cond_bidx = self.get_ctxdata().current_bb;
 
                 // This is just a placeholder. At this point, the locations of
@@ -736,11 +715,11 @@ impl Context {
 
                 //insert then block
                 let then_bidx = cond_bidx + 1;
-                let (t, _) = self.eval_block(Some(*then))?;
+                let (t, _) = self.eval_block(Some(*then));
                 //jmp to ret is inserted in bytecodegen
                 //insert else block
                 let else_bidx = self.get_ctxdata().current_bb + 1;
-                let (e, _) = self.eval_block(*else_)?;
+                let (e, _) = self.eval_block(*else_);
                 //insert return block
                 self.add_new_basicblock();
                 let res = self.push_inst(Instruction::Phi(t, e));
@@ -764,70 +743,47 @@ impl Context {
                     _ => panic!("the last block should be Jmp"),
                 }
 
-                Ok((res, ty))
+                (res, ty)
             }
             Expr::Bracket(_) => todo!(),
             Expr::Escape(_) => todo!(),
-            Expr::Error => todo!(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum CompileErrorKind {
-    TypingFailure(typing::ErrorKind),
-    AssignmentToArg,
-    UnboundedDelay,
-    TooManyConstants,
-    VariableNotFound(String),
-}
-#[derive(Clone, Debug)]
-pub struct CompileError(CompileErrorKind, Span);
-
-impl std::fmt::Display for CompileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let CompileError(kind, _span) = self;
-        match kind {
-            CompileErrorKind::TypingFailure(k) => write!(f, "{k}"),
-            CompileErrorKind::AssignmentToArg => write!(f, "Arguments can not be mutated"),
-            CompileErrorKind::UnboundedDelay => {
-                write!(f, "Maximium delay time needs to be a number literal.")
+            Expr::Error => {
+                self.push_inst(Instruction::Error);
+                (Arc::new(Value::None), unit!())
             }
-
-            CompileErrorKind::TooManyConstants => write!(f, "too many constants."),
-            CompileErrorKind::VariableNotFound(s) => write!(f, "Variable {s} not found."),
         }
     }
 }
-impl std::error::Error for CompileError {}
-impl From<typing::Error> for CompileError {
-    fn from(value: typing::Error) -> Self {
-        Self(CompileErrorKind::TypingFailure(value.0), value.1)
-    }
-}
-impl ReportableError for CompileError {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        self.1.clone()
-    }
-}
-
+/// Generate MIR from AST.
+/// The input ast (`root_expr_id`) should contain global context. (See [[compiler::parser::add_global_context]].)
+/// MIR generator itself does not emit any error, the any compile errors are analyzed before generating MIR, mostly in type checker.
 pub fn compile(
     root_expr_id: ExprNodeId,
     builtin_types: &[(Symbol, TypeNodeId)],
     file_path: Option<Symbol>,
-) -> Result<Mir, Box<dyn ReportableError>> {
-    let ast2 = recursecheck::convert_recurse(root_expr_id);
-    let expr2 = convert_pronoun::convert_pronoun(ast2).map_err(|e| {
-        let eb: Box<dyn ReportableError> = Box::new(e);
-        eb
-    })?;
-    let infer_ctx = infer_root(expr2, builtin_types)
-        .map_err(|err| Box::new(CompileError::from(err)) as Box<dyn ReportableError>)?;
-    let mut ctx = Context::new(infer_ctx);
-    let _res = ctx.eval_expr(expr2).map_err(|e| {
-        let eb: Box<dyn ReportableError> = Box::new(e);
-        eb
-    })?;
-    ctx.program.file_path = file_path;
-    Ok(ctx.program.clone())
+) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
+    let ast2 = recursecheck::convert_recurse(root_expr_id, file_path.unwrap_or_default());
+    let (expr2, convert_errs) =
+        convert_pronoun::convert_pronoun(ast2, file_path.unwrap_or_default());
+    let infer_ctx = infer_root(expr2, builtin_types, file_path.unwrap_or_default());
+    let errors = infer_ctx
+        .errors
+        .iter()
+        .cloned()
+        .map(|e| -> Box<dyn ReportableError> { Box::new(e) })
+        .chain(
+            convert_errs
+                .into_iter()
+                .map(|e| -> Box<dyn ReportableError> { Box::new(e) }),
+        )
+        .collect::<Vec<_>>();
+
+    if errors.is_empty() {
+        let mut ctx = Context::new(infer_ctx, file_path);
+        let _res = ctx.eval_expr(expr2);
+        ctx.program.file_path = file_path;
+        Ok(ctx.program.clone())
+    } else {
+        Err(errors)
+    }
 }

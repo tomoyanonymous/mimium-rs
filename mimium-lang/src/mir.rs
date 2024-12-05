@@ -123,6 +123,7 @@ pub enum Instruction {
     CastFtoI(VPtr),
     CastItoF(VPtr),
     CastItoB(VPtr),
+    Error,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -199,4 +200,13 @@ impl Function {
 pub struct Mir {
     pub functions: Vec<Function>,
     pub file_path: Option<Symbol>,
+}
+
+impl Mir {
+    pub fn new(file_path: Option<Symbol>) -> Self {
+        Self {
+            file_path,
+            ..Default::default()
+        }
+    }
 }

@@ -2,36 +2,147 @@ use crate::ast::{Expr, Literal};
 use crate::interner::{ExprNodeId, Symbol, ToSymbol};
 use crate::pattern::TypedId;
 use crate::types::Type;
-use crate::utils::{error::ReportableError, metadata::Span};
-use std::fmt;
-use itertools::Itertools;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Error {
-    NoParentSelf(Span),
+use crate::utils::error::SimpleError;
+use crate::utils::metadata::Location;
+pub type Error = SimpleError;
+struct ConvertResult {
+    expr: ExprNodeId,
+    found_any: bool,
 }
 
-type ConvertResult = Result<ExprNodeId, ExprNodeId>;
-fn get_content(e: ConvertResult) -> ExprNodeId {
-    match e {
-        Ok(e) | Err(e) => e,
-    }
-}
+// This applies conversion() recursively. This is intended to be used in the `_`
+// branch of pattern matching so that particular types of epressions can be
+// caught and treated differently.
+fn convert_recursively<F>(
+    e_id: ExprNodeId,
+    conversion: F,
+    file_path: Symbol,
+) -> (ConvertResult, Vec<Error>)
+where
+    F: Fn(ExprNodeId) -> (ConvertResult, Vec<Error>),
+{
+    let loc = Location {
+        span: e_id.to_span().clone(),
+        path: file_path,
+    };
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::NoParentSelf(_s) => write!(f, "self cannot be used in global context."),
+    let opt_conversion = |opt_e: Option<ExprNodeId>| -> (Option<ConvertResult>, Vec<Error>) {
+        let mut err_res = vec![];
+        let expr = opt_e.map(|e| {
+            let (res, errs) = conversion(e);
+            err_res = errs;
+            res
+        });
+        (expr, err_res)
+    };
+    match e_id.to_expr().clone() {
+        Expr::Tuple(v) => {
+            let (res_vec, errs): (Vec<_>, Vec<_>) = v.into_iter().map(&conversion).unzip();
+            let res_e = Expr::Tuple(res_vec.iter().map(|e| e.expr).collect()).into_id(loc);
+            let found_any = res_vec.into_iter().any(|e| e.found_any);
+            (
+                ConvertResult {
+                    expr: res_e,
+                    found_any,
+                },
+                errs.concat(),
+            )
         }
+        Expr::Proj(e, idx) => {
+            let (res, errs) = conversion(e);
+            (
+                ConvertResult {
+                    expr: Expr::Proj(res.expr, idx).into_id(loc),
+                    found_any: res.found_any,
+                },
+                errs,
+            )
+        }
+        Expr::Let(id, body, then) => {
+            let (bodyres, errs) = conversion(body);
+            let (then_res, errs2) = opt_conversion(then);
+            let found_any = bodyres.found_any | then_res.as_ref().map_or(false, |r| r.found_any);
+            let expr = Expr::Let(id, bodyres.expr, then_res.map(|r| r.expr)).into_id(loc);
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
+        }
+        Expr::LetRec(id, body, then) => {
+            let (bodyres, errs) = conversion(body);
+            let (then_res, errs2) = opt_conversion(then);
+            let found_any = bodyres.found_any | then_res.as_ref().map_or(false, |r| r.found_any);
+            let expr = Expr::LetRec(id, bodyres.expr, then_res.map(|r| r.expr)).into_id(loc);
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
+        }
+        Expr::Lambda(params, r_type, body) => {
+            // Note: params and r_type cannot be handled by conversion() because
+            //       these are Type, not Expr.
+            let (ConvertResult { expr, found_any }, errs) = conversion(body);
+            let expr = Expr::Lambda(params, r_type, expr).into_id(loc);
+            (ConvertResult { expr, found_any }, errs)
+        }
+        Expr::Apply(fun, callee) => {
+            let (fun, errs) = conversion(fun);
+            let (res_vec, errs2): (Vec<_>, Vec<_>) = callee.into_iter().map(&conversion).unzip();
+            let expr = Expr::Apply(fun.expr, res_vec.iter().map(|e| e.expr).collect()).into_id(loc);
+            let found_any = res_vec.into_iter().any(|e| e.found_any) | fun.found_any;
+            (
+                ConvertResult { expr, found_any },
+                [errs, errs2.concat()].concat(),
+            )
+        }
+        Expr::PipeApply(callee, fun) => {
+            let (callee, errs) = conversion(callee);
+            let (fun, errs2) = conversion(fun);
+            let expr = Expr::PipeApply(callee.expr, fun.expr).into_id(loc);
+            let found_any = callee.found_any | fun.found_any;
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
+        }
+        Expr::If(cond, then, opt_else) => {
+            let (cond, err) = conversion(cond);
+            let (then, err2) = conversion(then);
+            let (opt_else, errs3) = opt_conversion(opt_else);
+            let found_any =
+                cond.found_any | then.found_any | opt_else.as_ref().map_or(false, |e| e.found_any);
+            let expr = Expr::If(cond.expr, then.expr, opt_else.map(|e| e.expr)).into_id(loc);
+            let errs = [err, err2, errs3].concat();
+            (ConvertResult { expr, found_any }, errs)
+        }
+        Expr::Block(body) => {
+            let (body, errs) = opt_conversion(body);
+            let found_any = body.as_ref().map_or(false, |b| b.found_any);
+            let expr = Expr::Block(body.map(|e| e.expr)).into_id(loc);
+            (ConvertResult { expr, found_any }, errs)
+        }
+
+        _ => (
+            ConvertResult {
+                expr: e_id,
+                found_any: false,
+            },
+            vec![],
+        ),
     }
 }
-impl std::error::Error for Error {}
-impl ReportableError for Error {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        match self {
-            Self::NoParentSelf(s) => s.clone(),
-        }
-    }
+fn convert_recursively_pure<F>(e_id: ExprNodeId, conversion: F, file_path: Symbol) -> ExprNodeId
+where
+    F: Fn(ExprNodeId) -> ExprNodeId,
+{
+    convert_recursively(
+        e_id,
+        |e| {
+            let dummy_flag = false;
+            let dummy_errs = vec![];
+            (
+                ConvertResult {
+                    expr: conversion(e),
+                    found_any: dummy_flag,
+                },
+                dummy_errs,
+            )
+        },
+        file_path,
+    )
+    .0
+    .expr
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -39,220 +150,135 @@ pub enum FeedId {
     Global,
     Local(i64),
 }
-
-fn get_new_feedid(fid: FeedId) -> i64 {
-    match fid {
-        FeedId::Global => 0,
-        FeedId::Local(i) => i + 1,
+impl FeedId {
+    pub(self) fn get_next_id(self) -> Self {
+        match self {
+            Self::Global => Self::Local(0),
+            Self::Local(i) => Self::Local(i + 1),
+        }
+    }
+    pub(self) fn get_name(&self) -> Symbol {
+        match self {
+            FeedId::Global => "feed_global".to_symbol(),
+            FeedId::Local(i) => format!("feed_id{i}").to_symbol(),
+        }
     }
 }
 
-fn get_feedvar_name(fid: i64) -> Symbol {
-    //todo:need to assign true unique name
-    format!("feed_id{}", fid).to_symbol()
-}
-
-// This applies conversion() recursively. This is intended to be used in the `_`
-// branch of pattern matching so that particular types of epressions can be
-// caught and treated differently.
-fn convert_recursively<T>(e_id: ExprNodeId, conversion: T) -> Result<ConvertResult, Error>
-where
-    T: Fn(ExprNodeId) -> Result<ConvertResult, Error>,
-{
-    let opt_conversion = |opt_e: Option<ExprNodeId>| -> Result<Option<ConvertResult>, Error> {
-        opt_e.map(&conversion).transpose()
+fn convert_self(
+    e_id: ExprNodeId,
+    feedctx: FeedId,
+    file_path: Symbol,
+) -> (ConvertResult, Vec<Error>) {
+    let conversion = |e: ExprNodeId| -> (ConvertResult, Vec<Error>) {
+        convert_self(e, feedctx, file_path.clone())
     };
-    let span = e_id.to_span().clone();
-    match e_id.to_expr().clone() {
-        Expr::Tuple(v) => {
-            let elems: Vec<ConvertResult> = v.into_iter().map(&conversion).try_collect()?;
-            let elems_mapped: Vec<ExprNodeId> = elems.iter().map(|e| get_content(*e)).collect();
-            if elems.iter().any(|e| e.is_err()) {
-                Ok(ConvertResult::Err(Expr::Tuple(elems_mapped).into_id(span)))
-            } else {
-                Ok(ConvertResult::Ok(Expr::Tuple(elems_mapped).into_id(span)))
-            }
-        }
-        Expr::Proj(e, idx) => {
-            let elem = conversion(e)?;
-            Ok(elem.map(|e| Expr::Proj(e, idx).into_id(span)))
-        }
-        Expr::Let(id, body, then) => {
-            let body = conversion(body)?;
-            let then = opt_conversion(then)?;
-            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
-                Ok(ConvertResult::Ok(Expr::Let(id, b, t).into_id(span)))
-            } else {
-                Ok(ConvertResult::Err(
-                    Expr::Let(id, get_content(body), then.map(get_content)).into_id(span),
-                ))
-            }
-        }
-        Expr::LetRec(id, body, then) => {
-            let body = conversion(body)?;
-            let then = opt_conversion(then)?;
-            if let (Ok(b), Ok(t)) = (body, then.transpose()) {
-                Ok(ConvertResult::Ok(Expr::LetRec(id, b, t).into_id(span)))
-            } else {
-                Ok(ConvertResult::Err(e_id))
-            }
-        }
-        Expr::Lambda(params, r_type, body) => {
-            // Note: params and r_type cannot be handled by conversion() because
-            //       these are Type, not Expr.
-            let body = conversion(body)?;
-            if let Ok(b) = body {
-                let content = Expr::Lambda(params, r_type, b).into_id(span);
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(e_id))
-            }
-        }
-        Expr::Apply(fun, callee) => {
-            let fun = conversion(fun)?;
-            let elems: Vec<ConvertResult> = callee.into_iter().map(conversion).try_collect()?;
-            let elems_mapped: Vec<ExprNodeId> = elems.iter().map(|e| get_content(*e)).collect();
-            let content = Expr::Apply(fun.unwrap(), elems_mapped).into_id(span);
-            if fun.is_ok() && !elems.iter().any(|e| e.is_err()) {
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(content))
-            }
-        }
-        Expr::PipeApply(callee, fun) => {
-            let callee = conversion(callee)?;
-            let fun = conversion(fun)?;
-            let content = Expr::PipeApply(callee.unwrap(), fun.unwrap()).into_id(span);
-            if callee.is_ok() && fun.is_ok() {
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(content))
-            }
-        }
-        Expr::If(cond, then, opt_else) => {
-            let cond = conversion(cond)?;
-            let then = conversion(then)?;
-            let opt_else = opt_conversion(opt_else)?;
-            match (cond, then, opt_else.transpose()) {
-                (Ok(c), Ok(t), Ok(e)) => Ok(ConvertResult::Ok(Expr::If(c, t, e).into_id(span))),
-                (c, t, e) => {
-                    let e = match e {
-                        Ok(e) => e,
-                        Err(e) => Some(e),
-                    };
-                    Ok(ConvertResult::Err(
-                        Expr::If(get_content(c), get_content(t), e).into_id(span),
-                    ))
-                }
-            }
-        }
-        Expr::Block(body) => {
-            if let Some(body) = body {
-                Ok(conversion(body)?.map(|e| Expr::Block(Some(e)).into_id(span)))
-            } else {
-                Ok(ConvertResult::Ok(Expr::Block(None).into_id(span)))
-            }
-        }
+    let loc = Location::new(e_id.to_span().clone(), file_path);
 
-        _ => Ok(ConvertResult::Ok(e_id)),
-    }
-}
-
-fn convert_self(e_id: ExprNodeId, feedctx: FeedId) -> Result<ConvertResult, Error> {
-    let conversion = |e: ExprNodeId| -> Result<ConvertResult, Error> { convert_self(e, feedctx) };
-    let span = e_id.to_span().clone();
     match e_id.to_expr().clone() {
         Expr::Literal(Literal::SelfLit) => match feedctx {
-            FeedId::Global => Err(Error::NoParentSelf(span.clone())),
-            FeedId::Local(i) => Ok(ConvertResult::Err(
-                Expr::Var(get_feedvar_name(i)).into_id(span.clone()),
-            )),
+            FeedId::Global => {
+                let err = vec![SimpleError {
+                    message: "self cannot be used in global context.".to_string(),
+                    span: loc.clone(),
+                }];
+                (
+                    ConvertResult {
+                        expr: Expr::Error.into_id(loc),
+                        found_any: false,
+                    },
+                    err,
+                )
+            }
+            FeedId::Local(_) => {
+                let expr = Expr::Var(feedctx.get_name()).into_id(loc.clone());
+                (
+                    ConvertResult {
+                        expr,
+                        found_any: true,
+                    },
+                    vec![],
+                )
+            }
         },
         Expr::Lambda(params, r_type, body) => {
-            let nfctx = get_new_feedid(feedctx);
-            let nbody = match convert_self(body, FeedId::Local(nfctx))? {
-                ConvertResult::Err(nbody) => {
-                    let feedid = get_feedvar_name(nfctx);
-                    Expr::Feed(feedid, nbody).into_id(span.clone())
-                }
-                ConvertResult::Ok(nbody) => nbody,
+            let nfctx = feedctx.get_next_id();
+            let (res, err) = convert_self(body, nfctx, file_path);
+            let nbody = if res.found_any {
+                Expr::Feed(nfctx.get_name(), res.expr).into_id(loc.clone())
+            } else {
+                res.expr
             };
-            Ok(ConvertResult::Ok(
-                Expr::Lambda(params, r_type, nbody).into_id(span.clone()),
-            ))
+            let expr = Expr::Lambda(params, r_type, nbody).into_id(loc.clone());
+            (
+                ConvertResult {
+                    expr,
+                    found_any: false,
+                },
+                err,
+            )
         }
         Expr::Feed(_, _) => panic!(
             "Feed should not be shown before conversion at {}..{}",
-            span.start, span.end
+            loc.span.start, loc.span.end
         ),
-        _ => convert_recursively(e_id, conversion),
+        _ => convert_recursively(e_id, conversion, file_path.clone()),
     }
 }
 
-fn convert_placeholder(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
-    let span = e_id.to_span().clone();
+fn convert_placeholder(e_id: ExprNodeId, file_path: Symbol) -> ExprNodeId {
+    let loc = Location::new(e_id.to_span().clone(), file_path);
     match e_id.to_expr() {
         // if _ is used outside of pipe, treat it as a usual variable.
-        Expr::Literal(Literal::PlaceHolder) => Ok(ConvertResult::Ok(
-            Expr::Var("_".to_symbol()).into_id(e_id.to_span()),
-        )),
+        Expr::Literal(Literal::PlaceHolder) => Expr::Var("_".to_symbol()).into_id(loc),
         Expr::Apply(fun, args)
             if args
                 .iter()
                 .any(|e| matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder))) =>
         {
-            let fun = convert_placeholder(fun)?;
-            let mut lambda_args: Vec<TypedId> = Vec::with_capacity(args.len());
-            let new_args = args
-                .iter()
+            let fun = convert_placeholder(fun, file_path);
+            let (lambda_args_sparse, new_args): (Vec<_>, Vec<_>) = args
+                .into_iter()
                 .enumerate()
                 .map(|(i, e)| {
                     if matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder)) {
+                        let loc = Location::new(e_id.to_span().clone(), file_path);
                         let id = format!("__lambda_arg_{i}").to_symbol();
-                        lambda_args.push(TypedId {
-                            id,
-                            ty: Type::Unknown.into_id_with_span(span.clone()),
-                        });
-                        Expr::Var(id).into_id(e.to_span())
+                        let ty = Type::Unknown.into_id_with_location(loc.clone());
+                        let newid = TypedId { id, ty };
+                        let e = Expr::Var(id).into_id(loc);
+                        (Some(newid), e)
                     } else {
-                        *e
+                        (None, e)
                     }
                 })
-                .collect::<Vec<_>>();
-            let body = Expr::Apply(fun.unwrap(), new_args).into_id(span.clone());
-            let content = Expr::Lambda(lambda_args, None, body).into_id(span.clone());
-            if fun.is_ok() {
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(content))
-            }
+                .unzip();
+            let lambda_args = lambda_args_sparse.into_iter().filter_map(|e| e).collect();
+            let body = Expr::Apply(fun, new_args).into_id(loc.clone());
+            Expr::Lambda(lambda_args, None, body).into_id(loc.clone())
         }
-        _ => convert_recursively(e_id, convert_placeholder),
+        _ => convert_recursively_pure(e_id, |e| convert_placeholder(e, file_path), file_path),
     }
 }
 
-fn convert_pipe(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
-    let span = e_id.to_span().clone();
+fn convert_pipe(e_id: ExprNodeId, file_path: Symbol) -> ExprNodeId {
+    let loc = Location::new(e_id.to_span().clone(), file_path);
     match e_id.to_expr() {
         Expr::PipeApply(callee, fun) => {
-            let callee = convert_pipe(callee)?;
-            let fun = convert_pipe(fun)?;
-            let content = Expr::Apply(fun.unwrap(), vec![callee.unwrap()]).into_id(span.clone());
-            if callee.is_ok() && fun.is_ok() {
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(content))
-            }
+            let callee = convert_pipe(callee, file_path);
+            let fun = convert_pipe(fun, file_path);
+            Expr::Apply(fun, vec![callee]).into_id(loc)
         }
-        _ => convert_recursively(e_id, convert_pipe),
+        // because convert_pipe never fails, it propagate dummy error
+        _ => convert_recursively_pure(e_id, |e| convert_pipe(e, file_path), file_path),
     }
 }
 
-pub fn convert_pronoun(expr: ExprNodeId) -> Result<ExprNodeId, Error> {
-    let expr = convert_placeholder(expr)?;
-    let expr = convert_pipe(get_content(expr))?;
-    let res = convert_self(get_content(expr), FeedId::Global)?;
-    Ok(get_content(res))
+pub fn convert_pronoun(expr: ExprNodeId, file_path: Symbol) -> (ExprNodeId, Vec<Error>) {
+    let expr = convert_placeholder(expr, file_path);
+    let expr = convert_pipe(expr, file_path);
+    let (res, errs) = convert_self(expr, FeedId::Global, file_path);
+    (res.expr, errs)
 }
 
 #[cfg(test)]
@@ -266,46 +292,52 @@ mod test {
 
     #[test]
     pub fn test_selfconvert() {
+        let loc = Location {
+            span: 0..1,
+            path: "/".to_symbol(),
+        };
+        let unknownty = Type::Unknown.into_id_with_location(loc.clone());
         let src = Expr::Let(
             TypedPattern {
                 pat: Pattern::Single("lowpass".to_symbol()),
-                ty: Type::Unknown.into_id_with_span(0..1),
+                ty: unknownty,
             },
             Expr::Lambda(
                 vec![TypedId {
                     id: "input".to_symbol(),
-                    ty: Type::Unknown.into_id_with_span(0..1),
+                    ty: unknownty,
                 }],
                 None,
-                Expr::Literal(Literal::SelfLit).into_id(0..1),
+                Expr::Literal(Literal::SelfLit).into_id(loc.clone()),
             )
-            .into_id(0..1),
+            .into_id(loc.clone()),
             None,
         )
-        .into_id(0..1);
-        let res = convert_pronoun(src).unwrap();
+        .into_id(loc.clone());
+        let (res, errs) = convert_pronoun(src, "/".to_symbol());
 
         let ans = Expr::Let(
             TypedPattern {
                 pat: Pattern::Single("lowpass".to_symbol()),
-                ty: Type::Unknown.into_id_with_span(0..1),
+                ty: unknownty,
             },
             Expr::Lambda(
                 vec![TypedId {
                     id: "input".to_symbol(),
-                    ty: Type::Unknown.into_id_with_span(0..1),
+                    ty: unknownty,
                 }],
                 None,
                 Expr::Feed(
                     "feed_id0".to_symbol(),
-                    Expr::Var("feed_id0".to_symbol()).into_id(0..1),
+                    Expr::Var("feed_id0".to_symbol()).into_id(loc.clone()),
                 )
-                .into_id(0..1),
+                .into_id(loc.clone()),
             )
-            .into_id(0..1),
+            .into_id(loc.clone()),
             None,
         )
-        .into_id(0..1);
+        .into_id(loc);
+        assert!(errs.is_empty());
         assert_eq!(res, ans);
     }
 }

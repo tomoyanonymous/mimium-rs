@@ -187,6 +187,7 @@ impl std::fmt::Display for Instruction {
             Instruction::CastFtoI(_) => todo!(),
             Instruction::CastItoF(_) => todo!(),
             Instruction::CastItoB(_) => todo!(),
+            Instruction::Error => write!(f, "error"),
         }
     }
 }

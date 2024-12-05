@@ -16,6 +16,11 @@ pub enum LookupRes<T: Clone> {
     Global(T),
     None,
 }
+impl<T:Clone> Default for Environment<T>{
+    fn default() -> Self {
+        Self(EnvInner::new())
+    }
+}
 impl<T: Clone> Environment<T> {
     pub fn new() -> Self {
         Self(EnvInner::new())
