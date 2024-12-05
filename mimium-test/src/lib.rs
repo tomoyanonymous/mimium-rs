@@ -130,6 +130,18 @@ pub fn run_file_test(path: &str, times: u64, stereo: bool) -> Option<Vec<f64>> {
     }
 }
 
+pub fn run_error_test(path: &str, stereo: bool) -> Vec<Box<dyn ReportableError>> {
+    let (file, src) = load_src(path);
+    let path_sym = file.to_string_lossy().to_symbol();
+    let res = run_source_test(&src, 1, stereo, Some(path_sym));
+    match res {
+        Ok(_res) => {
+            panic!("this test should emit errors")
+        }
+        Err(errs) => errs,
+    }
+}
+
 pub fn load_src(path: &str) -> (PathBuf, String) {
     let crate_root = std::env::var("TEST_ROOT").expect(
         r#"You must set TEST_ROOT environment variable to run test.

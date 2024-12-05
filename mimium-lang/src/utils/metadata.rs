@@ -2,7 +2,7 @@ use crate::interner::{Symbol, ToSymbol};
 
 pub type Span = std::ops::Range<usize>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Location {
     pub span: Span,
     pub path: Symbol,

@@ -4,13 +4,22 @@ use crate::interner::Symbol;
 
 use super::metadata::Location;
 
+/// A dynamic error type that can hold specific error messages and the location where the error happened.
 pub trait ReportableError: std::error::Error {
-    /// message is used for reporting verbose message for ariadne.
+    /// message is used for reporting verbose message for `ariadne``.
     fn get_message(&self) -> String {
         self.to_string()
     }
-    /// label is used for indicating error with the specific position for ariadne.
+    /// Label is used for indicating error with the specific position for `ariadne``.
+    /// One error may have multiple labels, because the reason of the error may be caused by the mismatch of the properties in 2 or more different locations in the source (such as the type mismatch).
     fn get_labels(&self) -> Vec<(Location, String)>;
+}
+
+/// ReportableError implements `PartialEq`` mostly for testing purpose.
+impl PartialEq for dyn ReportableError + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_labels() == other.get_labels()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +59,7 @@ impl ariadne::Cache<Symbol> for FileCache {
     }
 }
 
-pub fn report(src: &String, path: Symbol, errs: &[Box<dyn ReportableError>]) {
+pub fn report(src: &str, path: Symbol, errs: &[Box<dyn ReportableError>]) {
     let mut colors = ColorGenerator::new();
     for e in errs {
         // let a_span = (src.source(), span);color
@@ -67,7 +76,7 @@ pub fn report(src: &String, path: Symbol, errs: &[Box<dyn ReportableError>]) {
         builder
             .eprint(FileCache {
                 path,
-                src: ariadne::Source::from(src.clone()),
+                src: ariadne::Source::from(src.to_owned()),
             })
             .unwrap();
     }

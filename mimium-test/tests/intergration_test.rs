@@ -1,6 +1,5 @@
 use mimium_lang::{interner::ToSymbol, utils::error::report};
 use mimium_test::*;
-use std::path::Path;
 
 fn run_simple_test(expr: &str, expect: f64, times: u64) {
     let src = format!(
@@ -337,4 +336,12 @@ fn if_state() {
         9.0, 0.0,
     ];
     assert_eq!(res, ans);
+}
+
+#[test]
+
+fn many_errors() {
+    let res = run_error_test("many_errors.mmm", false);
+    //todo! check error types
+    assert_eq!(res.len(), 6);
 }
