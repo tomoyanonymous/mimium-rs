@@ -6,7 +6,7 @@ use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self, StateOffset};
 use crate::types::{PType, Type, TypeSize};
-use crate::utils::{error::ReportableError, half_float::HFloat};
+use crate::utils::half_float::HFloat;
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
