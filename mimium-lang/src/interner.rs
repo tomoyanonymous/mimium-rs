@@ -159,7 +159,7 @@ impl ExprNodeId {
 
     pub fn to_span(&self) -> Span {
         with_session_globals(|session_globals| match session_globals.get_span(*self) {
-            Some(span) => span.clone(),
+            Some(loc) => loc.span.clone(),
             None => dummy_span!(),
         })
     }
@@ -172,7 +172,7 @@ impl TypeNodeId {
 
     pub fn to_span(&self) -> Span {
         with_session_globals(|session_globals| match session_globals.get_span(*self) {
-            Some(span) => span.clone(),
+            Some(loc) => loc.span.clone(),
             None => dummy_span!(),
         })
     }

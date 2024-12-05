@@ -200,3 +200,12 @@ pub struct Mir {
     pub functions: Vec<Function>,
     pub file_path: Option<Symbol>,
 }
+
+impl Mir {
+    pub fn new(file_path: Option<Symbol>) -> Self {
+        Self {
+            file_path,
+            ..Default::default()
+        }
+    }
+}

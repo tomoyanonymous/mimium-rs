@@ -125,7 +125,7 @@ pub struct InferContext {
     instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     pub env: Environment<TypeNodeId>,
-    errors: Vec<Error>,
+    pub errors: Vec<Error>,
 }
 impl InferContext {
     fn new(builtins: &[(Symbol, TypeNodeId)]) -> Self {

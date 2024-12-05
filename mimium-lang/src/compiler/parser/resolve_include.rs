@@ -1,4 +1,4 @@
-use super::{parse, Location, Span};
+use super::{parse, Expr, Location, Span};
 use crate::interner::{ExprNodeId, ToSymbol};
 use crate::utils::error::{ReportableError, SimpleError};
 use crate::utils::fileloader;
@@ -14,14 +14,20 @@ pub(super) fn resolve_include(
     mmm_filepath: &str,
     target_path: &str,
     span: Span,
-) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+) -> (ExprNodeId, Vec<Box<dyn ReportableError>>) {
     let loc = Location {
         span: span.clone(),
         path: mmm_filepath.to_symbol(),
     };
     let abspath = fileloader::get_canonical_path(mmm_filepath, target_path)
-        .map_err(|e| make_vec_error(e, loc.clone()))?;
-    let content =
-        fileloader::load(abspath.to_str().unwrap()).map_err(|e| make_vec_error(e, loc))?;
-    parse(&content, Some(abspath))
+        .map_err(|e| make_vec_error(e, loc.clone()));
+    match abspath {
+        Ok(abspath) => {
+            match fileloader::load(abspath.to_str().unwrap()).map_err(|e| make_vec_error(e, loc)) {
+                Ok(content) => parse(&content, Some(abspath)),
+                Err(errs) => (Expr::Error.into_id_without_span(), errs),
+            }
+        }
+        Err(errs) => (Expr::Error.into_id_without_span(), errs),
+    }
 }

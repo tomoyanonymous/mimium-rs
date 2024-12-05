@@ -59,19 +59,19 @@ fn dsp(){{
         }
         #[bench]
         fn bench_multiosc5(b: &mut Bencher) {
-            bench_runtime(b, &make_multiosc_src(5),1);
+            bench_runtime(b, &make_multiosc_src(5), 1);
         }
         #[bench]
         fn bench_multiosc7(b: &mut Bencher) {
-            bench_runtime(b, &make_multiosc_src(7),1);
+            bench_runtime(b, &make_multiosc_src(7), 1);
         }
         #[bench]
         fn bench_multiosc10(b: &mut Bencher) {
-            bench_runtime(b, &make_multiosc_src(9),1);
+            bench_runtime(b, &make_multiosc_src(9), 1);
         }
         #[bench]
         fn bench_multiosc15(b: &mut Bencher) {
-            bench_runtime(b, &make_multiosc_src(15),1);
+            bench_runtime(b, &make_multiosc_src(15), 1);
         }
         fn make_partialapp_src_from_template(c: &str) -> String {
             format!(
@@ -97,11 +97,11 @@ fn dsp(){{
         //test the performance degradation when open closure is made on `dsp` function with partial application.
         #[bench]
         fn bench_partialapp(b: &mut Bencher) {
-            bench_runtime(b, &make_partialapp_src(),10);
+            bench_runtime(b, &make_partialapp_src(), 10);
         }
         #[bench]
         fn bench_partialapp_no(b: &mut Bencher) {
-            bench_runtime(b, &make_no_partialapp_src(),10);
+            bench_runtime(b, &make_no_partialapp_src(), 10);
         }
     }
     mod parse {
@@ -154,8 +154,10 @@ fn dsp() {{
 
         fn bench_many_symbols(b: &mut Bencher, n: usize) {
             let content = make_many_symbols_src(n);
-            let compiler = compiler::Context::new([].into_iter(), None);
-            b.iter(move || compiler.emit_mir(&content).expect("ok"));
+            let compiler = compiler::Context::new([], None);
+            b.iter(move || {
+                let (_mir, _errs) = compiler.emit_mir(&content);
+            });
         }
 
         #[bench]

@@ -6,19 +6,17 @@ use std::path::PathBuf;
 macro_rules! test_string {
     ($src:literal, $ans:expr) => {
         let srcstr = $src.to_string();
-        match parse(&srcstr, None) {
-            Ok(ast) => {
-                assert!(
-                    ast.to_expr() == $ans.to_expr(),
-                    "res:{:?}\nans:{:?}",
-                    ast,
-                    $ans
-                );
-            }
-            Err(errs) => {
-                utils::error::report(&srcstr, PathBuf::new(), &errs);
-                panic!();
-            }
+        let (ast, errs) = parse(&srcstr, None);
+        if errs.is_empty() {
+            assert!(
+                ast.to_expr() == $ans.to_expr(),
+                "res:{:?}\nans:{:?}",
+                ast,
+                $ans
+            );
+        } else {
+            utils::error::report(&srcstr, PathBuf::new(), &errs);
+            panic!();
         }
     };
 }
@@ -440,11 +438,10 @@ fn test_stmt_without_return() {
 #[should_panic]
 fn test_fail() {
     let src = "let 100 == hoge\n fuga";
-    match parse(&src.to_string(), None) {
-        Err(errs) => {
-            panic!("{}", utils::error::dump_to_string(&errs))
-        }
-        _ => {}
+    let (ast, errs) = parse(&src.to_string(), None);
+
+    if !errs.is_empty() {
+        panic!("{}", utils::error::dump_to_string(&errs))
     };
 }
 
@@ -454,13 +451,14 @@ fn test_err_builtin_redefine() {
     0.0
 }
 100.0";
-    let res = &parse(&src.to_string(), None).expect_err("should be error");
-    assert_eq!(res.len(), 1);
+    let (_ast, err) = &parse(&src.to_string(), None);
+
+    assert_eq!(err.len(), 1);
 
     let err_ans: Box<dyn ReportableError> = Box::new(error::ParseError::<Token> {
         content: Simple::custom(3..6, "Builtin functions cannot be re-defined.")
             .with_label("function decl"),
         file: "/".to_symbol(),
     });
-    assert_eq!(res[0].to_string(), err_ans.to_string())
+    assert_eq!(err[0].to_string(), err_ans.to_string())
 }

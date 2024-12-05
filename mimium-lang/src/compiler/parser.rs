@@ -655,9 +655,15 @@ fn preprocess_parser(
         )
         .try_map(move |filename, span: Span| {
             let cfile = ctx.file_path.as_str();
-            resolve_include(cfile, &filename, span.clone()).map_err(|_e| {
-                Simple::<Token>::custom(span, format!("failed to resolve include for {filename}"))
-            })
+            let (c, errs) = resolve_include(cfile, &filename, span.clone());
+            if errs.is_empty() {
+                Ok(c)
+            } else {
+                Err(Simple::<Token>::custom(
+                    span,
+                    format!("failed to resolve include for {filename}"),
+                ))
+            }
         })
 }
 fn parser(
@@ -674,11 +680,11 @@ fn parser(
         .then_ignore(end())
 }
 
-pub(crate) fn add_global_context(ast: ExprNodeId, ctx: ParseContext) -> ExprNodeId {
+pub(crate) fn add_global_context(ast: ExprNodeId, file_path: Symbol) -> ExprNodeId {
     let span = ast.to_span();
     let loc = Location {
         span: span.clone(),
-        path: ctx.file_path,
+        path: file_path,
     };
     let res = Expr::Let(
         TypedPattern {
@@ -693,7 +699,7 @@ pub(crate) fn add_global_context(ast: ExprNodeId, ctx: ParseContext) -> ExprNode
 pub fn parse(
     src: &str,
     current_file: Option<PathBuf>,
-) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
+) -> (ExprNodeId, Vec<Box<dyn ReportableError>>) {
     let len = src.chars().count();
     let (tokens, lex_errs) = lexer::lexer().parse_recovery(src);
     let lex_errs = lex_errs.into_iter().map(|e| -> Box<dyn ReportableError> {
@@ -710,27 +716,22 @@ pub fn parse(
     if let Some(t) = tokens {
         let (ast, parse_errs) = parser(current_file.clone())
             .parse_recovery(chumsky::Stream::from_iter(len..len + 1, t.into_iter()));
-        match ast {
-            Some(ast) if parse_errs.is_empty() => Ok(ast),
-            _ => {
-                let errs = parse_errs
-                    .into_iter()
-                    .map(|e| -> Box<dyn ReportableError> {
-                        Box::new(error::ParseError {
-                            content: e,
-                            file: current_file
-                                .clone()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_symbol(),
-                        })
-                    })
-                    .chain(lex_errs)
-                    .collect();
-                Err(errs)
-            }
-        }
+        let errs = parse_errs
+            .into_iter()
+            .map(|e| -> Box<dyn ReportableError> {
+                Box::new(error::ParseError {
+                    content: e,
+                    file: current_file
+                        .clone()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_symbol(),
+                })
+            })
+            .chain(lex_errs)
+            .collect::<Vec<_>>();
+        (ast.unwrap_or(Expr::Error.into_id_without_span()), errs)
     } else {
-        Err(lex_errs.collect())
+        (Expr::Error.into_id_without_span(), lex_errs.collect())
     }
 }

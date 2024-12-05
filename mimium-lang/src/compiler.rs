@@ -61,8 +61,8 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl ReportableError for Error {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        self.1.clone()
+    fn get_labels(&self) -> Vec<(crate::utils::metadata::Location, String)> {
+        todo!()
     }
 }
 
@@ -82,9 +82,17 @@ pub fn emit_ast(
     src: &str,
     filepath: Option<Symbol>,
 ) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
-    let ast = parser::parse(src, filepath.map(|sym| PathBuf::from(sym.to_string())))
-        .map(|ast| parser::add_global_context(ast))?;
-    Ok(recursecheck::convert_recurse(ast))
+    let path = filepath.map(|sym| PathBuf::from(sym.to_string()));
+    let (ast, errs) = parser::parse(src, path);
+    if errs.is_empty() {
+        let ast = parser::add_global_context(ast, filepath.unwrap_or_default());
+        Ok(recursecheck::convert_recurse(
+            ast,
+            filepath.unwrap_or_default(),
+        ))
+    } else {
+        Err(errs)
+    }
 }
 #[derive(Clone, Copy)]
 pub struct ExtFunTypeInfo {
@@ -114,21 +122,21 @@ impl Context {
             .map(|ExtFunTypeInfo { name, ty }| (name, ty))
             .collect()
     }
-    pub fn emit_mir(&self, src: &str) -> Result<Mir, Vec<Box<dyn ReportableError>>> {
-        let ast = parser::parse(
-            src,
-            self.file_path.map(|sym| PathBuf::from(sym.to_string())),
-        )
-        .map(|ast| parser::add_global_context(ast))?;
-
-        mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path).map_err(|e| {
-            let bres = e as Box<dyn ReportableError>;
-            vec![bres]
-        })
+    pub fn emit_mir(&self, src: &str) -> (Mir, Vec<Box<dyn ReportableError>>) {
+        let path = self.file_path.map(|sym| PathBuf::from(sym.to_string()));
+        let (ast,mut parse_errs) = parser::parse(src, path);
+        let ast =parser::add_global_context(ast, self.file_path.unwrap_or_default());
+        let (mir,mut errs) = mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path);
+        errs.append(&mut parse_errs);
+        (mir,errs)
     }
     pub fn emit_bytecode(&self, src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
-        let mir = self.emit_mir(src)?;
-        bytecodegen::gen_bytecode(mir)
+        let (mir, err) = self.emit_mir(src);
+        if err.is_empty() {
+            Ok(bytecodegen::gen_bytecode(mir))
+        } else {
+            Err(err)
+        }
     }
 }
 
@@ -136,7 +144,7 @@ pub fn interpret_top(
     content: String,
     global_ctx: &mut ast_interpreter::Context,
 ) -> Result<ast_interpreter::Value, Vec<Box<dyn ReportableError>>> {
-    let ast = emit_ast(&content,None)?;
+    let ast = emit_ast(&content, None)?;
     ast_interpreter::eval_ast(ast, global_ctx).map_err(|e| {
         let eb: Box<dyn ReportableError> = Box::new(e);
         vec![eb]

@@ -784,10 +784,10 @@ fn optimize(program: vm::Program) -> vm::Program {
     // remove_redundunt_mov(program);
     program
 }
-pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+pub fn gen_bytecode(mir: mir::Mir) -> vm::Program {
     let mut generator = ByteCodeGenerator::default();
     let program = generator.generate(mir);
-    Ok(optimize(program))
+    optimize(program)
 }
 
 #[cfg(test)]
