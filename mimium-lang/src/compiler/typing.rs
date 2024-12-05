@@ -453,7 +453,7 @@ impl InferContext {
         body: (TypeNodeId, Location),
     ) -> Result<TypeNodeId, Vec<Error>> {
         let (TypedPattern { pat, ty }, loc_p) = pat;
-        let (t, _loc_b) = body.clone();
+        let (t, loc_b) = body.clone();
         let pat_t = match pat {
             Pattern::Single(id) => {
                 let gt = self.generalize(t);
@@ -480,7 +480,7 @@ impl InferContext {
             }
         }?;
         let ty = self.convert_unknown_to_intermediate(ty);
-        let t2 = Self::unify_types((ty, loc_p.clone()), (pat_t, loc_p.clone()))?;
+        let t2 = Self::unify_types((ty, loc_b.clone()), (pat_t, loc_p.clone()))?;
         Self::unify_types((t2, loc_p), body)
     }
 
