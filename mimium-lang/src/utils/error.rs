@@ -1,32 +1,31 @@
-use ariadne::{Color, ColorGenerator, Label, Report, ReportKind, Source};
+use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
 use std::path;
 
+use super::metadata::Location;
+
 pub trait ReportableError: std::error::Error {
-    fn get_span(&self) -> std::ops::Range<usize>;
     /// message is used for reporting verbose message for ariadne.
-    fn get_message(&self, _color: Color) -> String {
+    fn get_message(&self) -> String {
         self.to_string()
     }
     /// label is used for indicating error with the specific position for ariadne.
-    fn get_label(&self, _color: Color) -> String {
-        self.to_string()
-    }
+    fn get_labels(&self) -> Vec<(Location, String)>;
 }
 
-#[derive(Debug)]
-pub struct ReportableErrorDyn {
+#[derive(Debug, Clone)]
+pub struct SimpleError {
     pub message: String,
-    pub span: std::ops::Range<usize>,
+    pub span: Location,
 }
-impl std::fmt::Display for ReportableErrorDyn {
+impl std::fmt::Display for SimpleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
     }
 }
-impl std::error::Error for ReportableErrorDyn {}
-impl ReportableError for ReportableErrorDyn {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        self.span.clone()
+impl std::error::Error for SimpleError {}
+impl ReportableError for SimpleError {
+    fn get_labels(&self) -> Vec<(Location, String)> {
+        vec![(self.span.clone(), self.message.clone())]
     }
 }
 
@@ -37,24 +36,27 @@ where
     let path = srcpath.as_ref().to_str().unwrap_or_default();
     let mut colors = ColorGenerator::new();
     for e in errs {
-        let color = colors.next();
-        let span = e.get_span();
         // let a_span = (src.source(), span);color
-        let label = Label::new((path, span.clone()))
-            .with_message(e.get_label(color))
-            .with_color(color);
-        let builder = Report::build(ReportKind::Error, "test", 4)
-            .with_message(e.get_message(color))
-            .with_label(label)
+        let rawlabels = e.get_labels();
+        let labels = rawlabels.iter().map(|(span, message)| {
+            Label::new(span.clone())
+                .with_message(message)
+                .with_color(colors.next())
+        });
+        let builder = Report::build(ReportKind::Error, path.to_string(), 4)
+            .with_message(e.get_message())
+            .with_labels(labels)
             .finish();
-        builder.eprint((path, Source::from(src))).unwrap();
+        builder
+            .eprint((path.to_string(), Source::from(src)))
+            .unwrap();
     }
 }
 
 pub fn dump_to_string(errs: &[Box<dyn ReportableError>]) -> String {
     let mut res = String::new();
     for e in errs {
-        res += e.get_message(Color::Green).as_str();
+        res += e.get_message().as_str();
     }
     res
 }
