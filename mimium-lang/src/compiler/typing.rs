@@ -311,11 +311,11 @@ impl InferContext {
         loc2: Location,
     ) -> (Vec<TypeNodeId>, Vec<Error>) {
         let (res, errs): (Vec<_>, Vec<_>) = a1
-            .into_iter()
-            .zip_longest(a2.into_iter())
+            .iter()
+            .zip_longest(a2)
             .map(|pair| match pair {
-                EitherOrBoth::Both(a1, a2) => Self::unify_types(a1.clone(), a2.clone()),
-                EitherOrBoth::Left(t) | EitherOrBoth::Right(t) => Ok(t.clone()),
+                EitherOrBoth::Both(a1, a2) => Self::unify_types(*a1, *a2),
+                EitherOrBoth::Left(t) | EitherOrBoth::Right(t) => Ok(*t),
             })
             .partition_result();
         let mut errs: Vec<_> = errs.into_iter().flatten().collect();
@@ -457,7 +457,7 @@ impl InferContext {
         ty_pat: &TypedPattern,
         loc: Location,
     ) -> Result<TypeNodeId, Vec<Error>> {
-        let TypedPattern { pat, .. } = ty_pat;
+        let TypedPattern { pat, ty } = ty_pat;
         let pat_t = match pat {
             Pattern::Single(id) => {
                 let gt = self.generalize(t);
@@ -482,7 +482,12 @@ impl InferContext {
                 Ok(Type::Tuple(res).into_id())
             }
         }?;
-        Self::unify_types(t, pat_t)
+        if !matches!(ty.to_type(), Type::Unknown) {
+            let t2 = Self::unify_types(*ty, pat_t)?;
+            Self::unify_types(t, t2)
+        } else {
+            Self::unify_types(t, pat_t)
+        }
     }
 
     pub fn lookup(&self, name: Symbol, loc: Location) -> Result<TypeNodeId, Error> {
@@ -512,7 +517,7 @@ impl InferContext {
         r
     }
     fn infer_type(&mut self, e: ExprNodeId) -> Result<TypeNodeId, Vec<Error>> {
-        let loc = Location::new(e.to_span(), "".to_symbol()); //todo file
+        let loc = Location::new(e.to_span(), self.); //todo file
         let res: Result<TypeNodeId, Vec<Error>> = match &e.to_expr() {
             Expr::Literal(l) => Self::infer_type_literal(l).map_err(|e| vec![e]),
             Expr::Tuple(e) => Ok(Type::Tuple(self.infer_vec(e.as_slice())?).into_id()),
