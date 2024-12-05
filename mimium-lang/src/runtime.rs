@@ -1,4 +1,4 @@
-use crate::utils::{error::ReportableError, metadata::Span};
+use crate::utils::{error::ReportableError, metadata::{Location, Span}};
 
 // pub mod scheduler;
 // pub mod hir_interpreter;
@@ -21,7 +21,7 @@ impl std::fmt::Display for ErrorKind {
     }
 }
 #[derive(Debug)]
-pub struct Error(pub ErrorKind, pub Span);
+pub struct Error(pub ErrorKind, pub Location);
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let _ = write!(f, "Runtime Error: ");
@@ -32,7 +32,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl ReportableError for Error {
-    fn get_span(&self) -> std::ops::Range<usize> {
-        self.1.clone()
+    fn get_labels(&self) -> Vec<(crate::utils::metadata::Location, String)> {
+        vec![(self.1.clone(),self.0.to_string())]
     }
 }

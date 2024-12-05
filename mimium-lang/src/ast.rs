@@ -2,7 +2,7 @@ pub mod builder;
 
 use crate::interner::{with_session_globals, ExprNodeId, Symbol, TypeNodeId};
 use crate::pattern::{TypedId, TypedPattern};
-use crate::utils::metadata::Span;
+use crate::utils::metadata::Location;
 use crate::utils::miniprint::MiniPrint;
 use std::fmt::{self};
 pub type Time = i64;
@@ -19,13 +19,13 @@ pub enum Literal {
 }
 
 impl Expr {
-    fn into_id_inner(self, span: Option<Span>) -> ExprNodeId {
-        let span = span.unwrap_or(0..0);
-        with_session_globals(|session_globals| session_globals.store_expr_with_span(self, span))
+    fn into_id_inner(self, loc: Option<Location>) -> ExprNodeId {
+        let loc = loc.unwrap_or_default();
+        with_session_globals(|session_globals| session_globals.store_expr_with_location(self, loc))
     }
 
-    pub fn into_id(self, span: Span) -> ExprNodeId {
-        self.into_id_inner(Some(span))
+    pub fn into_id(self, loc: Location) -> ExprNodeId {
+        self.into_id_inner(Some(loc))
     }
 
     // For testing purposes

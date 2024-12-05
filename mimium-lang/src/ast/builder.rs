@@ -17,27 +17,27 @@ macro_rules! dummy_span {
 #[macro_export]
 macro_rules! number {
     ($n:literal) => {
-        Expr::Literal(Literal::Float(crate::ast::builder::str_to_symbol($n))).into_id(0..0)
+        Expr::Literal(Literal::Float(crate::ast::builder::str_to_symbol($n))).into_id_without_span()
     };
 }
 
 #[macro_export]
 macro_rules! string {
     ($n:expr) => {
-        Expr::Literal(Literal::String($n)).into_id(0..0)
+        Expr::Literal(Literal::String($n)).into_id_without_span()
     };
 }
 #[macro_export]
 macro_rules! var {
     ($n:literal) => {
-        Expr::Var($crate::ast::builder::str_to_symbol($n)).into_id(0..0)
+        Expr::Var($crate::ast::builder::str_to_symbol($n)).into_id_without_span()
     };
 }
 
 #[macro_export]
 macro_rules! app {
     ($a:expr,$b:expr) => {
-        Expr::Apply($a, $b).into_id(0..0)
+        Expr::Apply($a, $b).into_id_without_span()
     };
 }
 
@@ -63,13 +63,13 @@ macro_rules! lambda {
                 .iter()
                 .map(|a: &&'static str| $crate::pattern::TypedId {
                     id: $crate::ast::builder::str_to_symbol(a),
-                    ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                    ty: $crate::types::Type::Unknown.into_id(),
                 })
                 .collect::<Vec<_>>(),
             None,
             $body,
         )
-        .into_id(0..0)
+        .into_id_without_span()
     };
 }
 
@@ -79,12 +79,12 @@ macro_rules! let_ {
         Expr::Let(
             $crate::pattern::TypedPattern {
                 pat: $crate::pattern::Pattern::Single($crate::ast::builder::str_to_symbol($id)),
-                ty: $crate::types::Type::Unknown.into_id_with_span(0..0),
+                ty: $crate::types::Type::Unknown.into_id(),
             },
             $body,
             Some($then),
         )
-        .into_id(0..0)
+        .into_id_without_span()
     };
     ($id:literal,$body:expr) => {
         Expr::Let(
@@ -105,12 +105,12 @@ macro_rules! letrec {
         Expr::LetRec(
             TypedId {
                 id: $crate::ast::builder::str_to_symbol($id),
-                ty: $ty.unwrap_or($crate::types::Type::Unknown.into_id_with_span(0..0)),
+                ty: $ty.unwrap_or($crate::types::Type::Unknown.into_id()),
             },
             $body,
             $then,
         )
-        .into_id(0..0)
+        .into_id_without_span()
     };
 }
 
@@ -130,6 +130,6 @@ macro_rules! then {
 #[macro_export]
 macro_rules! ifexpr {
     ($cond:expr,$then:expr,$else_:expr) => {
-        Expr::If($cond, $then, Some($else_)).into_id(0..0)
+        Expr::If($cond, $then, Some($else_)).into_id_without_span()
     };
 }

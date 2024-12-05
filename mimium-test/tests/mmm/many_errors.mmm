@@ -1,0 +1,22 @@
+fn parse_error_continue(){
+    1+ +- ab |>
+}
+
+fn type_error_continue(){
+    let a:string = 1.0
+    let str = "test"
+    let mismatch = str + 2.0
+    let nonapplicable = str(100.0)
+    let (a,b) = (1.0,2.0,3.0)
+    let unknownvar = hogehoge
+    0.0
+}
+
+fn functional_feed (x){
+    let s = self
+    |x| { s(x) }
+}
+
+fn dsp(){
+    0.0
+}

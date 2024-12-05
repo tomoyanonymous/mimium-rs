@@ -1,8 +1,5 @@
 use crate::{
-    ast_interpreter::{self, PValue, Value},
-    compiler::{self, interpret_top},
-    utils::error,
-    utils::miniprint::MiniPrint,
+    ast_interpreter::{self, PValue, Value}, compiler::{self, interpret_top}, interner::ToSymbol, utils::{error, miniprint::MiniPrint}
 };
 use std::{
     io::{stdin, stdout, Write},
@@ -67,7 +64,7 @@ fn repl(data: &mut ReplAppData) -> ! {
                         Ok(v) => {
                             println!("{:?}", v);
                         }
-                        Err(e) => error::report(&src, PathBuf::new(), &e),
+                        Err(e) => error::report(&src, "".to_symbol(), &e),
                     },
                     ReplMode::EvalMulti(n) => {
                         let mut res = Ok(Value::Primitive(PValue::Numeric(0.0)));
@@ -79,14 +76,14 @@ fn repl(data: &mut ReplAppData) -> ! {
                             Ok(v) => {
                                 println!("{:?}", v);
                             }
-                            Err(e) => error::report(&src, PathBuf::new(), &e),
+                            Err(e) => error::report(&src, "".to_symbol(), &e),
                         }
                     }
                     ReplMode::ShowAST => match compiler::emit_ast(&src, None) {
                         Ok(ast) => {
                             println!("{}", ast.pretty_print());
                         }
-                        Err(e) => error::report(&src, PathBuf::new(), &e),
+                        Err(e) => error::report(&src, "".to_symbol(), &e),
                     },
                 }
                 src.clear();

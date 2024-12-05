@@ -6,7 +6,7 @@ use crate::mir::{self, Mir, StateSize};
 use crate::runtime::vm::bytecode::{ConstPos, GlobalPos, Reg};
 use crate::runtime::vm::{self, StateOffset};
 use crate::types::{PType, Type, TypeSize};
-use crate::utils::{error::ReportableError, half_float::HFloat};
+use crate::utils::half_float::HFloat;
 use vm::bytecode::Instruction as VmInstruction;
 
 #[derive(Debug, Default)]
@@ -784,10 +784,10 @@ fn optimize(program: vm::Program) -> vm::Program {
     // remove_redundunt_mov(program);
     program
 }
-pub fn gen_bytecode(mir: mir::Mir) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
+pub fn gen_bytecode(mir: mir::Mir) -> vm::Program {
     let mut generator = ByteCodeGenerator::default();
     let program = generator.generate(mir);
-    Ok(optimize(program))
+    optimize(program)
 }
 
 #[cfg(test)]
