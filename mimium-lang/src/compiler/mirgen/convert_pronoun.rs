@@ -31,14 +31,14 @@ struct ConvertResult {
 fn convert_recursively<T>(
     e_id: ExprNodeId,
     conversion: T,
-    file_path: PathBuf,
+    file_path: Symbol,
 ) -> (ConvertResult, Vec<Error>)
 where
     T: Fn(ExprNodeId) -> (ConvertResult, Vec<Error>),
 {
     let loc = Location {
         span: e_id.to_span().clone(),
-        path: file_path.to_string_lossy().to_symbol(),
+        path: file_path,
     };
 
     let opt_conversion = |opt_e: Option<ExprNodeId>| -> (Option<ConvertResult>, Vec<Error>) {
@@ -60,7 +60,7 @@ where
                     expr: res_e,
                     found_any,
                 },
-                errs.into_iter().flatten().collect(),
+                errs.concat(),
             )
         }
         Expr::Proj(e, idx) => {
@@ -78,20 +78,14 @@ where
             let (then_res, errs2) = opt_conversion(then);
             let found_any = bodyres.found_any | then_res.as_ref().map_or(false, |r| r.found_any);
             let expr = Expr::Let(id, bodyres.expr, then_res.map(|r| r.expr)).into_id(loc);
-            (
-                ConvertResult { expr, found_any },
-                errs.into_iter().chain(errs2).into_iter().collect(),
-            )
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
         }
         Expr::LetRec(id, body, then) => {
             let (bodyres, errs) = conversion(body);
             let (then_res, errs2) = opt_conversion(then);
             let found_any = bodyres.found_any | then_res.as_ref().map_or(false, |r| r.found_any);
             let expr = Expr::LetRec(id, bodyres.expr, then_res.map(|r| r.expr)).into_id(loc);
-            (
-                ConvertResult { expr, found_any },
-                errs.into_iter().chain(errs2).into_iter().collect(),
-            )
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
         }
         Expr::Lambda(params, r_type, body) => {
             // Note: params and r_type cannot be handled by conversion() because
@@ -107,11 +101,7 @@ where
             let found_any = res_vec.into_iter().any(|e| e.found_any) | fun.found_any;
             (
                 ConvertResult { expr, found_any },
-                errs2
-                    .into_iter()
-                    .flatten()
-                    .chain(errs.into_iter())
-                    .collect(),
+                [errs, errs2.concat()].concat(),
             )
         }
         Expr::PipeApply(callee, fun) => {
@@ -119,10 +109,7 @@ where
             let (fun, errs2) = conversion(fun);
             let expr = Expr::PipeApply(callee.expr, fun.expr).into_id(loc);
             let found_any = callee.found_any | fun.found_any;
-            (
-                ConvertResult { expr, found_any },
-                errs.into_iter().chain(errs2).into_iter().collect(),
-            )
+            (ConvertResult { expr, found_any }, [errs, errs2].concat())
         }
         Expr::If(cond, then, opt_else) => {
             let (cond, err) = conversion(cond);
@@ -131,10 +118,7 @@ where
             let found_any =
                 cond.found_any | then.found_any | opt_else.as_ref().map_or(false, |e| e.found_any);
             let expr = Expr::If(cond.expr, then.expr, opt_else.map(|e| e.expr)).into_id(loc);
-            let errs = err
-                .into_iter()
-                .chain(err2.into_iter().chain(errs3.into_iter()))
-                .collect();
+            let errs = [err, err2, errs3].concat();
             (ConvertResult { expr, found_any }, errs)
         }
         Expr::Block(body) => {
@@ -177,15 +161,13 @@ impl FeedId {
 fn convert_self(
     e_id: ExprNodeId,
     feedctx: FeedId,
-    file_path: PathBuf,
+    file_path: Symbol,
 ) -> (ConvertResult, Vec<Error>) {
     let conversion = |e: ExprNodeId| -> (ConvertResult, Vec<Error>) {
         convert_self(e, feedctx, file_path.clone())
     };
-    let loc = Location {
-        span: e_id.to_span().clone(),
-        path: file_path.to_string_lossy().to_symbol(),
-    };
+    let loc = Location::new(e_id.to_span().clone(), file_path);
+
     match e_id.to_expr().clone() {
         Expr::Literal(Literal::SelfLit) => match feedctx {
             FeedId::Global => {
@@ -237,45 +219,44 @@ fn convert_self(
     }
 }
 
-fn convert_placeholder(e_id: ExprNodeId) -> Result<ConvertResult, Error> {
-    let span = e_id.to_span().clone();
+fn convert_placeholder(e_id: ExprNodeId, file_path: Symbol) -> (ConvertResult, Vec<Error>) {
+    let loc = Location::new(e_id.to_span().clone(), file_path);
     match e_id.to_expr() {
         // if _ is used outside of pipe, treat it as a usual variable.
-        Expr::Literal(Literal::PlaceHolder) => Ok(ConvertResult::Ok(
-            Expr::Var("_".to_symbol()).into_id(e_id.to_span()),
-        )),
+        Expr::Literal(Literal::PlaceHolder) => {
+            let expr = Expr::Var("_".to_symbol()).into_id(loc);
+            let found_any = false;
+            (ConvertResult { expr, found_any }, vec![])
+        }
         Expr::Apply(fun, args)
             if args
                 .iter()
                 .any(|e| matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder))) =>
         {
-            let fun = convert_placeholder(fun)?;
-            let mut lambda_args: Vec<TypedId> = Vec::with_capacity(args.len());
-            let new_args = args
-                .iter()
+            let (fun, errs) = convert_placeholder(fun, file_path);
+            let (lambda_args_sparse, new_args): (Vec<_>, Vec<_>) = args
+                .into_iter()
                 .enumerate()
                 .map(|(i, e)| {
                     if matches!(e.to_expr(), Expr::Literal(Literal::PlaceHolder)) {
+                        let loc = Location::new(e_id.to_span().clone(), file_path);
                         let id = format!("__lambda_arg_{i}").to_symbol();
-                        lambda_args.push(TypedId {
-                            id,
-                            ty: Type::Unknown.into_id_with_span(span.clone()),
-                        });
-                        Expr::Var(id).into_id(e.to_span())
+                        let ty = Type::Unknown.into_id_with_location(loc.clone());
+                        let newid = TypedId { id, ty };
+                        let e = Expr::Var(id).into_id(loc);
+                        (Some(newid), e)
                     } else {
-                        *e
+                        (None, e)
                     }
                 })
-                .collect::<Vec<_>>();
-            let body = Expr::Apply(fun.unwrap(), new_args).into_id(span.clone());
-            let content = Expr::Lambda(lambda_args, None, body).into_id(span.clone());
-            if fun.is_ok() {
-                Ok(ConvertResult::Ok(content))
-            } else {
-                Ok(ConvertResult::Err(content))
-            }
+                .unzip();
+            let lambda_args = lambda_args_sparse.into_iter().filter_map(|e| e).collect();
+            let body = Expr::Apply(fun.expr, new_args).into_id(loc.clone());
+            let expr = Expr::Lambda(lambda_args, None, body).into_id(loc.clone());
+            let found_any = fun.found_any;
+            (ConvertResult { expr, found_any }, errs)
         }
-        _ => convert_recursively(e_id, convert_placeholder),
+        _ => convert_recursively(e_id, |e| convert_placeholder(e, file_path), file_path),
     }
 }
 

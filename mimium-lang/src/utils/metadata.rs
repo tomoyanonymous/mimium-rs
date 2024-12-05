@@ -1,16 +1,23 @@
 use crate::interner::{Symbol, ToSymbol};
 
-
 pub type Span = std::ops::Range<usize>;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Location {
     pub span: Span,
     pub path: Symbol,
 }
-impl Default for Location{
+impl Location {
+    pub fn new(span: Span, path: Symbol) -> Self {
+        Self { span, path }
+    }
+}
+impl Default for Location {
     fn default() -> Self {
-        Self { span: 0..0, path: "".to_symbol() }
+        Self {
+            span: 0..0,
+            path: "".to_symbol(),
+        }
     }
 }
 
