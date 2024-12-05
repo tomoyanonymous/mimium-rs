@@ -8,7 +8,7 @@ fn comment_parser() -> impl Parser<char, Comment, Error = Simple<char>> + Clone 
     // comment parser that keep its contents length, not to break line number for debugging.
     // replaces all characters except for newline.
     let single_line = (just("//"))
-        .ignore_then(take_until(text::newline()))
+        .ignore_then(take_until(text::newline().or(end())))
         .map(|(c, _)| Comment::SingleLine(String::from_iter(c.iter())));
 
     let multi_line = just("/*")
