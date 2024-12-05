@@ -194,7 +194,11 @@ fn get_default_context(path: Option<Symbol>, with_gui: bool) -> ExecContext {
     let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
     let mut ctx = ExecContext::new(plugins.into_iter(), path);
     ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
-    ctx.add_system_plugin(mimium_midi::MidiPlugin::default());
+    if let Some(midi_plug) = mimium_midi::MidiPlugin::try_new() {
+        ctx.add_system_plugin(midi_plug);
+    } else {
+        log::warn!("Midi is not supported on this platform.")
+    }
 
     if with_gui {
         #[cfg(not(target_arch = "wasm32"))]

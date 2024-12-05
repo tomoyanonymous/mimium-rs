@@ -8,13 +8,12 @@ use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use mimium_lang::{
     function,
     interner::ToSymbol,
-    numeric,
+    log, numeric,
     plugin::{SysPluginSignature, SystemPlugin, SystemPluginFnType},
     runtime::vm,
     string_t, tuple,
     types::{PType, Type},
     unit,
-    log
 };
 use std::{
     cell::{OnceCell, RefCell},
@@ -46,21 +45,21 @@ pub struct MidiPlugin {
     note_callbacks: Option<NoteCallBacks>,
     connection: Option<MidiInputConnection<NoteCallBacks>>,
 }
-impl Default for MidiPlugin {
-    fn default() -> Self {
-        let midiin = MidiInput::new("mimium midi plugin")
-            .inspect_err(|e| log::warn!("{e}"))
-            .ok();
-        Self {
-            input: midiin,
-            port: OnceCell::new(),
-            port_name: None,
-            note_callbacks: Some(Default::default()),
-            connection: None,
+
+impl MidiPlugin {
+    pub fn try_new() -> Option<Self> {
+        let input_res = MidiInput::new("mimium midi plugin");
+        match input_res {
+            Ok(input) => Some(Self {
+                input: Some(input),
+                port: OnceCell::new(),
+                port_name: None,
+                note_callbacks: Some(Default::default()),
+                connection: None,
+            }),
+            Err(_e) => None,
         }
     }
-}
-impl MidiPlugin {
     fn add_note_callback(&mut self, chan: u8, cb: NoteCallBack) {
         match self.note_callbacks.as_mut() {
             Some(v) if chan < 15 => {
