@@ -15,7 +15,6 @@ use crate::utils::error::ReportableError;
 use crate::utils::metadata::{Location, Span};
 
 use crate::ast::{Expr, Literal};
-// use itertools::Itertools;
 
 // pub mod closure_convert;
 // pub mod feedconvert;
@@ -33,7 +32,7 @@ struct ContextData {
 }
 
 #[derive(Debug)]
-pub struct Context {
+struct Context {
     typeenv: InferContext,
     valenv: Environment<VPtr>,
     fn_label: Option<Symbol>,
@@ -374,7 +373,8 @@ impl Context {
         };
         match self.lookup(&name) {
             LookupRes::Local(v) => match v.as_ref() {
-                Value::Argument(_i, a) => {
+                Value::Argument(_i, _a) => {
+                    //todo: collect warning for the language server
                     log::warn!("assignment to argument {name} does not affect to the external environments.");
                     self.push_inst(Instruction::Store(v.clone(), src, t));
                 }
@@ -678,8 +678,7 @@ impl Context {
                 let v = if is_global {
                     Arc::new(Value::Function(nextfunid))
                 } else {
-                    let alloc = self.push_inst(Instruction::Alloc(t.clone()));
-                    alloc
+                    self.push_inst(Instruction::Alloc(t))
                 };
                 let bind = (id.id, v.clone());
                 self.add_bind(bind);
@@ -755,7 +754,9 @@ impl Context {
         }
     }
 }
-
+/// Generate MIR from AST.
+/// The input ast (`root_expr_id`) should contain global context. (See [[compiler::parser::add_global_context]].)
+/// MIR generator itself does not emit any error, the any compile errors are analyzed before generating MIR, mostly in type checker.
 pub fn compile(
     root_expr_id: ExprNodeId,
     builtin_types: &[(Symbol, TypeNodeId)],
