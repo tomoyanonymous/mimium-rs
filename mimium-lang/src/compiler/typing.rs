@@ -154,6 +154,7 @@ impl InferContext {
             intrinsics::DIV,
             intrinsics::MODULO,
             intrinsics::POW,
+            intrinsics::LOG,
             intrinsics::GT,
             intrinsics::LT,
             intrinsics::GE,

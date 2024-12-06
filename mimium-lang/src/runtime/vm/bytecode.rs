@@ -14,7 +14,7 @@ pub enum Instruction {
     /// Load Single Value from Constants. Destination, Source
     MoveConst(Reg, ConstPos),
     /// Load Immediate float from half precision. Destination, Value
-    MoveImmF(Reg,HFloat),
+    MoveImmF(Reg, HFloat),
     // Move the range of registers (e.g. tuple) Destination, Source, Wordsize
     MoveRange(Reg, Reg, TypeSize),
     /// Call to internal function
@@ -71,7 +71,7 @@ pub enum Instruction {
     SinF(Reg, Reg),
     CosF(Reg, Reg),
     PowF(Reg, Reg, Reg),
-    LogF(Reg, Reg, Reg),
+    LogF(Reg, Reg),
 
     // Primitive Operations for int
     AddI(Reg, Reg, Reg),
@@ -113,7 +113,7 @@ impl std::fmt::Display for Instruction {
 
             Instruction::Move(dst, src) => write!(f, "{:<10} {} {}", "mov", dst, src),
             Instruction::MoveConst(dst, num) => write!(f, "{:<10} {} {}", "movc", dst, num),
-            Instruction::MoveImmF(dst,v)=> write!(f, "{:<10} {} {}", "movimmF", dst, v),
+            Instruction::MoveImmF(dst, v) => write!(f, "{:<10} {} {}", "movimmF", dst, v),
             Instruction::MoveRange(dst, src, n) => {
                 write!(
                     f,
@@ -157,6 +157,8 @@ impl std::fmt::Display for Instruction {
             Instruction::SinF(dst, src) => write!(f, "{:<10} {} {}", "sin", dst, src),
             Instruction::CosF(dst, src) => write!(f, "{:<10} {} {}", "cos", dst, src),
             Instruction::SqrtF(dst, src) => write!(f, "{:<10} {} {}", "sqrt", dst, src),
+            Instruction::LogF(dst, src) => write!(f, "{:<10} {} {} ", "logf", dst, src),
+
             Instruction::AbsI(dst, src) => write!(f, "{:<10} {} {}", "abs", dst, src),
             Instruction::NegI(dst, src) => write!(f, "{:<10} {} {}", "neg", dst, src),
             Instruction::Not(dst, src) => write!(f, "{:<10} {} {}", "not", dst, src),
@@ -181,7 +183,6 @@ impl std::fmt::Display for Instruction {
             Instruction::DivF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "divf", dst, lhs, rhs),
             Instruction::ModF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "modf", dst, lhs, rhs),
             Instruction::PowF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "powf", dst, lhs, rhs),
-            Instruction::LogF(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "logf", dst, lhs, rhs),
             Instruction::AddI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "add", dst, lhs, rhs),
             Instruction::SubI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "sub", dst, lhs, rhs),
             Instruction::MulI(dst, lhs, rhs) => write!(f, "{:<10} {} {} {}", "mul", dst, lhs, rhs),

@@ -165,7 +165,7 @@ impl std::fmt::Display for Instruction {
             Instruction::CosF(a) => write!(f, "sinf {}", *a),
             Instruction::SqrtF(a) => write!(f, "sqrtf {}", *a),
             Instruction::PowF(a, b) => write!(f, "powf {} {}", *a, *b),
-            Instruction::LogF(a, b) => write!(f, "logf {} {}", *a, *b),
+            Instruction::LogF(a) => write!(f, "logf {}", *a),
             Instruction::AddI(a, b) => write!(f, "addi {} {}", *a, *b),
             Instruction::SubI(a, b) => write!(f, "subi {} {}", *a, *b),
             Instruction::MulI(a, b) => write!(f, "muli {} {}", *a, *b),

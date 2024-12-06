@@ -129,7 +129,6 @@ impl Context {
             intrinsics::DIV => Some(Instruction::DivF(a0, a1)),
             intrinsics::POW => Some(Instruction::PowF(a0, a1)),
             intrinsics::MODULO => Some(Instruction::ModF(a0, a1)),
-            intrinsics::LOG => Some(Instruction::LogF(a0, a1)),
             intrinsics::GT => Some(Instruction::Gt(a0, a1)),
             intrinsics::GE => Some(Instruction::Ge(a0, a1)),
             intrinsics::LT => Some(Instruction::Lt(a0, a1)),
@@ -152,6 +151,7 @@ impl Context {
         match label.as_str() {
             intrinsics::NEG => Some(Instruction::NegF(a0)),
             intrinsics::SQRT => Some(Instruction::SqrtF(a0)),
+            intrinsics::LOG => Some(Instruction::LogF(a0)),
             intrinsics::ABS => Some(Instruction::AbsF(a0)),
             intrinsics::SIN => Some(Instruction::SinF(a0)),
             intrinsics::COS => Some(Instruction::CosF(a0)),
