@@ -81,9 +81,13 @@ pub fn load_mmmlibfile(current_file_or_dir: &str, path: &str) -> Result<(String,
     let path = std::path::Path::new(path);
     let search_default_lib = !(path.is_absolute() || path.starts_with("."));
     if let (true, Some(stdlibpath)) = (search_default_lib, get_default_library_path()) {
-        let cpath = stdlibpath.join(path).canonicalize()?;
-        let content = load(&cpath.to_string_lossy())?;
-        return Ok((content, cpath));
+        let cpath = stdlibpath.join(path).canonicalize();
+        if let Ok(cpath) = cpath {
+            if let Ok(content) = load(&cpath.to_string_lossy()) {
+                return Ok((content, cpath));
+                // if not found in the stdlib, continue to find in a relative path.
+            }
+        }
     };
     let cpath = get_canonical_path(current_file_or_dir, &path.to_string_lossy())?;
     let content = load(&cpath.to_string_lossy())?;
