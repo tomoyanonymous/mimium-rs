@@ -33,7 +33,7 @@ impl std::fmt::Display for ErrorKind {
                 )
             }
             ErrorKind::IndexForNonTuple(t) => {
-                write!(f, "Index access for non tuple-type {}.", t.to_string())
+                write!(f, "Index access for non tuple-type {}.", t)
             }
             ErrorKind::IndexOutOfRange(r, a) => {
                 write!(

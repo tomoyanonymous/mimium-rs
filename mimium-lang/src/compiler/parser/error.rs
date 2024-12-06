@@ -14,14 +14,15 @@ where
     pub file: Symbol,
 }
 
-impl<T> Into<chumsky::error::Simple<T>> for ParseError<T>
+impl<T> From<ParseError<T>> for chumsky::error::Simple<T>
 where
     T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,
 {
-    fn into(self) -> chumsky::error::Simple<T> {
-        self.content
+    fn from(value: ParseError<T>) -> Self {
+        value.content
     }
 }
+
 impl<T> fmt::Display for ParseError<T>
 where
     T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,

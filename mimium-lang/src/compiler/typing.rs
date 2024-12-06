@@ -58,7 +58,7 @@ impl ReportableError for Error {
             }
             Error::IndexForNonTuple(_) => format!("Index access for non-tuple variable."),
             Error::VariableNotFound(symbol, _) => {
-                format!("Variable {} not found in this scope", symbol.to_string())
+                format!("Variable {} not found in this scope", symbol)
             }
             Error::NonPrimitiveInFeed(_) => {
                 format!("Function that uses `self` cannot return function type.")
@@ -107,11 +107,6 @@ impl ReportableError for Error {
             }
         }
     }
-}
-
-pub struct InferResult {
-    ty: TypeNodeId,
-    errs: Vec<Error>,
 }
 
 #[derive(Clone, Debug)]

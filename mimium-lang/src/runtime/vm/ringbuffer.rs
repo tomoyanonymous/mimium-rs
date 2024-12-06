@@ -35,7 +35,7 @@ impl<'a> Ringbuffer<'a> {
     pub fn process(&mut self, input: RawVal, time_raw: u64) -> RawVal {
         let len = self.data.len() as u64;
         let res = unsafe {
-            let time = std::mem::transmute::<u64, f64>(time_raw) as u64;
+            let time = f64::from_bits(time_raw) as u64;
             let read_idx = *self.read_idx;
             *self.write_idx = (read_idx + time) % len;
             let write_idx = *self.write_idx;

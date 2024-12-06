@@ -17,9 +17,9 @@ impl From<f16> for HFloat {
         Self(value)
     }
 }
-impl Into<f64> for HFloat {
-    fn into(self) -> f64 {
-        self.0.to_f64()
+impl From<HFloat> for f64 {
+    fn from(value: HFloat) -> Self {
+        value.0.to_f64()
     }
 }
 
@@ -46,6 +46,6 @@ mod test {
         let f64v: f64 = 2.0;
         let hv = HFloat::try_from(f64v);
         assert!(hv.is_ok());
-        assert!((hv.unwrap().0.to_f64() -  f64v).abs() < ALLOWED_ERROR)
+        assert!((hv.unwrap().0.to_f64() - f64v).abs() < ALLOWED_ERROR)
     }
 }

@@ -29,7 +29,6 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
 pub struct ExecContext {
@@ -46,7 +45,7 @@ impl ExecContext {
     pub fn new(plugins: impl Iterator<Item = Box<dyn Plugin>>, path: Option<Symbol>) -> Self {
         let plugins = plugins.collect::<Vec<_>>();
         let extfuntypes = plugin::get_extfun_types(&plugins)
-            .chain(get_builtin_fn_types().into_iter())
+            .chain(get_builtin_fn_types())
             .collect::<Vec<_>>();
 
         let sys_plugins = vec![];
@@ -89,8 +88,7 @@ impl ExecContext {
     pub fn prepare_machine_with_bytecode(&mut self, prog: Program) {
         self.extclsinfos_reserve
             .extend(plugin::get_extclsinfos(&self.plugins));
-        let extfninfos =
-            plugin::get_extfuninfos(&self.plugins).chain(get_builtin_fns().into_iter());
+        let extfninfos = plugin::get_extfuninfos(&self.plugins).chain(get_builtin_fns());
         let vm = vm::Machine::new(
             prog,
             extfninfos,
@@ -110,11 +108,11 @@ impl ExecContext {
         res
     }
     pub fn run_main(&mut self) -> ReturnCode {
-        if let Some(mut vm) = self.vm.as_mut() {
+        if let Some(vm) = self.vm.as_mut() {
             self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {
                 //todo: encapsulate unsafety within SystemPlugin functionality
                 let p = unsafe { plug.0.get().as_mut().unwrap_unchecked() };
-                let _ = p.on_init(&mut vm);
+                let _ = p.on_init(vm);
             });
             let res = vm.execute_main();
             self.sys_plugins.iter().for_each(|plug: &DynSystemPlugin| {

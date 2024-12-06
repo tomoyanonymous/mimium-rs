@@ -69,6 +69,6 @@ pub fn load(canonical_path: &str) -> Result<String, Error> {
     let content = std::fs::read(canonical_path)
         .map_err(|e| Error::FileNotFound(e, PathBuf::from(canonical_path)))?;
 
-    let content_r = String::from_utf8(content).map_err(|e| Error::from(e))?;
+    let content_r = String::from_utf8(content).map_err(Error::from)?;
     Ok(content_r)
 }
