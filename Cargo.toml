@@ -19,6 +19,7 @@ license = "MPL-2.0"
 version = "2.1.1"
 repository = "https://github.com/tomoyanonymous/mimium-rs/"
 readme = "Readme.md"
+authors = ["Tomoya Matsuura <me@matsuuratomoya.com>"]
 
 [workspace.dependencies]
 mimium-cli = { path = "mimium-cli", version = "2.1.1" }

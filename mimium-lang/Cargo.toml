@@ -24,6 +24,7 @@ half = "2.4.1"
 itertools = "0.13.0"
 mimalloc = { version = "0.1.43", optional = true }
 intx = "0.1.0"
+homedir = "0.3.4"
 
 [lints.clippy]
 useless_format = "allow"
