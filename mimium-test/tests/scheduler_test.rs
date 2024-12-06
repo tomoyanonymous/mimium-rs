@@ -35,6 +35,13 @@ fn scheduler_counter_indirect() {
     let ans = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     assert_eq!(res, ans);
 }
+#[test]
+fn scheduler_reactive() {
+    let res = run_file_with_scheduler("scheduler_reactive.mmm", 10).unwrap();
+    let ans = vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0];
+    assert_eq!(res, ans);
+}
+
 
 fn prep_gc_test_machine(times: usize, src: &str) -> LocalBufferDriver {
     let mut driver = LocalBufferDriver::new(times);
