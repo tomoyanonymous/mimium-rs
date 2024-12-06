@@ -119,7 +119,13 @@ fn primitive_sin() {
     let r = (res[0] - ans[0]).abs() < f64::EPSILON;
     assert!(r);
 }
-
+#[test]
+fn primitive_sqrt() {
+    let res = run_file_test_mono("primitive_sqrt.mmm", 1).unwrap();
+    let ans = [2.0f64.sqrt()];
+    let r = (res[0] - ans[0]).abs() < f64::EPSILON;
+    assert!(r);
+}
 #[test]
 fn ifblock() {
     let res = run_file_test_mono("if.mmm", 1).unwrap();
