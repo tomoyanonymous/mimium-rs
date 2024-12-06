@@ -44,7 +44,7 @@ An event scheduling is sample-accurate because the scheduler is driven by an aud
 let freq = 440.0
 fn noteloop(){
     freq = (freq+1200.0)%4000.0
-    noteloop()@(now + 1.0*samplerate)
+    noteloop@(now + 1.0*samplerate)
 }
 ```
 
