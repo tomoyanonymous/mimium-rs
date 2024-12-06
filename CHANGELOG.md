@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v2.1.1
+
+### Bug fix
+
+- Fixed another bug incomment tokenizer so that the line comment on the last line can be parsed correctly (#106)
+- Fixed crash on WSL by trying to load midi plugin though it is not available on wsl(#105)
+
 ## v2.1.0
 
 ### Improvement

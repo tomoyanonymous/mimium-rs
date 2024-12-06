@@ -1,5 +1,5 @@
 let pi = 3.14159265359
-let sr = 44100.0
+let sr = samplerate
 fn phasor(freq){
   (self + freq/sr)%1.0
 }

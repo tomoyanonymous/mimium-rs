@@ -6,6 +6,8 @@ edition.workspace = true
 repository.workspace = true
 description = "basic analyzer tool plugin with egui for mimium."
 
+package.metadata.dist = false # do not publish binary on github release
+
 [dependencies]
 egui = "0.29.1"
 egui_plot = "0.29.0"

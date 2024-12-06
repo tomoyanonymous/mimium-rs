@@ -2,9 +2,21 @@
 
 ## Prepare Development Environment
 
+On windows, you need to install git and Visual Studio.
+
+On macOS, you need to install XCode from AppStore and execute `xcode-select --install` on the terminal.
+
 ### Install Rust with rustup
 
+To install rust language toolchains, follow the instruction of this page.
+
+https://www.rust-lang.org/tools/install
+
 #### Install additional cargo tools.
+
+We uses several additional tools to improve developing experience and automate a deployment process.
+
+You can install them with the command below.
 
 ```sh
 cargo install clippy cargo-dist cargo-release
@@ -12,9 +24,32 @@ cargo install clippy cargo-dist cargo-release
 
 ### Install IDE
 
+Install Visual Studio Code.
+
+https://code.visualstudio.com/
+
 ### Clone Repository
 
-## How to Debug
+```sh
+git clone https://github.com/tomoyanonymous/mimium-rs.git
+```
+
+Open `mimium-rs.code-workspace` with VSCode. The workspace contains recommended extensions, notification to install them will come up when you open the workspace first time.
+
+- mimium-language(Syntax highlight for mimium language)
+- rust-analyzer (Rust Language Server)
+- CodeLLDB (Better debugger)
+- Even better TOML(Better language support for Cargo.toml)
+
+## How to Run & Debug
+
+You can run built `mimium-cli` by running `cargo run -- targetfile.mmm`. Note that you need to be in `mimium-cli` directory.
+
+Note that the binary with debug configuration is slow, you may hear the glitch noise (because of audio driver underrun). You should try with release build when you are trying to check audio with `--release` option.
+
+You can also debug the binary with LLDB from the debug menu on the left sidebar of VSCode. It has several config options but mostly you use "Debug executable 'mimium-CLI'". You can change target `.mmm` file and optional arguments by modifying the line of `"args": ["mimium-cli/examples/sinewave.mmm"].`.
+
+(Do not commit this change.)
 
 
 ## How to bump release (for the core maintainer)

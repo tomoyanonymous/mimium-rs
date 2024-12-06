@@ -1,29 +1,30 @@
 # mimium 
 
-[![Test(main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml) [![Test(dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml)
+main: [![Test(main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml) dev: [![Test(dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml)
 
-a programming language as an infrastructure for sound and music
+A programming language as an infrastructure for sound and music
 
 <p align="center" style="display:flex; justify-content:center;">
 <img src = "mimium_logo_slant.svg" width="300" alt="An icon of the mimium. The word “mimium” is written in small caps, white letters at an angle on a gray diamond-shaped background with a gradient. The vertical bars of the letters are evenly spaced, making it look like a pedestrian crossing." />
 </p>
 
+https://mimium.org (A documentation for v2 is under preparation!)
+
 ---
 
-mimium(MInimal-Musical-medIUM) is a programming language for sound and music.
+mimium(*MInimal-Musical-medIUM*) is a programming language for sound and music.
 
 mimium is made to be an infrastructure for distributing music in a form of a source code, not only a tool for musicians and programmers.
 
-Its semantics are technically inspired from several modern programming languages for sound such as *[Faust](https://faust.grame.fr)* and *[Extempore](https://extemporelang.github.io/)*.
+Its semantics are inspired from several modern programming languages for sound such as *[Faust](https://faust.grame.fr)*, *[Kronos](https://kronoslang.io/)* and *[Extempore](https://extemporelang.github.io/)*.
 
 A minimal example below generates a sinewave of 440Hz.
 
 ```rust
 // minimal.mmm
 let twopi = 3.141595*2.0
-let sr = 48000.0
 fn dsp(){
-  sin(now * 440.0 * twopi / sr)
+  sin(now * 440.0 * twopi / samplerate)
 }
 ```
 
@@ -40,32 +41,38 @@ You can also write a note-level processing by using `@` operator which specifies
 An event scheduling is sample-accurate because the scheduler is driven by an audio driver.
 
 ```rust
-freq = 440.0
+let freq = 440.0
 fn noteloop(){
     freq = (freq+1200.0)%4000.0
-    noteloop()@(now + 48000.0)
+    noteloop()@(now + 1.0*samplerate)
 }
 ```
 
 Also, the language design is based on the call by value lambda calculus, so the higher-order functions are supported to express generative signal graph like replicatiing multiple oscillators like the code below.
 
 ```rust
-fn replicate(n){
+fn replicate(n,gen:()->(float,float)->float){
     if (n>0.0){
         let c = replicate(n - 1.0,gen)
         let g = gen()
-        |x,rate| {g(x,rate) + c(x+100.0,rate+0.1)}
+        |x,rate| g(x,rate) + c(x+100.0,rate+0.1)
     }else{
-        |x,rate| { 0.0 }
+        |x,rate|  0
     }
 }
 ```
 
-This repository is for a mimium *version 2*, all the code base is rewritten in Rust while the original was in C++, and Semantics of the language was re-designed. The code is still very under development.
+mimium is a statically typed language but the most of type annotations can be omitted by the type inference system. If you are interested in the theoritical background of mimium, see [the paper about mimium](https://matsuuratomoya.com/en/research/lambdammm-ifc-2024/).
+
+This repository is for a mimium *version 2*, all the code base is rewritten in Rust while the original was in C++, and semantics of the language was re-designed. The codes are still very under development.
 
 ## Installation
 
-TODO
+An easy way to start mimium is using [Visual Studio Code Extension](https://github.com/mimium-org/mimium-language). You can run opening `.mmm` file from the command palette.
+
+Also you can download the latest CLI tool [mimium-cli](https://github.com/tomoyanonymous/mimium-rs/releases) from GitHub Release.
+
+If you are Rust developer, you can install mimium-cli by `cargo install mimium-cli` as well.
 
 ## Development
 
@@ -94,8 +101,8 @@ Tomoya Matsuura/松浦知也 <https://matsuuratomoya.com/en>
 This project is supported grants and scholarships as follows.
 
 - 2019 Exploratory IT Human Resources Project ([The MITOU Program](https://www.ipa.go.jp/jinzai/mitou/portal_index.html)) by IPA: INFORMATION-TECHNOLOGY PROMOTION AGENCY, Japan.
-- Kakehashi Foundation
-- JSPS Kakenhi 23K12059 "Civil Engineering of Music, as a Practice and Critics between Music and Engineering"
+- Kakehashi Foundation (2022)
+- JSPS Kakenhi 23K12059 "Civil Engineering of Music, as a Practice and Critics between Music and Engineering"(2023-2025)
 
 ### Contributers
 
@@ -117,46 +124,8 @@ This list contains the contributers from v1 development, documentation and finan
 - [zigen](https://horol.org/)
 
 
-## (Memo) Roadmap toward version 2
+## Known Bugs
 
-- [x] Basic Data Types
-  - [x] AST
-  - [x] MIR
-  - [x] VM Instructions
-- [x] Aggregate Types
-  - [x] Tuple (Vector) types
-- [x] Compilers
-  - [x] Stateful Functions
-    - [x] Feedback with `self`
-    - [x] Delay and mem
-  - [x] Parser
-  - [x] MIR Generation
-    - [x] Type Inference
-    - [x] Code Generation
-  - [x] VM Code Generation 
-- [ ] Runtime
-  - [x] Audio Driver Backend
-    - [x] CPAL implmentation
-  - [x] Logical Scheduler
-    - [x] auto de-allocation of unused closure
-    - [x] destructive assignment of closure upvalues
-    - [x] schedule (`@`) operator
-  - [ ] Runtime value
-    - [x] `now`
-    - [ ] `samplerate`
-  - [x] VM
-    - [x] Closure upvalue implementation
-    - [x] StateStorage implementation
-  - [ ] simple file include
-  - [x] simple audio file reader function
-    - [ ] ~~array(slice) type & automatic interporation~~
+See [GitHub Issues with "bug" tag](https://github.com/tomoyanonymous/mimium-rs/issues?q=is%3Aissue+is%3Aopen+label%3Abug).
 
-### Further Plans
-
-- [ ] Multi-stage computation (Hygienic Macro)
-- [ ] Generics
-- [ ] Native & WASM backend with Cranelift
-- [ ] Module System, Package Manager
-- [ ] effect system for managing statefull function and IO
-
-other todos: Migrating examples
+## [Roadmap](./roadmap)
