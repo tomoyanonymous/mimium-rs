@@ -36,6 +36,15 @@ impl From<env::JoinPathsError> for Error {
         Error::PathJoinError(e)
     }
 }
+fn get_default_library_path() -> Option<PathBuf> {
+    let home = homedir::my_home().ok().flatten();
+    if home.is_none() {
+        log::warn!("default library search path is not available on this platform.");
+        return None;
+    }
+    let p = home.unwrap().join(PathBuf::from(".mimium/lib"));
+    Some(p)
+}
 
 pub fn get_canonical_path(current_file_or_dir: &str, relpath: &str) -> Result<PathBuf, Error> {
     let parent_dir = get_parent_dir(current_file_or_dir)?;
@@ -62,6 +71,23 @@ fn get_parent_dir(current_file: &str) -> Result<PathBuf, Error> {
         let cwd = std::path::PathBuf::new();
         Ok(current_filepath.parent().map_or_else(|| cwd, PathBuf::from))
     }
+}
+
+/// Used for resolving include.
+/// If the filename is given it searches ~/.mimium/lib first. If not found, tries to find in relative path.
+/// If the relative path is given explicitly, do not find in standard library path.
+
+pub fn load_mmmlibfile(current_file_or_dir: &str, path: &str) -> Result<(String, PathBuf), Error> {
+    let path = std::path::Path::new(path);
+    let search_default_lib = !(path.is_absolute() || path.starts_with("."));
+    if let (true, Some(stdlibpath)) = (search_default_lib, get_default_library_path()) {
+        let cpath = stdlibpath.join(path).canonicalize()?;
+        let content = load(&cpath.to_string_lossy())?;
+        return Ok((content, cpath));
+    };
+    let cpath = get_canonical_path(current_file_or_dir, &path.to_string_lossy())?;
+    let content = load(&cpath.to_string_lossy())?;
+    Ok((content, cpath))
 }
 
 pub fn load(canonical_path: &str) -> Result<String, Error> {
