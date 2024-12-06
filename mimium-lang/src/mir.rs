@@ -95,7 +95,7 @@ pub enum Instruction {
     SinF(VPtr),
     CosF(VPtr),
     PowF(VPtr, VPtr),
-    LogF(VPtr, VPtr),
+    LogF(VPtr),
     SqrtF(VPtr),
 
     // Primitive Operations for int

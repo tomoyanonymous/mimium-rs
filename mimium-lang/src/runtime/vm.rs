@@ -167,7 +167,7 @@ pub fn drop_closure(storage: &mut ClosureStorage, id: ClosureIdx) {
     }
 }
 
-#[derive(Clone, Copy,Default)]
+#[derive(Clone, Copy, Default)]
 enum RawValType {
     Float,
     #[default]
@@ -812,7 +812,7 @@ impl Machine {
                 Instruction::PowF(dst, src1, src2) => {
                     binopmethod!(powf, f64, dst, src1, src2, self)
                 }
-                Instruction::LogF(dst, src1, src2) => binopmethod!(log, f64, dst, src1, src2, self),
+                Instruction::LogF(dst, src) => uniopmethod!(ln, f64, dst, src, self),
                 Instruction::AddI(dst, src1, src2) => binop!(+,i64,dst,src1,src2,self),
                 Instruction::SubI(dst, src1, src2) => binop!(-,i64,dst,src1,src2,self),
                 Instruction::MulI(dst, src1, src2) => binop!(*,i64,dst,src1,src2,self),

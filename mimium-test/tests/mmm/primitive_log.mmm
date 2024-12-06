@@ -1,0 +1,8 @@
+//log primitive is x.ln() in rust
+fn log10(x){
+    log(x) / log(10.0)
+}
+
+fn dsp(){
+    log10(2.0)
+}

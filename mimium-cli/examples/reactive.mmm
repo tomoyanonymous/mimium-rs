@@ -1,0 +1,22 @@
+include("../../mimium-lang/lib/osc.mmm")
+let probe = make_probe("test");
+fn counter(){
+    (self+0.1)%1.0
+}
+fn metro(interval,sig:()->float)->()->float{
+    let v = 0.0
+    letrec updater = | |{
+      let s:float =sig();
+      v = probeln(s);
+      let _ = updater@(now+interval);
+    }
+    let _ = updater@(now+1)
+    | | {v}
+}
+let myv:()->float = metro(0.4*samplerate ,counter);
+
+fn dsp(){
+    let freq = (myv()|> probe)*100 + 200;
+    let r = sinwave(freq,0.0) * 0.5
+    (r,r)
+}

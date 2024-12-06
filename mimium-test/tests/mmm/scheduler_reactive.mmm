@@ -1,0 +1,21 @@
+//combination of `self` and temporal recursion.
+
+fn counter(){
+    self+1.0
+}
+
+fn metro(interval,sig:()->float)->()->float{
+    let v = 0.0
+    letrec updater = | |{
+      v = sig();
+      let _ = updater@(now+interval);
+    }
+    let _ = updater@(now+1)
+    | | {v}
+}
+
+let myv = metro(3.0 ,counter);
+
+fn dsp(){
+    myv()
+}

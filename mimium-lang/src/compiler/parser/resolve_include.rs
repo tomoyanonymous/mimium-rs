@@ -19,15 +19,10 @@ pub(super) fn resolve_include(
         span: span.clone(),
         path: mmm_filepath.to_symbol(),
     };
-    let abspath = fileloader::get_canonical_path(mmm_filepath, target_path)
+    let res = fileloader::load_mmmlibfile(mmm_filepath, target_path)
         .map_err(|e| make_vec_error(e, loc.clone()));
-    match abspath {
-        Ok(abspath) => {
-            match fileloader::load(abspath.to_str().unwrap()).map_err(|e| make_vec_error(e, loc)) {
-                Ok(content) => parse(&content, Some(abspath)),
-                Err(errs) => (Expr::Error.into_id_without_span(), errs),
-            }
-        }
-        Err(errs) => (Expr::Error.into_id_without_span(), errs),
+    match res {
+        Ok((content, path)) => parse(&content, Some(path)),
+        Err(err) => (Expr::Error.into_id(loc), err),
     }
 }
