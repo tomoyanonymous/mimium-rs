@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v2.2.0
+
+### Improvement
+
+- `include("file.mmm")` directive can now find files in `${HOME}/.mimium/lib` (#109).
+- added "reactive.mmm" example
+
+### Bug fix
+
+- Fixed incorrect inplementation of `log` function(#107)
+
 ## v2.1.1
 
 ### Bug fix
