@@ -1,5 +1,5 @@
 fn dsp(){
-    let time = now * 440.0 / 48000.0
+    let time = now * 440.0 / samplerate
     let nphase = time % 1.0 
     sin(nphase*6.2831853)
 }
