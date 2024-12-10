@@ -16,19 +16,19 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "MPL-2.0"
-version = "2.2.0"
+version = "2.2.1"
 repository = "https://github.com/tomoyanonymous/mimium-rs/"
 readme = "Readme.md"
 authors = ["Tomoya Matsuura <me@matsuuratomoya.com>"]
 
 [workspace.dependencies]
-mimium-cli = { path = "mimium-cli", version = "2.2.0" }
-mimium-lang = { path = "mimium-lang", version = "2.2.0" }
-mimium-audiodriver = { path = "mimium-audiodriver", version = "2.2.0" }
-mimium-midi = { path = "mimium-midi", version = "2.2.0" }
-mimium-symphonia = { path = "mimium-symphonia", version = "2.2.0" }
-mimium-scheduler = { path = "mimium-scheduler", version = "2.2.0" }
-mimium-guitools = { path = "mimium-guitools", version = "2.2.0" }
+mimium-cli = { path = "mimium-cli", version = "2.2.1" }
+mimium-lang = { path = "mimium-lang", version = "2.2.1" }
+mimium-audiodriver = { path = "mimium-audiodriver", version = "2.2.1" }
+mimium-midi = { path = "mimium-midi", version = "2.2.1" }
+mimium-symphonia = { path = "mimium-symphonia", version = "2.2.1" }
+mimium-scheduler = { path = "mimium-scheduler", version = "2.2.1" }
+mimium-guitools = { path = "mimium-guitools", version = "2.2.1" }
 mimium-test = { path = "mimium-test" }
 
 # do not add git tag for each crates on release.
