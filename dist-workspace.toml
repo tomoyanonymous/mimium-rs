@@ -8,7 +8,8 @@ cargo-dist-version = "0.25.1"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell", "msi"]
+installers = [
+] # we don't use this because the installer script does not copy bundled assets.
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
     "aarch64-apple-darwin",
@@ -17,15 +18,11 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 # Extra static files to include in each App (path relative to this Cargo.toml's dir)
-include = ["./mimium-cli/lib/"]
+include = ["./mimium-cli/lib/", "./mimium-cli/examples/", "Readme.md"]
 # The archive format to use for non-windows builds (defaults .tar.xz)
 unix-archive = ".zip"
 # The archive format to use for windows builds (defaults .zip)
 windows-archive = ".zip"
-# Path that installers should place binaries in
-install-path = "~/.mimium"
-# Whether to install an updater program
-install-updater = false
 
 [dist.dependencies.apt]
 libasound2-dev = "*"
