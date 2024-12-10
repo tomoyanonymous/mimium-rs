@@ -1,50 +1,9 @@
-let pi = 3.14159535
-let sr = 44100.0
-fn phasor(freq){
-  (self + freq/sr)%1.0
-}
-fn saw(freq){
-  (phasor(freq)*2.0)-1.0
-}
-
-fn gen_hp_coeff(fc,q,fs){
-    let omega = 2.0 * pi* fc / fs
-    let alpha = sin(omega)/(2.0* q)
-    let norm = 1.0 + alpha
-    let a1 = -2.0 * cos(omega) / norm
-    let a2 = (1.0 - alpha)/ norm
-    let btmp = 1.0 + cos(omega)
-    let b0 = btmp / (2.0*norm)
-    let b1 = -btmp / norm
-    let b2 = b0
-    (a1,a2,b0,b1,b2)
-}
-fn gen_lp_coeff(fc,q,fs){
-    let omega = 2.0 * pi* fc / fs
-    let alpha = sin(omega)/(2.0*q)
-    let norm = 1.0 + alpha
-    let a1 = -2.0 * cos(omega) / norm
-    let a2 = (1.0 - alpha)/ norm
-    let btmp = 1.0 - cos(omega)
-    let b0 = btmp / (2.0*norm)
-    let b1 = btmp  / norm
-    let b2 = b0
-    (a1,a2,b0,b1,b2)
-}
-fn inner (x,a1,a2){
-    let (ws, wss, _wsss) = self
-    let w = x - a1*ws - a2*wss
-    (w, ws, wss)
-}
-fn biquad(x,coeffs){
-    let (a1,a2,b0,b1,b2) = coeffs;
-	let (w,ws,wss) = inner(x,a1,a2);
-	b0*w + b1*ws + b2*wss
-}
+include("osc.mmm")
+include("filter.mmm")
 
 fn dsp(){
     let f = phasor(0.2)*3000.0+200.0
-    let coeff = gen_lp_coeff(f,10.0,sr);
-    let r = biquad(saw(220.0),coeff)
+    let r = lowpass(saw(220.0),f,10.0,samplerate)
+    let r = saw(220.0);
     (r, r)
 }

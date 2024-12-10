@@ -1,10 +1,6 @@
-let pi = 3.14159265359
-let sr = 44100.0
-fn phasor(freq){
-  (self + freq/sr)%1.0
-}
+include("osc.mmm")
 fn osc(freq){
-  sin(phasor(freq)*pi*2.0)
+  sinwave(freq,0.0)
 }
 
 fn cascade(n,gen:()->(float)->float){
