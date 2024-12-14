@@ -1,0 +1,27 @@
+include("osc.mmm")
+include("env.mmm")
+include("filter.mmm")
+fn midi_to_hz(note){
+    440.0*(2.0^ ((note-69.0)/12.0) )
+}
+// let _ = set_midi_port("from Max 1")
+let boundval = bind_midi_note_mono(0.0,69.0,127.0);
+let probe1 = make_probe("out")
+
+fn osc(freq){
+   saw(freq,0.0)
+}
+fn my_synth(note,vel,cutoff_base,fenv_depth){
+    let gain = vel/127
+    let gain_env = adsr(0.5,0.2,0.5,2.0,gain)
+    let cutfreq = cutoff_base + adsr(0.6,0.3,0.3,2.0,gain) * fenv_depth 
+    let sig = note 
+                |> midi_to_hz 
+                |> osc;
+    lowpass(sig,cutfreq,5.0)*gain_env
+}
+fn dsp(){
+    let (note,vel) = boundval();
+    let r = my_synth(note,vel,400,3000) |> probe1
+    (r,r)
+}
