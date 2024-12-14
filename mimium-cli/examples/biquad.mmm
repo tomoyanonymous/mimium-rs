@@ -3,7 +3,7 @@ include("filter.mmm")
 
 fn dsp(){
     let f = phasor(0.2)*3000.0+200.0
-    let r = lowpass(saw(220.0),f,10.0,samplerate)
+    let r = lowpass(saw(220.0),f,10.0)
     let r = saw(220.0);
     (r, r)
 }
