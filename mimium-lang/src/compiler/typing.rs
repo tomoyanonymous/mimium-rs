@@ -161,6 +161,8 @@ impl InferContext {
             intrinsics::LE,
             intrinsics::EQ,
             intrinsics::NE,
+            intrinsics::AND,
+            intrinsics::OR,
         ];
         let uniop_ty = function!(vec![numeric!()], numeric!());
         let uniop_names = [
