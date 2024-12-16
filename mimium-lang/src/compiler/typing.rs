@@ -113,11 +113,9 @@ impl ReportableError for Error {
 pub struct InferContext {
     interm_idx: u64,
     typescheme_idx: u64,
-    instantiated_idx: u64,
     level: u64,
-    subst_map: BTreeMap<i64, TypeNodeId>,
+    instantiated_map: BTreeMap<u64, TypeNodeId>, //from type scheme to typevar
     generalize_map: BTreeMap<u64, u64>,
-    instantiate_map: BTreeMap<u64, u64>,
     result_map: BTreeMap<ExprKey, TypeNodeId>,
     file_path: Symbol,
     pub env: Environment<TypeNodeId>,
@@ -128,11 +126,9 @@ impl InferContext {
         let mut res = Self {
             interm_idx: Default::default(),
             typescheme_idx: Default::default(),
-            instantiated_idx: Default::default(),
             level: Default::default(),
-            subst_map: Default::default(),
+            instantiated_map: Default::default(),
             generalize_map: Default::default(),
-            instantiate_map: Default::default(),
             result_map: Default::default(),
             file_path,
             env: Environment::<TypeNodeId>::default(),
@@ -221,11 +217,7 @@ impl InferContext {
         self.typescheme_idx += 1;
         res
     }
-    fn gen_instantiated(&mut self) -> TypeNodeId {
-        let res = Type::Instantiated(self.instantiated_idx).into_id();
-        self.instantiated_idx += 1;
-        res
-    }
+
     fn gen_intermediate_type_with_location(&mut self, loc: Location) -> TypeNodeId {
         let res = Type::Intermediate(Rc::new(RefCell::new(TypeVar::new(
             self.interm_idx,
@@ -370,9 +362,6 @@ impl InferContext {
                 tv2.parent = Some(t1r);
                 Ok(t1r)
             }
-            //currently monomorphize all generic types.
-            (t1, Type::Instantiated(_)) => Ok(t1.clone().into_id()),
-            (Type::Instantiated(_), t2) => Ok(t2.clone().into_id()),
             (Type::Array(a1), Type::Array(a2)) => {
                 Ok(Type::Array(Self::unify_types((*a1, loc1), (*a2, loc2))?).into_id())
             }
@@ -399,7 +388,7 @@ impl InferContext {
                     (Err(mut e), mut errs) => {
                         errs.append(&mut e);
                         Err(errs)
-                    } 
+                    }
                 }
             }
             (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => {
@@ -430,20 +419,17 @@ impl InferContext {
         }
     }
     fn instantiate(&mut self, t: TypeNodeId) -> TypeNodeId {
-        let mut g_i_map = BTreeMap::<u64, TypeNodeId>::default();
-        self.instantiate_in(t, &mut g_i_map)
-    }
-    fn instantiate_in(
-        &mut self,
-        t: TypeNodeId,
-        g_i_map: &mut BTreeMap<u64, TypeNodeId>,
-    ) -> TypeNodeId {
         match t.to_type() {
-            Type::TypeScheme(id) => g_i_map
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(|| self.gen_instantiated()),
-            _ => t.apply_fn(|t| self.instantiate_in(t, g_i_map)),
+            Type::TypeScheme(id) => {
+                if let Some(tvar) = self.instantiated_map.get(&id) {
+                    *tvar
+                } else {
+                    let res = self.gen_intermediate_type();
+                    self.instantiated_map.insert(id, res);
+                    res
+                }
+            }
+            _ => t.apply_fn(|t| self.instantiate(t)),
         }
     }
 
