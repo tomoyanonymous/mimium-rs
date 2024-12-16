@@ -657,7 +657,7 @@ fn preprocess_parser(
                     |simple_e, reportable_e| {
                         let wrapped =
                             Simple::<Token>::custom(span.clone(), reportable_e.to_string());
-                        simple_e.merge(wrapped)
+                        wrapped.merge(simple_e)
                     },
                 );
                 Err(e)
