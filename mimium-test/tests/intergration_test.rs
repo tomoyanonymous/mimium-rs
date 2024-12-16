@@ -384,11 +384,9 @@ fn hof_typefail() {
 }
 #[test]
 fn error_include_itself() {
-    //check false positive
     let res = run_error_test("error_include_itself.mmm", false);
-    //todo! check error types
-    assert_eq!(
-        res.into_iter().map(|e| e.get_message()).collect::<Vec<_>>(),
-        vec!["File tried to include itself recusively: /home/tomoya/mimium-rs/mimium-test/tests/mmm/error_include_itself.mmm".to_string()]
-    );
+    assert_eq!(res.len(), 1);
+    assert!(res[0]
+        .get_message()
+        .contains("File tried to include itself recusively:"))
 }
