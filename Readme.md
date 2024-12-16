@@ -2,7 +2,7 @@
 
 main: [![Test(main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml) dev: [![Test(dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml/badge.svg?branch=dev)](https://github.com/tomoyanonymous/mimium-rs/actions/workflows/ci.yaml)
 
-A programming language as an infrastructure for sound and music
+A programming language as an infrastructure for sound and music.
 
 <p align="center" style="display:flex; justify-content:center;">
 <img src = "mimium_logo_slant.svg" width="300" alt="An icon of the mimium. The word “mimium” is written in small caps, white letters at an angle on a gray diamond-shaped background with a gradient. The vertical bars of the letters are evenly spaced, making it look like a pedestrian crossing." />
@@ -37,21 +37,10 @@ fn lpf(input,fb){
 }
 ```
 
-You can also write a note-level processing by using `@` operator which specifies the time when the function will be executed. Another special keyword `now` can be used for getting current logical time.
-An event scheduling is sample-accurate because the scheduler is driven by an audio driver.
+Also, the language design is based on the call by value lambda calculus, so the higher-order functions are supported to express generative signal graph like replicatiing multiple oscillators.
 
 ```rust
-let freq = 440.0
-fn noteloop(){
-    freq = (freq+1200.0)%4000.0
-    noteloop@(now + 1.0*samplerate)
-}
-```
-
-Also, the language design is based on the call by value lambda calculus, so the higher-order functions are supported to express generative signal graph like replicatiing multiple oscillators like the code below.
-
-```rust
-fn replicate(n,gen:()->(float,float)->float){
+fn replicate(n,gen){
     if (n>0.0){
         let c = replicate(n - 1.0,gen)
         let g = gen()
@@ -71,8 +60,6 @@ This repository is for a mimium *version 2*, all the code base is rewritten in R
 An easy way to start mimium is using [Visual Studio Code Extension](https://github.com/mimium-org/mimium-language). You can run opening `.mmm` file from the command palette.
 
 Also you can download the latest CLI tool [mimium-cli](https://github.com/tomoyanonymous/mimium-rs/releases) from GitHub Release.
-
-If you are Rust developer, you can install mimium-cli by `cargo install mimium-cli` as well.
 
 ## Development
 
