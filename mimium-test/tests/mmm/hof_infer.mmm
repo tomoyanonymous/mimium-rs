@@ -1,0 +1,18 @@
+//this is exactly same as hof_state.mmm but now works without explicit type annotation.
+fn counter(inc){
+    self+inc
+}
+
+fn replicate(n,gen){
+    if (n>0.0){
+        let c = replicate(n - 1.0,gen)
+        let g = gen()
+        |x| {g(x) * n + c(x)}
+    }else{
+        |x| { 0.0 }
+    }
+}
+let mycounter = replicate(3.0,| |counter);
+fn dsp(){
+    mycounter(0.1)
+}

@@ -272,6 +272,24 @@ fn hof_state() {
 }
 
 #[test]
+fn hof_infer() {
+    let res = run_file_test_mono("hof_infer.mmm", 10).unwrap();
+    let ans = vec![
+        0.0,
+        0.6000000000000001,
+        1.2000000000000002,
+        1.8000000000000003,
+        2.4000000000000004,
+        3.0,
+        3.5999999999999996,
+        4.199999999999999,
+        4.8,
+        5.3999999999999995,
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn simple_stereo() {
     let res = run_file_test_stereo("simple_stereo.mmm", 3).unwrap();
     let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
