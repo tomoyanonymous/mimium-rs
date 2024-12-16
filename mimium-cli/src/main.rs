@@ -212,7 +212,7 @@ fn run_file(
     options: RunOptions,
     content: &str,
     fullpath: &Path,
-) -> Result<(), Vec<Box<dyn ReportableError>>> {
+) -> Result<Box<dyn Fn()>, Vec<Box<dyn ReportableError>>> {
     log::debug!("Filename: {}", fullpath.display());
     let path_sym = fullpath.to_string_lossy().to_symbol();
     let mut ctx = get_default_context(Some(path_sym), options.with_gui);
@@ -220,13 +220,16 @@ fn run_file(
     match options.mode {
         RunMode::EmitAst => {
             let ast = emit_ast_local(content, fullpath)?;
-            Ok(println!("{}", ast.pretty_print()))
+            Ok(Box::new(move || println!("{}", ast.pretty_print())))
         }
         RunMode::EmitMir => {
             ctx.prepare_compiler();
             let res = ctx.compiler.as_ref().unwrap().emit_mir(content);
             res.map(|r| {
+                let b: Box<dyn Fn()> = Box::new(move || {
                 println!("{r}");
+                });
+                b
             })
         }
         RunMode::EmitByteCode => {
@@ -234,8 +237,12 @@ fn run_file(
             let localdriver = LocalBufferDriver::new(0);
             let plug = localdriver.get_as_plugin();
             ctx.add_plugin(plug);
-            ctx.prepare_machine(content)?;
-            Ok(println!("{}", ctx.vm.unwrap().prog))
+            let res = ctx.prepare_machine(content);
+            let prog = ctx.vm.take().unwrap().prog;
+            res.map(move |_| {
+                let b: Box<dyn Fn()> = Box::new(move || println!("{}", prog));
+                b
+            })
         }
         _ => {
             let mut driver = options.get_driver();
@@ -252,7 +259,7 @@ fn run_file(
             driver.init(ctx, Some(SampleRate::from(48000)));
             driver.play();
             mainloop();
-            Ok(())
+            Ok(Box::new(|| ()))
         }
     }
 }
