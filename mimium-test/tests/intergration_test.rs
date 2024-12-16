@@ -109,7 +109,7 @@ fn primitive_log() {
     let res = run_file_test_mono("primitive_log.mmm", 1).unwrap();
     let ans = [2.0f64.log10()];
     let r = (res[0] - ans[0]).abs() < f64::EPSILON;
-    assert!(r);
+    assert!(r,"res:{} expected: {}",res[0],ans[0]);
 }
 
 #[test]

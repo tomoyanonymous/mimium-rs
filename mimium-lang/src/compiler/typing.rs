@@ -154,7 +154,6 @@ impl InferContext {
             intrinsics::DIV,
             intrinsics::MODULO,
             intrinsics::POW,
-            intrinsics::LOG,
             intrinsics::GT,
             intrinsics::LT,
             intrinsics::GE,
@@ -171,6 +170,7 @@ impl InferContext {
             intrinsics::SIN,
             intrinsics::COS,
             intrinsics::ABS,
+            intrinsics::LOG,
             intrinsics::SQRT,
         ];
 
@@ -389,12 +389,18 @@ impl InferContext {
             }
             (Type::Struct(_a1), Type::Struct(_a2)) => todo!(), //todo
             (Type::Function(p1, r1, _s1), Type::Function(p2, r2, _s2)) => {
-                let (param, mut errs) = Self::unify_vec(p1, loc1.clone(), p2, loc2.clone());
-                let ret = Self::unify_types((*r1, loc1), (*r2, loc2)).map_err(|mut e| {
-                    errs.append(&mut e);
-                    errs
-                })?;
-                Ok(Type::Function(param, ret, None).into_id())
+                let (param, errs) = Self::unify_vec(p1, loc1.clone(), p2, loc2.clone());
+                let ret = Self::unify_types((*r1, loc1), (*r2, loc2));
+                match (ret, errs) {
+                    (Ok(ret), errs) if errs.is_empty() => {
+                        Ok(Type::Function(param, ret, None).into_id())
+                    }
+                    (Ok(_ret), errs) => Err(errs),
+                    (Err(mut e), mut errs) => {
+                        errs.append(&mut e);
+                        Err(errs)
+                    } 
+                }
             }
             (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => {
                 Ok(Type::Primitive(p1.clone()).into_id())
