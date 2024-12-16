@@ -6,6 +6,7 @@ pub enum Error {
     FileNotFound(std::io::Error, PathBuf),
     UtfConversionError(std::string::FromUtf8Error),
     PathJoinError(env::JoinPathsError),
+    SelfReference(PathBuf),
 }
 
 impl fmt::Display for Error {
@@ -15,6 +16,11 @@ impl fmt::Display for Error {
             Error::FileNotFound(e, p) => write!(f, "File {} not found: {:?}", p.display(), e),
             Error::UtfConversionError(e) => write!(f, "Failed to convert into UTF{:?}", e),
             Error::PathJoinError(e) => write!(f, "Failed to join paths{:?}", e),
+            Error::SelfReference(path_buf) => write!(
+                f,
+                "File tried to include itself recusively: {}",
+                path_buf.to_string_lossy()
+            ),
         }
     }
 }
@@ -90,6 +96,9 @@ pub fn load_mmmlibfile(current_file_or_dir: &str, path: &str) -> Result<(String,
         }
     };
     let cpath = get_canonical_path(current_file_or_dir, &path.to_string_lossy())?;
+    if current_file_or_dir == cpath.to_string_lossy() {
+        return Err(Error::SelfReference(cpath.clone()));
+    }
     let content = load(&cpath.to_string_lossy())?;
     Ok((content, cpath))
 }
