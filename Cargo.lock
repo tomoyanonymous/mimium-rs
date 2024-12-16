@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-audiodriver"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "cpal",
  "mimium-lang",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-cli"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "clap",
  "colog",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-guitools"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "eframe",
  "egui",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-lang"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "ariadne",
  "chumsky",
@@ -1417,7 +1417,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-midi"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "atomic_float",
  "midir",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-scheduler"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "mimium-lang",
  "mimium-test",
@@ -1436,7 +1436,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-symphonia"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "mimium-lang",
  "mimium-test",
@@ -1445,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "mimium-test"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "mimium-audiodriver",
  "mimium-lang",
