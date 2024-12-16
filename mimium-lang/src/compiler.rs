@@ -126,10 +126,14 @@ impl Context {
         let (ast, mut parse_errs) = parser::parse(src, path);
         let ast = parser::add_global_context(ast, self.file_path.unwrap_or_default());
         let mir = mirgen::compile(ast, &self.get_ext_typeinfos(), self.file_path);
-        mir.map_err(|mut e| {
-            parse_errs.append(&mut e);
-            parse_errs
-        })
+        if parse_errs.is_empty() {
+            mir
+        } else {
+            let _ = mir.map_err(|mut e| {
+                parse_errs.append(&mut e);
+            });
+            Err(parse_errs)
+        }
     }
     pub fn emit_bytecode(&self, src: &str) -> Result<vm::Program, Vec<Box<dyn ReportableError>>> {
         let mir = self.emit_mir(src)?;
