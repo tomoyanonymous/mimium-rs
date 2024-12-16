@@ -635,7 +635,7 @@ impl Context {
                 if let Ok(tid) = TypedId::try_from(pat.clone()) {
                     self.fn_label = Some(tid.id);
                     log::trace!(
-                        "{}",
+                        "mirgen let {}",
                         self.fn_label.map_or("".to_string(), |s| s.to_string())
                     )
                 };
