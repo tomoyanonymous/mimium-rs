@@ -356,5 +356,13 @@ fn if_state() {
 fn many_errors() {
     let res = run_error_test("many_errors.mmm", false);
     //todo! check error types
-    assert_eq!(res.len(), 6);
+    assert_eq!(res.len(), 7);
+}
+#[test]
+
+fn hof_typefail() {
+    //check false positive
+    let res = run_error_test("hof_typefail.mmm", false);
+    //todo! check error types
+    assert_eq!(res.len(), 1);
 }
