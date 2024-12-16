@@ -109,7 +109,7 @@ fn primitive_log() {
     let res = run_file_test_mono("primitive_log.mmm", 1).unwrap();
     let ans = [2.0f64.log10()];
     let r = (res[0] - ans[0]).abs() < f64::EPSILON;
-    assert!(r,"res:{} expected: {}",res[0],ans[0]);
+    assert!(r, "res:{} expected: {}", res[0], ans[0]);
 }
 
 #[test]
@@ -370,17 +370,25 @@ fn if_state() {
 }
 
 #[test]
-
 fn many_errors() {
     let res = run_error_test("many_errors.mmm", false);
     //todo! check error types
     assert_eq!(res.len(), 7);
 }
 #[test]
-
 fn hof_typefail() {
     //check false positive
     let res = run_error_test("hof_typefail.mmm", false);
     //todo! check error types
     assert_eq!(res.len(), 1);
+}
+#[test]
+fn error_include_itself() {
+    //check false positive
+    let res = run_error_test("error_include_itself.mmm", false);
+    //todo! check error types
+    assert_eq!(
+        res.into_iter().map(|e| e.get_message()).collect::<Vec<_>>(),
+        vec!["File tried to include itself recusively: /home/tomoya/mimium-rs/mimium-test/tests/mmm/error_include_itself.mmm".to_string()]
+    );
 }
