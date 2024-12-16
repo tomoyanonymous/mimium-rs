@@ -1,0 +1,11 @@
+let doublethunk = | | {| | 1.0} 
+
+fn hof_ident(f:()->float)-> ()->float {
+    f
+}
+
+let f = hof_ident(doublethunk) //this should be an error
+
+fn dsp()->float{
+ f()
+}

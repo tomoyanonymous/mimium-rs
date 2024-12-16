@@ -1,0 +1,36 @@
+include("osc.mmm")
+include("env.mmm")
+include("filter.mmm")
+include("reactive.mmm")
+let myprobe = make_probe("test1")
+let myprobe2 = make_probe("test2")
+fn counter(max){
+    (self+1)%max
+}
+fn rhythm1(){
+    (counter(64) % 8) == 0 || (counter(32) % 2) == 0 || (counter(32) % 3)==0
+}
+fn rhythm2(){
+     (counter(64) % 2) == 0 || (counter(64) % 5) == 0
+}
+let bpm = 80;
+let beat1 = 8 * (bpm / 60)
+let beat2 = 16 * (bpm / 60)
+fn beat_to_interval(beat){
+    samplerate / beat
+}
+let gate1:()->float = metro(beat1 |> beat_to_interval ,rhythm1);
+let gate2:()->float = metro(beat2 |> beat_to_interval ,rhythm2);
+fn synth(gate){
+    let g = gate > 0  
+    let f = 20 + adsr(0.001,0.2,0.0,0.1,g) * 30
+    let cf = 200 + adsr(0.01,0.2,0.0,0.1,g) * 400
+    let sig = lowpass(saw(f,0.0),cf,4.0)
+    sig * adsr(0.001,0.2,0.0,0.1,gate)
+}
+fn dsp(){
+    let gate  = (gate1() * gate2()) |> myprobe
+    let r = synth(gate) |> myprobe2;
+    (r,r)
+}
+

@@ -6,10 +6,10 @@ fn osc(freq){
 fn amosc(freq,rate){
   osc(freq + osc(rate)*4000.0)
 }
-fn replicate(n,gen:()->(float,float)->float){
+fn replicate(n,gen){
     if (n>0.0){
         let c = replicate(n - 1.0,gen)
-        let g = gen()
+        let g =  gen()
         |x,rate| g(x,rate) + c(x+100.0,rate+0.1)
     }else{
         |x,rate|  0

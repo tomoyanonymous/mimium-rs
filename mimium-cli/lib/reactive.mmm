@@ -1,0 +1,10 @@
+fn metro(interval,sig:()->float)->()->float{
+    let v = 0.0
+    letrec updater = | |{
+      let s:float =sig();
+    v = s
+      let _ = updater@(now+interval);
+    }
+    let _ = updater@(now+1)
+    | | {v}
+}

@@ -109,7 +109,7 @@ fn primitive_log() {
     let res = run_file_test_mono("primitive_log.mmm", 1).unwrap();
     let ans = [2.0f64.log10()];
     let r = (res[0] - ans[0]).abs() < f64::EPSILON;
-    assert!(r);
+    assert!(r, "res:{} expected: {}", res[0], ans[0]);
 }
 
 #[test]
@@ -272,6 +272,24 @@ fn hof_state() {
 }
 
 #[test]
+fn hof_infer() {
+    let res = run_file_test_mono("hof_infer.mmm", 10).unwrap();
+    let ans = vec![
+        0.0,
+        0.6000000000000001,
+        1.2000000000000002,
+        1.8000000000000003,
+        2.4000000000000004,
+        3.0,
+        3.5999999999999996,
+        4.199999999999999,
+        4.8,
+        5.3999999999999995,
+    ];
+    assert_eq!(res, ans);
+}
+
+#[test]
 fn simple_stereo() {
     let res = run_file_test_stereo("simple_stereo.mmm", 3).unwrap();
     let ans = vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0];
@@ -352,9 +370,23 @@ fn if_state() {
 }
 
 #[test]
-
 fn many_errors() {
     let res = run_error_test("many_errors.mmm", false);
     //todo! check error types
-    assert_eq!(res.len(), 6);
+    assert_eq!(res.len(), 7);
+}
+#[test]
+fn hof_typefail() {
+    //check false positive
+    let res = run_error_test("hof_typefail.mmm", false);
+    //todo! check error types
+    assert_eq!(res.len(), 1);
+}
+#[test]
+fn error_include_itself() {
+    let res = run_error_test("error_include_itself.mmm", false);
+    assert_eq!(res.len(), 1);
+    assert!(res[0]
+        .get_message()
+        .contains("File tried to include itself recusively:"))
 }
