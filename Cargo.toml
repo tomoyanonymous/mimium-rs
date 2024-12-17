@@ -13,6 +13,9 @@ members = [
 
 resolver = "2"
 
+[workspace.lib]
+crate-type = ["cdylib", "rlib"]
+
 [workspace.package]
 edition = "2021"
 license = "MPL-2.0"

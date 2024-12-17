@@ -23,11 +23,16 @@ use runtime::vm::{
 };
 use utils::error::ReportableError;
 
+#[cfg(target_arch="wasm32")]
+pub mod web;
+
 #[cfg(feature = "mimalloc")]
 use mimalloc::MiMalloc;
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+
 
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
@@ -126,6 +131,8 @@ impl ExecContext {
         }
     }
 }
+
+
 
 //todo: remove
 pub mod ast_interpreter;

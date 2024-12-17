@@ -43,7 +43,10 @@ impl From<env::JoinPathsError> for Error {
     }
 }
 fn get_default_library_path() -> Option<PathBuf> {
+    #[cfg(not(target_arch = "wasm32"))]
     let home = homedir::my_home().ok().flatten();
+    #[cfg(target_arch = "wasm32")]
+    let home: Option<PathBuf> = None;
     if home.is_none() {
         log::warn!("default library search path is not available on this platform.");
         return None;
