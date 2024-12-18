@@ -4,7 +4,7 @@ fn onepole(x, ratio){
 }
 
 fn smooth(x){
-    onepole(0.95)
+    onepole(x, 0.95)
 }
 
 fn gen_hp_coeff(fc,q,fs){
