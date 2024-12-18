@@ -1,0 +1,18 @@
+fn _delay(input,time){
+    delay(48000,input,time)
+}
+
+fn pingpong_delay_inner(input:(float,float),time,fb)->(float,float){
+    let (left_i,right_i) = input
+    let (left_fb, right_fb) = self
+
+    let left_res = _delay(left_i+right_fb*fb ,time)
+    let right_res = _delay(right_i+left_fb*fb , time)
+    (left_res,right_res)
+}
+fn pingpong_delay(input,time,fb,mix){
+    let (left_dry,right_dry) = input
+    let (left_wet,right_wet) = pingpong_delay_inner(input,time,fb)
+    let mix_inv = 1-mix
+    (left_dry*mix_inv + left_wet*mix, right_dry*mix_inv + right_wet*mix )
+}

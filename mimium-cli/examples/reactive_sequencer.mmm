@@ -1,6 +1,7 @@
 include("osc.mmm")
 include("env.mmm")
 include("filter.mmm")
+include("delay.mmm")
 include("reactive.mmm")
 let myprobe = make_probe("test1")
 let myprobe2 = make_probe("test2")
@@ -13,24 +14,27 @@ fn rhythm1(){
 fn rhythm2(){
      (counter(64) % 2) == 0 || (counter(64) % 5) == 0
 }
-let bpm = 80;
+let bpm = 40;
 let beat1 = 8 * (bpm / 60)
 let beat2 = 16 * (bpm / 60)
 fn beat_to_interval(beat){
     samplerate / beat
+}
+fn mydelay(input){
+    pingpong_delay((input*0.7,input*0.3),0.07*samplerate,0.5,0.3)
 }
 let gate1:()->float = metro(beat1 |> beat_to_interval ,rhythm1);
 let gate2:()->float = metro(beat2 |> beat_to_interval ,rhythm2);
 fn synth(gate){
     let g = gate > 0  
     let f = 20 + adsr(0.001,0.2,0.0,0.1,g) * 30
-    let cf = 200 + adsr(0.01,0.2,0.0,0.1,g) * 400
+    let cf = 100 + adsr(0.01,0.2,0.0,0.1,g) * 400
     let sig = lowpass(saw(f,0.0),cf,4.0)
-    sig * adsr(0.001,0.2,0.0,0.1,gate)
+    sig * adsr(0.0001,0.2,0.0,0.1,gate)
 }
 fn dsp(){
     let gate  = (gate1() * gate2()) |> myprobe
     let r = synth(gate) |> myprobe2;
-    (r,r)
+    r |> mydelay
 }
 
