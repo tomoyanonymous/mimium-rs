@@ -44,6 +44,18 @@ fn gen_bp_coeff(fc,q,fs){
     (a1,a2,b0,b1,b2)
 }
 
+fn gen_ap_coeff(fc,q,fs){
+    let omega = 2.0 * PI* fc / fs
+    let alpha = sin(omega)/(2.0* q)
+    let norm = 1.0 + alpha
+    let a1 = -2.0 * cos(omega) / norm
+    let a2 = (1.0 - alpha)/ norm
+    let b0 = a2
+    let b1 = a1
+    let b2 = 1.0
+    (a1,a2,b0,b1,b2)
+}
+
 fn gen_peaking_coeff(fc,gain_db,q,fs){
     let A = 10 ^ (gain_db/40)
     let omega = 2.0 * PI* fc / fs
@@ -75,10 +87,11 @@ fn lowpass(x,fc,q){
 fn highpass(x,fc,q){
     biquad(x,gen_hp_coeff(fc,q,samplerate))
 }
-
-
 fn bandpass(x,fc,q){
     biquad(x,gen_bp_coeff(fc,q,samplerate))
+}
+fn allpass(x,fc,q){
+    biquad(x,gen_ap_coeff(fc,q,samplerate))
 }
 
 fn peakeq(x,fc,gaindb,q){
