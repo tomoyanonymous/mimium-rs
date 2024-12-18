@@ -12,10 +12,10 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::IoError(e) => write!(f, "IoError{:?}", e),
-            Error::FileNotFound(e, p) => write!(f, "File {} not found: {:?}", p.display(), e),
-            Error::UtfConversionError(e) => write!(f, "Failed to convert into UTF{:?}", e),
-            Error::PathJoinError(e) => write!(f, "Failed to join paths{:?}", e),
+            Error::IoError(e) => write!(f, "IoError: {}", e),
+            Error::FileNotFound(e, p) => write!(f, "File {} not found: {}", p.display(), e),
+            Error::UtfConversionError(e) => write!(f, "Failed to convert into UTF: {}", e),
+            Error::PathJoinError(e) => write!(f, "Failed to join path: {}", e),
             Error::SelfReference(path_buf) => write!(
                 f,
                 "File tried to include itself recusively: {}",
@@ -62,7 +62,7 @@ pub fn get_canonical_path(current_file_or_dir: &str, relpath: &str) -> Result<Pa
         //canonicalize is platform-dependent and always returns Err on wasm32
         Ok(abspath)
     } else {
-        abspath.canonicalize().map_err(Error::IoError)
+        abspath.canonicalize().map_err(|e| Error::FileNotFound(e, abspath))
     }
 }
 

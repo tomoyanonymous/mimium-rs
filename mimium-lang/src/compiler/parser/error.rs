@@ -28,7 +28,7 @@ where
     T: Hash + std::cmp::Eq + fmt::Debug + fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.content)
+        write!(f, "{}", self.content)
     }
 }
 

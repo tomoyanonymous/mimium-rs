@@ -1,4 +1,4 @@
-include("math.lib")
+include("math.mmm")
 
 fn mix(gain,a,b){
     gain*a + (1.0-gain)*b
@@ -17,7 +17,7 @@ fn hz_to_midi(freq){
 }
 
 fn dbtolinear(x){
-    pow(10.0, l/20.0)
+    pow(10.0, x/20.0)
 }
 
 fn linear2db(g) {

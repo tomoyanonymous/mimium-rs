@@ -1,5 +1,6 @@
-let PI =  3.14159265359
 //built-in "log" function means that the base is napier(x.ln() in rust).
+
+let PI = 3.14159265359
 fn log2(x){
     log(x)/log(2.0)
 }
