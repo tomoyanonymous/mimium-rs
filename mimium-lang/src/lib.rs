@@ -23,7 +23,7 @@ use runtime::vm::{
 };
 use utils::error::ReportableError;
 
-#[cfg(target_arch = "wasm32")]
+// #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "mimalloc")]
