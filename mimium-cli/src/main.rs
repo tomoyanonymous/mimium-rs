@@ -224,7 +224,7 @@ fn run_file(
         }
         RunMode::EmitMir => {
             ctx.prepare_compiler();
-            let res = ctx.compiler.as_ref().unwrap().emit_mir(content);
+            let res = ctx.get_compiler().unwrap().emit_mir(content);
             res.map(|r| {
                 println!("{r}");
             })
@@ -235,7 +235,7 @@ fn run_file(
             let plug = localdriver.get_as_plugin();
             ctx.add_plugin(plug);
             ctx.prepare_machine(content)?;
-            Ok(println!("{}", ctx.vm.unwrap().prog))
+            Ok(println!("{}", ctx.get_vm().unwrap().prog))
         }
         _ => {
             let mut driver = options.get_driver();

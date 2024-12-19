@@ -57,14 +57,14 @@ unsafe impl Send for NativeAudioData {}
 
 impl NativeAudioData {
     pub fn new(
-        ctx: ExecContext,
+        mut ctx: ExecContext,
         buffer: HeapCons<f64>,
         count: Arc<AtomicU64>,
         h_ochannels: usize,
     ) -> Self {
         //todo: split as trait interface method
-        let vm = ctx.vm.expect("vm is not prepared yet");
-        let vmdata = RuntimeData::new(vm, ctx.sys_plugins);
+        let vm = ctx.take_vm().expect("vm is not prepared yet");
+        let vmdata = RuntimeData::new(vm, ctx.get_system_plugins().cloned().collect());
         let dsp_ochannels = vmdata.get_dsp_fn().nret;
         let localbuffer: Vec<f64> = vec![0.0f64; 4096 * h_ochannels];
         Self {
