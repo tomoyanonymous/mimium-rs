@@ -1,21 +1,26 @@
 use mimium_audiodriver::backends::local_buffer::LocalBufferDriver;
 use mimium_audiodriver::driver::Driver;
 use mimium_lang::log;
-use mimium_lang::runtime::Time;
 use mimium_lang::ExecContext;
 use wasm_bindgen::prelude::*;
-
 #[wasm_bindgen]
+#[derive(Default)]
 pub struct Config {
     sample_rate: f64,
+    input_channels: u32,
+    output_channels: u32,
     buffer_size: u32,
 }
 
-type Processer = Box<dyn FnMut(&[f64], &mut [f64]) -> u64>;
+type Output<'a> = &'a mut [f32];
+type Input<'a> = &'a [f32];
+
+type Processer = Box<dyn FnMut(Input, Output) -> u64>;
 #[wasm_bindgen]
 #[derive(Default)]
 pub struct Context {
     processor: Option<Processer>,
+    config: Config,
 }
 
 fn get_default_context() -> ExecContext {
@@ -32,41 +37,53 @@ fn get_default_context() -> ExecContext {
 #[wasm_bindgen]
 impl Context {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
         Context {
+            config,
             ..Default::default()
         }
     }
     #[wasm_bindgen]
-    pub fn compile(&mut self, src: String, config: Config) {
+    pub fn compile(&mut self, src: String) {
         let mut ctx = get_default_context();
         if let Err(e) = ctx.prepare_machine(src.as_str()) {
             e.iter().for_each(|e| {
                 eprintln!("{}", e);
             });
         }
-        let mut driver = LocalBufferDriver::new(config.buffer_size as usize);
+        let mut driver = LocalBufferDriver::new(self.config.buffer_size as usize);
         ctx.add_plugin(driver.get_as_plugin());
         ctx.run_main();
         driver.init(
             ctx,
             Some(mimium_audiodriver::driver::SampleRate::from(
-                config.sample_rate as u32,
+                self.config.sample_rate as u32,
             )),
         );
-        let mut now = 0;
-        self.processor = Some(Box::new(move |_input, output| {
-            driver.vmdata.as_mut().unwrap().run_dsp(Time(now));
-            now += 1;
+        let out_ch = self.config.output_channels;
+        let mut out_buf = vec![0.0; (out_ch * self.config.buffer_size) as usize];
+        self.processor = Some(Box::new(move |_input, output: Output| -> u64 {
+            driver.play();
+            driver
+                .get_generated_samples()
+                .iter()
+                .map(|f| *f as f32)
+                .enumerate()
+                .for_each(|(i, f)| {
+                    out_buf[i] = f;
+                });
+            output.copy_from_slice(&out_buf);
             0
         }));
     }
+    /// .
+    ///
+    /// # Safety
+    /// Array size of input and output must be equal to `input_channels * buffer_size` and `output_channels * buffer_size` respectively.
+    /// .
     #[wasm_bindgen]
-    pub fn process(&mut self,input : &[f64], output: &mut [f64]) {
-        if let Some(ref mut processor) = self.processor {
-            processor(input, output);
-        }
+    pub fn process(ctx: &mut Context, input: &[f32], output: &mut [f32]) -> u64 {
+        unsafe { ctx.processor.as_mut().unwrap_unchecked()(input, output) }
     }
 }
