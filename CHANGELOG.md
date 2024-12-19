@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v2.2.3
+
+### Library update
+
+- added `delay.mmm` which contains ping-pong delay
+- added `reverb.mmm` which contains freeverb
+
+### Bug fix
+
+- Fixed incorrect format in parsing error.
+- Fixed incorrect implementation in `core.mmm`
+
+
 ## v2.2.2
 
 ### Bug fix

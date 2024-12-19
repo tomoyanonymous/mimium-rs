@@ -1,0 +1,62 @@
+include("filter.mmm")
+
+//damp should be 0-1
+fn _damp_filter(x,damp){
+    let damp_scaled = 0.4;
+    onepole(x,damp*damp_scaled)
+}
+//roomsize should be 0-1
+fn _lp_fb_comb(input,time,damp,roomsize){
+    let room_scaled = roomsize*0.28 + 0.7
+    let sum = input+ room_scaled* _damp_filter(self,damp)
+    delay(1800,input,time)
+}
+fn _lfc_bank(input,damp,roomsize){
+    _lp_fb_comb(input,1557,damp,roomsize) + 
+    _lp_fb_comb(input,1617,damp,roomsize) + 
+    _lp_fb_comb(input,1491,damp,roomsize) + 
+    _lp_fb_comb(input,1422,damp,roomsize) + 
+    _lp_fb_comb(input,1277,damp,roomsize) + 
+    _lp_fb_comb(input,1356,damp,roomsize) + 
+    _lp_fb_comb(input,1188,damp,roomsize) +
+    _lp_fb_comb(input,1116,damp,roomsize) 
+}
+
+fn allpass_delay(input,N){
+    delay(600,input,N)
+}
+fn _freeverb_allpass(input,gain,N){
+    let ffdelayed = allpass_delay(input + self*gain ,N)
+    -gain * input + (1-gain*gain) * ffdelayed
+}
+fn _allpass1(input){
+    _freeverb_allpass(input,0.5,225)
+}
+fn _allpass2(input){
+    _freeverb_allpass(input,0.5,556)
+}
+fn _allpass3(input){
+    _freeverb_allpass(input,0.5,441)
+}
+fn _allpass4(input){
+    _freeverb_allpass(input,0.5,341)
+}
+fn freeverb_mono(input,damp,roomsize,mix:float)->float{
+    let lf = _lfc_bank(input,damp,roomsize)
+    let out = lf |> _allpass1 |> _allpass2|> _allpass3 |> _allpass4 ;
+    let r =  input*(1-mix)+out*mix
+    r
+}
+fn _scalewidth(x){
+    x * 0.5 + 0.5
+}
+fn freeverb_stereo(input:(float,float),damp,roomsize,width,mix_2){
+    let (left,right) = input
+    let left_wet = freeverb_mono(left,damp,roomsize,1.0)
+    let right_wet = freeverb_mono(right,damp,roomsize,1.0)
+    let mix_inv = 1-mix_2
+    let left_out = left*mix_inv + left_wet*_scalewidth(mix_2)+right_wet*_scalewidth(1-mix_2)
+    let right_out = left*mix_inv + left_wet*_scalewidth(mix_2)+right_wet*_scalewidth(1-mix_2)
+
+    (left_out,right_out)
+}
