@@ -1,4 +1,3 @@
-extern crate mimium_lang;
 use std::{collections::HashMap, path::PathBuf};
 
 use mimium_audiodriver::{backends::local_buffer::LocalBufferDriver, driver::Driver};

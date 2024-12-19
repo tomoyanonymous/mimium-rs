@@ -23,9 +23,6 @@ use runtime::vm::{
 };
 use utils::error::ReportableError;
 
-// #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 #[cfg(feature = "mimalloc")]
 use mimalloc::MiMalloc;
 #[cfg(feature = "mimalloc")]
@@ -34,7 +31,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 /// A set of compiler and external functions (plugins).
 /// From this information, user can generate VM with [`Self::prepare_machine`].
-#[wasm_bindgen]
 pub struct ExecContext {
     compiler: Option<compiler::Context>,
     vm: Option<runtime::vm::Machine>,
@@ -149,28 +145,6 @@ impl ExecContext {
         }
     }
 }
-
-#[wasm_bindgen]
-impl ExecContext {
-    #[wasm_bindgen]
-    pub fn default_web() -> Self {
-        Self::new([].into_iter(), None)
-    }
-    #[wasm_bindgen]
-    pub fn compile(&mut self, src: String) -> i64 {
-        let res = self.prepare_machine(&src);
-        if res.is_err() {
-            -1
-        } else {
-            self.run_main()
-        }
-    }
-    #[wasm_bindgen]
-    pub fn process(&mut self, _input: &[f64], _out: &mut [f64]) {
-        self.get_vm_mut().unwrap().execute_idx(0);
-    }
-}
-
 //todo: remove
 pub mod ast_interpreter;
 pub mod repl;

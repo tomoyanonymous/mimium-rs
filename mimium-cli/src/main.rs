@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, ValueEnum};
 use mimium_audiodriver::backends::csv::csv_driver;
 use mimium_audiodriver::backends::local_buffer::LocalBufferDriver;
-use mimium_audiodriver::driver::{load_default_runtime, Driver, SampleRate};
+use mimium_audiodriver::driver::{Driver, SampleRate};
+use mimium_audiodriver::load_default_runtime;
 use mimium_lang::compiler::emit_ast;
 use mimium_lang::interner::{ExprNodeId, Symbol, ToSymbol};
 use mimium_lang::log;
@@ -141,6 +142,24 @@ impl RunOptions {
     }
 }
 
+fn get_default_context(path: Option<Symbol>, with_gui: bool) -> ExecContext {
+    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
+    let mut ctx = ExecContext::new(plugins.into_iter(), path);
+    ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
+    if let Some(midi_plug) = mimium_midi::MidiPlugin::try_new() {
+        ctx.add_system_plugin(midi_plug);
+    } else {
+        log::warn!("Midi is not supported on this platform.")
+    }
+
+    if with_gui {
+        #[cfg(not(target_arch = "wasm32"))]
+        ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
+    }
+
+    ctx
+}
+
 fn emit_ast_local(src: &str, filepath: &Path) -> Result<ExprNodeId, Vec<Box<dyn ReportableError>>> {
     let path = filepath.to_str().unwrap().to_symbol();
     let ast1 = emit_ast(src, Some(path))?;
@@ -188,24 +207,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
-}
-
-fn get_default_context(path: Option<Symbol>, with_gui: bool) -> ExecContext {
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(SamplerPlugin)];
-    let mut ctx = ExecContext::new(plugins.into_iter(), path);
-    ctx.add_system_plugin(mimium_scheduler::get_default_scheduler_plugin());
-    if let Some(midi_plug) = mimium_midi::MidiPlugin::try_new() {
-        ctx.add_system_plugin(midi_plug);
-    } else {
-        log::warn!("Midi is not supported on this platform.")
-    }
-
-    if with_gui {
-        #[cfg(not(target_arch = "wasm32"))]
-        ctx.add_system_plugin(mimium_guitools::GuiToolPlugin::default());
-    }
-
-    ctx
 }
 
 fn run_file(
