@@ -6,10 +6,17 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 #[derive(Default)]
 pub struct Config {
-    sample_rate: f64,
-    input_channels: u32,
-    output_channels: u32,
-    buffer_size: u32,
+    pub sample_rate: f64,
+    pub input_channels: u32,
+    pub output_channels: u32,
+    pub buffer_size: u32,
+}
+#[wasm_bindgen]
+impl Config {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 type Output<'a> = &'a mut [f32];
@@ -47,6 +54,7 @@ impl Context {
     #[wasm_bindgen]
     pub fn compile(&mut self, src: String) {
         let mut ctx = get_default_context();
+
         if let Err(e) = ctx.prepare_machine(src.as_str()) {
             e.iter().for_each(|e| {
                 eprintln!("{}", e);
@@ -83,7 +91,7 @@ impl Context {
     /// Array size of input and output must be equal to `input_channels * buffer_size` and `output_channels * buffer_size` respectively.
     /// .
     #[wasm_bindgen]
-    pub fn process(ctx: &mut Context, input: &[f32], output: &mut [f32]) -> u64 {
-        unsafe { ctx.processor.as_mut().unwrap_unchecked()(input, output) }
+    pub fn process(&mut self, input: &[f32], output: &mut [f32]) -> u64 {
+        unsafe { self.processor.as_mut().unwrap_unchecked()(input, output) }
     }
 }
