@@ -118,7 +118,3 @@ impl RuntimeData {
         self.vm.execute_idx(self.dsp_i)
     }
 }
-
-pub fn load_default_runtime() -> Box<dyn Driver<Sample = f64>> {
-    crate::backends::cpal::native_driver(4096)
-}
